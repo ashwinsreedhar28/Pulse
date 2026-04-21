@@ -210,6 +210,15 @@ export default function App(): JSX.Element {
     return () => clearTimeout(fallback)
   }, [])
 
+  useEffect(() => {
+    const sync = (): void => {
+      document.body.classList.toggle('pulse-hidden', document.hidden)
+    }
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return () => document.removeEventListener('visibilitychange', sync)
+  }, [])
+
   const refreshReelsCount = useCallback(async () => {
     setReelsCount(await window.api.reels.count())
   }, [])

@@ -351,9 +351,19 @@
 }
 .animate-ticker {
   animation: ticker-marquee 70s linear infinite;
+  /* Promote to its own compositor layer: the marquee runs forever, so paying
+     one-time GPU memory avoids repainting neighbors every frame. */
   will-change: transform;
 }
 .animate-ticker:hover { animation-play-state: paused; }
+/* Pause every CSS animation (marquee, animate-ping, animate-pulse, kenburns,
+   etc.) while the window is hidden — GPU compositor was repainting layers
+   nobody could see. */
+body.pulse-hidden *,
+body.pulse-hidden *::before,
+body.pulse-hidden *::after {
+  animation-play-state: paused !important;
+}
 
 /* Score flourish — fired when a team's score increases during a live game.
    Pops in with a small overshoot, floats upward, then fades. Auto-removed by
