@@ -1,0 +1,545 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+ * Theme system
+ *
+ * Every color — Tailwind zinc utilities, our semantic surface/edge/accent
+ * tokens — resolves to a CSS variable. Switching themes is a single
+ * `data-theme` attribute flip on <html>.
+ *
+ * Zinc variables are RGB triplets (not hex) so Tailwind's `/<alpha-value>`
+ * modifier keeps working.
+ * ------------------------------------------------------------------------- */
+
+/* Default (dark) — the original Pulse look. */
+:root,
+[data-theme='default'] {
+  /* Tailwind zinc palette (dark-native orientation). */
+  --c-zinc-50: 250 250 250;
+  --c-zinc-100: 244 244 245;
+  --c-zinc-200: 228 228 231;
+  --c-zinc-300: 212 212 216;
+  --c-zinc-400: 161 161 170;
+  --c-zinc-500: 113 113 122;
+  --c-zinc-600: 82 82 91;
+  --c-zinc-700: 63 63 70;
+  --c-zinc-800: 39 39 42;
+  --c-zinc-900: 24 24 27;
+  --c-zinc-950: 9 9 11;
+
+  /* Semantic surfaces + accents. */
+  --surface-0: 10 11 13;
+  --surface-1: 17 19 23;
+  --surface-2: 23 26 31;
+  --surface-3: 31 35 42;
+  --edge: 37 41 50;
+  --accent: 59 130 246;
+  --accent-amber: 245 158 11;
+  --urgency-high: 239 68 68;
+  --urgency-med: 245 158 11;
+  --urgency-low: 107 114 128;
+
+  /* Reader prose colors (referenced below). */
+  --prose-heading: 244 244 245;
+  --prose-body: 228 228 231;
+  --prose-muted: 113 113 122;
+  --prose-link: 96 165 250;
+  --prose-rule: 39 39 42;
+  --prose-quote-border: 63 63 70;
+  --prose-quote-text: 161 161 170;
+  --prose-code-bg: 255 255 255;
+  --prose-code-bg-alpha: 0.05;
+
+  color-scheme: dark;
+}
+
+/* Light — clean, high-contrast for daylight use. Zinc scale is inverted so
+ * every `text-zinc-100` / `bg-zinc-900` etc. flips meaning automatically. */
+[data-theme='light'] {
+  --c-zinc-50: 24 24 27;
+  --c-zinc-100: 39 39 42;
+  --c-zinc-200: 63 63 70;
+  --c-zinc-300: 82 82 91;
+  --c-zinc-400: 113 113 122;
+  --c-zinc-500: 140 140 150;
+  --c-zinc-600: 180 181 188;
+  --c-zinc-700: 212 212 216;
+  --c-zinc-800: 228 228 231;
+  --c-zinc-900: 244 244 245;
+  --c-zinc-950: 250 250 250;
+
+  --surface-0: 255 255 255;
+  --surface-1: 246 247 249;
+  --surface-2: 238 240 243;
+  --surface-3: 227 230 235;
+  --edge: 212 215 221;
+  --accent: 37 99 235;
+  --accent-amber: 202 138 4;
+  --urgency-high: 220 38 38;
+  --urgency-med: 202 138 4;
+  --urgency-low: 161 161 170;
+
+  --prose-heading: 24 24 27;
+  --prose-body: 39 39 42;
+  --prose-muted: 113 113 122;
+  --prose-link: 37 99 235;
+  --prose-rule: 212 215 221;
+  --prose-quote-border: 180 181 188;
+  --prose-quote-text: 82 82 91;
+  --prose-code-bg: 0 0 0;
+  --prose-code-bg-alpha: 0.05;
+
+  color-scheme: light;
+}
+
+/* Fiesta — dark red-dominant. */
+[data-theme='fiesta'] {
+  --c-zinc-50: 253 242 243;
+  --c-zinc-100: 252 228 230;
+  --c-zinc-200: 244 200 204;
+  --c-zinc-300: 230 168 174;
+  --c-zinc-400: 194 110 118;
+  --c-zinc-500: 143 66 75;
+  --c-zinc-600: 102 42 50;
+  --c-zinc-700: 78 30 36;
+  --c-zinc-800: 52 18 22;
+  --c-zinc-900: 32 10 13;
+  --c-zinc-950: 18 5 7;
+
+  --surface-0: 20 6 8;
+  --surface-1: 32 10 13;
+  --surface-2: 48 14 18;
+  --surface-3: 66 20 26;
+  --edge: 92 32 38;
+  --accent: 239 68 68;
+  --accent-amber: 250 176 5;
+  --urgency-high: 248 113 113;
+  --urgency-med: 250 176 5;
+  --urgency-low: 143 66 75;
+
+  --prose-heading: 252 228 230;
+  --prose-body: 244 200 204;
+  --prose-muted: 194 110 118;
+  --prose-link: 248 113 113;
+  --prose-rule: 66 20 26;
+  --prose-quote-border: 102 42 50;
+  --prose-quote-text: 194 110 118;
+  --prose-code-bg: 255 255 255;
+  --prose-code-bg-alpha: 0.06;
+
+  color-scheme: dark;
+}
+
+/* Zazu — green-dominant, jungle tones. */
+[data-theme='zazu'] {
+  --c-zinc-50: 240 253 244;
+  --c-zinc-100: 220 252 231;
+  --c-zinc-200: 187 247 208;
+  --c-zinc-300: 134 218 170;
+  --c-zinc-400: 86 176 128;
+  --c-zinc-500: 52 132 92;
+  --c-zinc-600: 32 95 64;
+  --c-zinc-700: 22 70 48;
+  --c-zinc-800: 14 48 32;
+  --c-zinc-900: 8 30 20;
+  --c-zinc-950: 4 18 12;
+
+  --surface-0: 6 20 14;
+  --surface-1: 8 30 20;
+  --surface-2: 14 44 30;
+  --surface-3: 22 62 42;
+  --edge: 32 82 56;
+  --accent: 34 197 94;
+  --accent-amber: 245 158 11;
+  --urgency-high: 239 68 68;
+  --urgency-med: 250 204 21;
+  --urgency-low: 86 176 128;
+
+  --prose-heading: 220 252 231;
+  --prose-body: 187 247 208;
+  --prose-muted: 86 176 128;
+  --prose-link: 74 222 128;
+  --prose-rule: 22 70 48;
+  --prose-quote-border: 32 95 64;
+  --prose-quote-text: 134 218 170;
+  --prose-code-bg: 255 255 255;
+  --prose-code-bg-alpha: 0.06;
+
+  color-scheme: dark;
+}
+
+/* Ocean — deep blue, cool and calm. */
+[data-theme='ocean'] {
+  --c-zinc-50: 240 249 255;
+  --c-zinc-100: 224 242 254;
+  --c-zinc-200: 186 230 253;
+  --c-zinc-300: 125 211 252;
+  --c-zinc-400: 90 170 226;
+  --c-zinc-500: 58 129 188;
+  --c-zinc-600: 38 92 146;
+  --c-zinc-700: 28 70 112;
+  --c-zinc-800: 18 48 80;
+  --c-zinc-900: 10 30 54;
+  --c-zinc-950: 5 18 34;
+
+  --surface-0: 5 14 28;
+  --surface-1: 10 30 54;
+  --surface-2: 14 42 74;
+  --surface-3: 22 60 100;
+  --edge: 30 78 128;
+  --accent: 56 189 248;
+  --accent-amber: 250 204 21;
+  --urgency-high: 248 113 113;
+  --urgency-med: 250 204 21;
+  --urgency-low: 90 170 226;
+
+  --prose-heading: 224 242 254;
+  --prose-body: 186 230 253;
+  --prose-muted: 90 170 226;
+  --prose-link: 125 211 252;
+  --prose-rule: 22 60 100;
+  --prose-quote-border: 38 92 146;
+  --prose-quote-text: 125 211 252;
+  --prose-code-bg: 255 255 255;
+  --prose-code-bg-alpha: 0.06;
+
+  color-scheme: dark;
+}
+
+/* Casino — near-black with gold accents. */
+[data-theme='casino'] {
+  --c-zinc-50: 253 246 216;
+  --c-zinc-100: 250 238 186;
+  --c-zinc-200: 240 218 138;
+  --c-zinc-300: 214 182 96;
+  --c-zinc-400: 176 142 58;
+  --c-zinc-500: 130 102 38;
+  --c-zinc-600: 92 70 24;
+  --c-zinc-700: 66 50 16;
+  --c-zinc-800: 44 33 10;
+  --c-zinc-900: 24 20 10;
+  --c-zinc-950: 10 9 5;
+
+  --surface-0: 6 6 4;
+  --surface-1: 14 12 8;
+  --surface-2: 24 20 10;
+  --surface-3: 36 30 14;
+  --edge: 66 54 22;
+  --accent: 234 179 8;
+  --accent-amber: 250 204 21;
+  --urgency-high: 239 68 68;
+  --urgency-med: 250 204 21;
+  --urgency-low: 130 102 38;
+
+  --prose-heading: 250 238 186;
+  --prose-body: 240 218 138;
+  --prose-muted: 176 142 58;
+  --prose-link: 250 204 21;
+  --prose-rule: 36 30 14;
+  --prose-quote-border: 92 70 24;
+  --prose-quote-text: 214 182 96;
+  --prose-code-bg: 255 255 255;
+  --prose-code-bg-alpha: 0.05;
+
+  color-scheme: dark;
+}
+
+@layer base {
+  html,
+  body,
+  #root,
+  #popover-root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .drag {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
+
+.reader-content {
+  color: rgb(var(--prose-body));
+}
+.reader-content p {
+  margin: 0 0 1em;
+}
+.reader-content h1,
+.reader-content h2,
+.reader-content h3 {
+  color: rgb(var(--prose-heading));
+  font-weight: 600;
+  margin: 1.5em 0 0.5em;
+  line-height: 1.3;
+}
+.reader-content h2 { font-size: 1.25rem; }
+.reader-content h3 { font-size: 1.05rem; }
+.reader-content a {
+  color: rgb(var(--prose-link));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.reader-content img,
+.reader-content figure {
+  max-width: 100%;
+  height: auto;
+  margin: 1.5em auto;
+  display: block;
+  border-radius: 4px;
+}
+.reader-content figcaption {
+  font-size: 0.75rem;
+  color: rgb(var(--prose-muted));
+  text-align: center;
+  margin-top: 0.5em;
+}
+.reader-content blockquote {
+  border-left: 2px solid rgb(var(--prose-quote-border));
+  padding-left: 1em;
+  color: rgb(var(--prose-quote-text));
+  margin: 1em 0;
+  font-style: italic;
+}
+.reader-content ul,
+.reader-content ol {
+  padding-left: 1.5em;
+  margin: 0 0 1em;
+}
+.reader-content li { margin: 0.25em 0; }
+.reader-content pre,
+.reader-content code {
+  background: rgb(var(--prose-code-bg) / var(--prose-code-bg-alpha));
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+.reader-content pre {
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+.reader-content code { padding: 0.1em 0.35em; }
+.reader-content hr {
+  border: 0;
+  border-top: 1px solid rgb(var(--prose-rule));
+  margin: 2em 0;
+}
+
+/* Compact density overrides */
+.density-compact li button { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+.density-compact .reader-content { font-size: 14px; line-height: 1.5; }
+
+/* Hide scrollbar on horizontal nav chip row */
+.scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* Ticker marquee */
+@keyframes ticker-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-ticker {
+  animation: ticker-marquee 70s linear infinite;
+  will-change: transform;
+}
+.animate-ticker:hover { animation-play-state: paused; }
+
+/* Score flourish — fired when a team's score increases during a live game.
+   Pops in with a small overshoot, floats upward, then fades. Auto-removed by
+   the hook after ~2.5s so no JS cleanup needed per animation. */
+@keyframes score-flourish-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.6);
+  }
+  18% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.15);
+  }
+  32% {
+    transform: translateY(-10px) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-18px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.95);
+  }
+}
+.score-flourish {
+  animation: score-flourish-pop 2500ms cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* Hero variant (soccer / hockey / baseball) — same timing, slightly larger
+   overshoot + a secondary emoji wobble for extra celebration. */
+@keyframes score-flourish-hero {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.5);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1.25);
+  }
+  30% {
+    transform: translateY(-14px) scale(1.05);
+  }
+  50% {
+    transform: translateY(-20px) scale(1.1) rotate(-2deg);
+  }
+  70% {
+    transform: translateY(-26px) scale(1.05) rotate(2deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-36px) scale(1);
+  }
+}
+.score-flourish-hero {
+  animation: score-flourish-hero 2500ms cubic-bezier(0.18, 0.89, 0.32, 1.18) forwards;
+}
+@keyframes score-flourish-emoji-wobble {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-14deg); }
+  75% { transform: rotate(14deg); }
+}
+.score-flourish-hero .score-flourish-emoji {
+  display: inline-block;
+  animation: score-flourish-emoji-wobble 600ms ease-in-out 1;
+}
+
+/* Feed card hover lift */
+.card-lift { transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background-color 160ms ease; }
+.card-lift:hover { transform: translateY(-2px); }
+
+/* Reels: Ken Burns pan/zoom on article hero image */
+@keyframes kenburns {
+  0%   { transform: scale(1.12) translate(-1.5%, -1%); }
+  50%  { transform: scale(1.22) translate(1.5%, 1%); }
+  100% { transform: scale(1.12) translate(-1.5%, -1%); }
+}
+.animate-kenburns {
+  animation: kenburns 22s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* Reels: per-beat scene animations. Each variant gives a distinct camera feel
+   so consecutive beats read like cuts in a produced video, not one long pan. */
+@keyframes scene-establish {
+  0%   { transform: scale(1.02) translate(0, 0); }
+  100% { transform: scale(1.12) translate(-1%, -0.5%); }
+}
+.animate-scene-establish {
+  animation: scene-establish 7s ease-out both;
+  transform-origin: 50% 55%;
+}
+@keyframes scene-push {
+  0%   { transform: scale(1.05); }
+  100% { transform: scale(1.3); }
+}
+.animate-scene-push {
+  animation: scene-push 6s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transform-origin: 50% 48%;
+}
+@keyframes scene-pan {
+  0%   { transform: scale(1.2) translateX(4%); }
+  100% { transform: scale(1.2) translateX(-4%); }
+}
+.animate-scene-pan {
+  animation: scene-pan 8s linear both;
+  transform-origin: center center;
+}
+@keyframes scene-rack {
+  0%   { transform: scale(1.25); }
+  100% { transform: scale(1.18); }
+}
+.animate-scene-rack {
+  animation: scene-rack 5s ease-out both;
+  transform-origin: 52% 50%;
+}
+@keyframes scene-crop {
+  0%   { transform: scale(1.45) translate(2%, 1%); }
+  100% { transform: scale(1.5) translate(-2%, -1%); }
+}
+.animate-scene-crop {
+  animation: scene-crop 6s ease-in-out both;
+  transform-origin: 60% 45%;
+}
+@keyframes scene-split {
+  0%   { transform: scale(1.18) translate(0, 0); }
+  100% { transform: scale(1.18) translate(0, -2%); }
+}
+.animate-scene-split {
+  animation: scene-split 6s ease-out both;
+  transform-origin: center center;
+}
+
+/* Reels: broadcast scanlines overlay (subtle horizontal lines).
+   mix-blend-mode forces non-accelerated compositing over the animated scene
+   beneath, which was pegging CPU; plain alpha comp looks nearly identical. */
+.scanlines-overlay {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.06) 0,
+    rgba(255, 255, 255, 0.06) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* Reels: heavy vignette for crop-detail variant */
+.vignette-heavy {
+  background: radial-gradient(
+    ellipse at center,
+    transparent 40%,
+    rgba(0, 0, 0, 0.55) 85%,
+    rgba(0, 0, 0, 0.9) 100%
+  );
+}
+
+/* Reels: beat caption enter */
+@keyframes beat-in {
+  from { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);  filter: blur(0); }
+}
+.animate-beat {
+  animation: beat-in 360ms ease-out both;
+}
+
+/* Reels: procedurally-generated film grain overlay.
+   Removed mix-blend-mode + infinite drift — the blend forced full-surface
+   recomposition on every Ken Burns frame and the SVG-filter noise is heavy.
+   A static, alpha-blended grain layer reads nearly identical at 0.2 opacity. */
+.grain-overlay {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.4 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/></svg>");
+  background-size: 180px 180px;
+  opacity: 0.2;
+}
+
+/* Aurora gradient used behind the hero */
+.hero-aurora::before {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  background:
+    radial-gradient(40% 55% at 15% 20%, rgba(59, 130, 246, 0.18), transparent 60%),
+    radial-gradient(35% 50% at 85% 30%, rgba(245, 158, 11, 0.14), transparent 60%),
+    radial-gradient(45% 60% at 50% 110%, rgba(239, 68, 68, 0.12), transparent 65%);
+  filter: blur(30px);
+  pointer-events: none;
+}

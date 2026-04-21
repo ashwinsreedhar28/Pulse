@@ -1,0 +1,355 @@
+[
+  {
+    "title": "SemiAnalysis",
+    "url": "https://www.semianalysis.com/feed",
+    "category": "Semiconductors",
+    "domain": "finance"
+  },
+  {
+    "title": "EE Times",
+    "url": "https://www.eetimes.com/feed/",
+    "category": "Semiconductors",
+    "domain": "finance"
+  },
+  {
+    "title": "Tom's Hardware",
+    "url": "https://www.tomshardware.com/feeds/all",
+    "category": "Semiconductors",
+    "domain": "finance"
+  },
+  {
+    "title": "The Register — Data Centre",
+    "url": "https://www.theregister.com/data_centre/headlines.atom",
+    "category": "Semiconductors",
+    "domain": "finance"
+  },
+  {
+    "title": "Ars Technica — Tech Policy",
+    "url": "https://arstechnica.com/tech-policy/feed/",
+    "category": "Semiconductors",
+    "domain": "finance"
+  },
+  {
+    "title": "IEEE Spectrum — Semiconductors",
+    "url": "https://spectrum.ieee.org/feeds/topic/semiconductors.rss",
+    "category": "Semiconductors",
+    "domain": "finance"
+  },
+  {
+    "title": "Nikkei Asia — Tech",
+    "url": "https://asia.nikkei.com/rss/feed/nar",
+    "category": "Semiconductors",
+    "domain": "finance",
+    "notes": "Critical for Asia-Pacific semiconductor supply chain news (TSMC, Samsung, etc.)"
+  },
+  {
+    "title": "NVIDIA Blog",
+    "url": "https://blogs.nvidia.com/feed/",
+    "category": "Semiconductors",
+    "domain": "finance"
+  },
+  {
+    "title": "Breaking Defense",
+    "url": "https://breakingdefense.com/feed/",
+    "category": "Defense & Aerospace",
+    "domain": "finance"
+  },
+  {
+    "title": "Defense News",
+    "url": "https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml",
+    "category": "Defense & Aerospace",
+    "domain": "finance"
+  },
+  {
+    "title": "The War Zone",
+    "url": "https://www.thedrive.com/the-war-zone/feed",
+    "category": "Defense & Aerospace",
+    "domain": "finance"
+  },
+  {
+    "title": "Mining.com",
+    "url": "https://www.mining.com/feed/",
+    "category": "Mining & Materials",
+    "domain": "finance"
+  },
+  {
+    "title": "Reuters Commodities (via Google News)",
+    "url": "https://news.google.com/rss/search?q=when:24h+allinurl:reuters.com/markets/commodities&hl=en-US&gl=US&ceid=US:en",
+    "category": "Mining & Materials",
+    "domain": "finance",
+    "notes": "Workaround since Reuters killed their native RSS in 2020"
+  },
+  {
+    "title": "Federal Reserve Press Releases",
+    "url": "https://www.federalreserve.gov/feeds/press_all.xml",
+    "category": "General Financial",
+    "domain": "finance",
+    "notes": "Official, completely unbiased primary source"
+  },
+  {
+    "title": "SEC Press Releases",
+    "url": "https://www.sec.gov/news/pressreleases.rss",
+    "category": "General Financial",
+    "domain": "finance",
+    "notes": "Official regulatory announcements"
+  },
+  {
+    "title": "Reuters Business",
+    "url": "https://news.google.com/rss/search?q=when:24h+allinurl:reuters.com/business&hl=en-US&gl=US&ceid=US:en",
+    "category": "General Financial",
+    "domain": "finance",
+    "notes": "Workaround since Reuters killed their native RSS"
+  },
+  {
+    "title": "Associated Press",
+    "url": "https://news.google.com/rss/search?q=when:24h+allinurl:apnews.com&hl=en-US&gl=US&ceid=US:en",
+    "category": "US Geopolitics",
+    "domain": "general",
+    "notes": "AP doesn't offer official RSS — this is the most reliable workaround"
+  },
+  {
+    "title": "NPR Politics",
+    "url": "https://feeds.npr.org/1014/rss.xml",
+    "category": "US Geopolitics",
+    "domain": "general"
+  },
+  {
+    "title": "PBS NewsHour — Politics",
+    "url": "https://www.pbs.org/newshour/feeds/rss/politics",
+    "category": "US Geopolitics",
+    "domain": "general",
+    "notes": "Consistently ranked as one of the most unbiased news sources"
+  },
+  {
+    "title": "ProPublica",
+    "url": "http://feeds.propublica.org/propublica/main",
+    "category": "US Geopolitics",
+    "domain": "general",
+    "notes": "Nonprofit investigative journalism — deep, fact-driven reporting"
+  },
+  {
+    "title": "Christian Science Monitor",
+    "url": "https://rss.csmonitor.com/feeds/all",
+    "category": "US Geopolitics",
+    "domain": "general",
+    "notes": "Consistently rated among the most unbiased sources"
+  },
+  {
+    "title": "Politico",
+    "url": "https://rss.politico.com/politics-news.xml",
+    "category": "US Geopolitics",
+    "domain": "general"
+  },
+  {
+    "title": "The Hill",
+    "url": "https://thehill.com/news/feed/",
+    "category": "US Geopolitics",
+    "domain": "general"
+  },
+  {
+    "title": "Foreign Policy",
+    "url": "https://foreignpolicy.com/feed/",
+    "category": "US Geopolitics",
+    "domain": "general"
+  },
+  {
+    "title": "CSIS Analysis",
+    "url": "https://www.csis.org/analysis/feed",
+    "category": "US Geopolitics",
+    "domain": "general"
+  },
+  {
+    "title": "The Diplomat",
+    "url": "https://thediplomat.com/feed/",
+    "category": "US Geopolitics",
+    "domain": "general"
+  },
+  {
+    "title": "BBC World News",
+    "url": "http://feeds.bbci.co.uk/news/world/rss.xml",
+    "category": "World Events",
+    "domain": "general"
+  },
+  {
+    "title": "PBS NewsHour — World",
+    "url": "https://www.pbs.org/newshour/feeds/rss/world",
+    "category": "World Events",
+    "domain": "general"
+  },
+  {
+    "title": "Al Jazeera English",
+    "url": "https://www.aljazeera.com/xml/rss/all.xml",
+    "category": "World Events",
+    "domain": "general",
+    "notes": "Strong Middle East and Global South coverage — balances Western outlets"
+  },
+  {
+    "title": "The Guardian — World",
+    "url": "https://www.theguardian.com/world/rss",
+    "category": "World Events",
+    "domain": "general"
+  },
+  {
+    "title": "Deutsche Welle (DW)",
+    "url": "https://rss.dw.com/xml/rss-en-all",
+    "category": "World Events",
+    "domain": "general",
+    "notes": "German public broadcaster — statutory impartiality requirement"
+  },
+  {
+    "title": "NPR World",
+    "url": "https://feeds.npr.org/1004/rss.xml",
+    "category": "World Events",
+    "domain": "general"
+  },
+  {
+    "title": "NASA Breaking News",
+    "url": "https://www.nasa.gov/feed/",
+    "category": "Space",
+    "domain": "general",
+    "notes": "Official NASA news — primary source"
+  },
+  {
+    "title": "NASA JPL News",
+    "url": "https://www.jpl.nasa.gov/feeds/news",
+    "category": "Space",
+    "domain": "general",
+    "notes": "Jet Propulsion Laboratory — missions, robotics, planetary science"
+  },
+  {
+    "title": "NASA Spaceflight",
+    "url": "https://www.nasaspaceflight.com/feed/",
+    "category": "Space",
+    "domain": "general",
+    "notes": "Independent, technically rigorous — not affiliated with NASA"
+  },
+  {
+    "title": "SpaceNews",
+    "url": "https://spacenews.com/feed/",
+    "category": "Space",
+    "domain": "general"
+  },
+  {
+    "title": "Space.com",
+    "url": "https://www.space.com/feeds/all",
+    "category": "Space",
+    "domain": "general"
+  },
+  {
+    "title": "Ars Technica — Space",
+    "url": "https://arstechnica.com/science/space/feed/",
+    "category": "Space",
+    "domain": "general"
+  },
+  {
+    "title": "ESA News",
+    "url": "https://www.esa.int/rssfeed/Our_Activities",
+    "category": "Space",
+    "domain": "general",
+    "notes": "European Space Agency official"
+  },
+  {
+    "title": "NPR Top Stories",
+    "url": "https://feeds.npr.org/1001/rss.xml",
+    "category": "Regional",
+    "domain": "general"
+  },
+  {
+    "title": "San Francisco Chronicle — Bay Area",
+    "url": "https://www.sfchronicle.com/bayarea/feed/Bay-Area-News-429.php",
+    "category": "Regional",
+    "domain": "general",
+    "notes": "Bay Area regional coverage"
+  },
+  {
+    "title": "The Mercury News — Bay Area",
+    "url": "https://www.mercurynews.com/location/california/bay-area/feed/",
+    "category": "Regional",
+    "domain": "general",
+    "notes": "South Bay / Silicon Valley regional coverage including Mountain View"
+  },
+  {
+    "title": "KQED News (NPR)",
+    "url": "https://www.kqed.org/news/feed",
+    "category": "Regional",
+    "domain": "general",
+    "notes": "Bay Area NPR affiliate"
+  },
+  {
+    "title": "Mountain View Voice",
+    "url": "https://mv-voice.com/rss/",
+    "category": "Regional",
+    "domain": "general",
+    "notes": "Hyperlocal Mountain View coverage"
+  },
+  {
+    "title": "arXiv CS - Machine Learning",
+    "url": "http://export.arxiv.org/rss/cs.LG",
+    "category": "Deep Learning & AI",
+    "domain": "technology",
+    "notes": "Direct pipeline to the latest machine learning and neural network papers."
+  },
+  {
+    "title": "BAIR Blog",
+    "url": "https://bair.berkeley.edu/blog/feed.xml",
+    "category": "Deep Learning & AI",
+    "domain": "technology",
+    "notes": "Berkeley Artificial Intelligence Research — highly technical and unbiased academic insights."
+  },
+  {
+    "title": "HPCwire",
+    "url": "https://www.hpcwire.com/feed/",
+    "category": "Semiconductors & Hardware",
+    "domain": "technology",
+    "notes": "Excellent primary source for tracking high-performance computing, efficient hardware, and supercomputing."
+  },
+  {
+    "title": "ServeTheHome",
+    "url": "https://www.servethehome.com/feed/",
+    "category": "Semiconductors & Hardware",
+    "domain": "technology",
+    "notes": "Deep-dive hardware reviews, networking architecture, and enterprise-grade server infrastructure."
+  },
+  {
+    "title": "Propmodo",
+    "url": "https://www.propmodo.com/feed/",
+    "category": "Real Estate Tech",
+    "domain": "finance",
+    "notes": "Objective coverage of commercial real estate innovation and PropTech platforms."
+  },
+  {
+    "title": "GeekEstate Blog",
+    "url": "https://geekestateblog.com/feed/",
+    "category": "Real Estate Tech",
+    "domain": "technology",
+    "notes": "Focuses heavily on the intersection of real estate, automation, and technology."
+  },
+  {
+    "title": "Reuters Technology (via Google News)",
+    "url": "https://news.google.com/rss/search?q=when:24h+allinurl:reuters.com/technology&hl=en-US&gl=US&ceid=US:en",
+    "category": "Technology",
+    "domain": "general",
+    "notes": "Workaround for Reuters tech news; highly objective, fact-based reporting."
+  },
+  {
+    "title": "AP News Technology (via Google News)",
+    "url": "https://news.google.com/rss/search?q=when:24h+allinurl:apnews.com/hub/technology&hl=en-US&gl=US&ceid=US:en",
+    "category": "Technology",
+    "domain": "general",
+    "notes": "Workaround for AP tech news; factual and strictly unbiased wire reporting."
+  },
+  {
+    "title": "WFYI Indianapolis (NPR/PBS)",
+    "url": "https://www.wfyi.org/news/rss",
+    "category": "Regional",
+    "domain": "general",
+    "notes": "Statewide Indiana coverage with high journalistic standards."
+  },
+  {
+    "title": "WBAA Greater Lafayette (NPR)",
+    "url": "https://www.wbaa.org/rss.xml",
+    "category": "Regional",
+    "domain": "general",
+    "notes": "Local NPR affiliate for West Lafayette and the surrounding area."
+  }
+]

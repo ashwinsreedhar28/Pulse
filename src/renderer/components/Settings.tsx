@@ -1,0 +1,1676 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import type {
+  Category,
+  Domain,
+  FavoriteTeam,
+  Feed,
+  GeoInterest,
+  GeoType,
+  KokoroStatus,
+  KokoroVoice,
+  Preferences,
+  SportsLeague,
+  SportsTeam,
+  Theme,
+  Ticker,
+  TtsEngine
+} from '../../preload'
+import tickerReference from '../../data/tickerReference.json'
+import locationReference from '../../data/locationReference.json'
+
+interface TickerRef {
+  symbol: string
+  name: string
+  sector?: string | null
+  industry?: string | null
+  aliases?: string[]
+}
+
+interface LocationRef {
+  displayName: string
+  type: GeoType
+  keywords: string[]
+}
+
+const REFERENCE_TICKERS = tickerReference as TickerRef[]
+const REFERENCE_LOCATIONS = locationReference as LocationRef[]
+
+type Tab = 'categories' | 'feeds' | 'tickers' | 'locations' | 'teams' | 'preferences'
+
+export function Settings({
+  onClose,
+  onDataChanged
+}: {
+  onClose: () => void
+  onDataChanged: () => void
+}): JSX.Element {
+  const [tab, setTab] = useState<Tab>('categories')
+  const [categories, setCategories] = useState<Category[]>([])
+  const [feeds, setFeeds] = useState<Feed[]>([])
+  const [tickers, setTickers] = useState<Ticker[]>([])
+  const [geo, setGeo] = useState<GeoInterest[]>([])
+
+  const reloadAll = useCallback(async (): Promise<void> => {
+    const [cats, fs, ts, gs] = await Promise.all([
+      window.api.categories.list(),
+      window.api.feeds.list(),
+      window.api.tickers.list(),
+      window.api.geo.list()
+    ])
+    setCategories(cats)
+    setFeeds(fs)
+    setTickers(ts)
+    setGeo(gs)
+    onDataChanged()
+  }, [onDataChanged])
+
+  useEffect(() => {
+    void reloadAll()
+  }, [reloadAll])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/60 backdrop-blur-sm pt-12 pb-8 px-6"
+      style={{ isolation: 'isolate' }}
+    >
+      <div className="bg-surface-1 border border-edge rounded-lg shadow-2xl w-full max-w-3xl max-h-[calc(100vh-80px)] flex flex-col overflow-hidden">
+        <header className="h-11 shrink-0 flex items-center gap-3 px-4 border-b border-edge">
+          <div className="text-xs tracking-[0.2em] uppercase text-zinc-400 font-medium">Settings</div>
+          <div className="flex gap-1 ml-4">
+            {(['categories', 'feeds', 'tickers', 'locations', 'teams', 'preferences'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-2.5 py-1 text-[11px] uppercase tracking-wider rounded ${
+                  tab === t
+                    ? 'bg-surface-3 text-zinc-100'
+                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-surface-2'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={onClose}
+            className="ml-auto text-[11px] uppercase tracking-wider text-zinc-400 hover:text-zinc-100"
+          >
+            Close
+          </button>
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {tab === 'categories' && (
+            <CategoriesTab
+              categories={categories}
+              feedCounts={countBy(feeds, 'categoryId')}
+              reload={reloadAll}
+            />
+          )}
+          {tab === 'feeds' && (
+            <FeedsTab feeds={feeds} categories={categories} reload={reloadAll} />
+          )}
+          {tab === 'tickers' && <TickersTab tickers={tickers} reload={reloadAll} />}
+          {tab === 'locations' && <LocationsTab geo={geo} reload={reloadAll} />}
+          {tab === 'teams' && <TeamsTab />}
+          {tab === 'preferences' && <PreferencesTab />}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function countBy<K extends keyof Feed>(items: Feed[], key: K): Record<string, number> {
+  const acc: Record<string, number> = {}
+  for (const f of items) {
+    const k = String(f[key])
+    acc[k] = (acc[k] ?? 0) + 1
+  }
+  return acc
+}
+
+function CategoriesTab({
+  categories,
+  feedCounts,
+  reload
+}: {
+  categories: Category[]
+  feedCounts: Record<string, number>
+  reload: () => Promise<void>
+}): JSX.Element {
+  const [newName, setNewName] = useState('')
+  const [newDomain, setNewDomain] = useState<Domain>('finance')
+  const [busy, setBusy] = useState(false)
+
+  const add = async (): Promise<void> => {
+    const name = newName.trim()
+    if (!name || busy) return
+    setBusy(true)
+    try {
+      await window.api.categories.create(name, newDomain)
+      setNewName('')
+      await reload()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const byDomain = (d: Domain): Category[] => categories.filter((c) => c.domain === d)
+
+  return (
+    <div className="p-5 space-y-6">
+      <section>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-2">Add category</div>
+        <div className="flex gap-2">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+            placeholder="Category name"
+            className="flex-1 px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent"
+          />
+          <select
+            value={newDomain}
+            onChange={(e) => setNewDomain(e.target.value as Domain)}
+            className="px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 focus:outline-none focus:border-accent"
+          >
+            <option value="finance">Finance</option>
+            <option value="general">News</option>
+          </select>
+          <button
+            onClick={add}
+            disabled={busy || !newName.trim()}
+            className="px-3 py-1.5 text-[11px] uppercase tracking-wider bg-accent/20 text-accent rounded hover:bg-accent/30 disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
+      </section>
+
+      {(['finance', 'general'] as const).map((domain) => (
+        <section key={domain}>
+          <div
+            className={`text-[10px] uppercase tracking-[0.18em] mb-2 ${
+              domain === 'finance' ? 'text-amber-400' : 'text-blue-400'
+            }`}
+          >
+            {domain === 'finance' ? 'Finance' : 'News'}
+          </div>
+          <ul className="border border-edge rounded divide-y divide-edge">
+            {byDomain(domain).map((c) => (
+              <CategoryRow
+                key={c.id}
+                category={c}
+                feedCount={feedCounts[String(c.id)] ?? 0}
+                reload={reload}
+              />
+            ))}
+            {byDomain(domain).length === 0 && (
+              <li className="px-3 py-4 text-sm text-zinc-500 text-center">No categories</li>
+            )}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function CategoryRow({
+  category,
+  feedCount,
+  reload
+}: {
+  category: Category
+  feedCount: number
+  reload: () => Promise<void>
+}): JSX.Element {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(category.name)
+
+  useEffect(() => setName(category.name), [category.name])
+
+  const saveRename = async (): Promise<void> => {
+    setEditing(false)
+    const trimmed = name.trim()
+    if (!trimmed || trimmed === category.name) {
+      setName(category.name)
+      return
+    }
+    await window.api.categories.rename(category.id, trimmed)
+    await reload()
+  }
+
+  const toggleNotif = async (): Promise<void> => {
+    await window.api.categories.setNotifications(category.id, !category.notificationsEnabled)
+    await reload()
+  }
+
+  const flipDomain = async (): Promise<void> => {
+    const next: Domain = category.domain === 'finance' ? 'general' : 'finance'
+    await window.api.categories.setDomain(category.id, next)
+    await reload()
+  }
+
+  const remove = async (): Promise<void> => {
+    if (feedCount > 0) {
+      const ok = window.confirm(
+        `Delete "${category.name}"? This will also remove ${feedCount} feed${feedCount === 1 ? '' : 's'} and their articles.`
+      )
+      if (!ok) return
+    }
+    await window.api.categories.delete(category.id)
+    await reload()
+  }
+
+  return (
+    <li className="flex items-center gap-2 px-3 py-2">
+      {editing ? (
+        <input
+          value={name}
+          autoFocus
+          onChange={(e) => setName(e.target.value)}
+          onBlur={saveRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void saveRename()
+            if (e.key === 'Escape') {
+              setName(category.name)
+              setEditing(false)
+            }
+          }}
+          className="flex-1 px-2 py-1 text-sm bg-surface-2 border border-edge rounded text-zinc-100 focus:outline-none focus:border-accent"
+        />
+      ) : (
+        <button
+          onClick={() => setEditing(true)}
+          className="flex-1 text-left text-sm text-zinc-100 hover:text-accent truncate"
+          title="Click to rename"
+        >
+          {category.name}
+        </button>
+      )}
+      <span className="text-[10px] text-zinc-500 tabular-nums shrink-0">{feedCount} feeds</span>
+      <button
+        onClick={toggleNotif}
+        title={category.notificationsEnabled ? 'Notifications on' : 'Notifications off'}
+        className={`text-[11px] px-2 py-0.5 rounded transition-colors shrink-0 ${
+          category.notificationsEnabled
+            ? 'text-accent bg-accent/10 hover:bg-accent/20'
+            : 'text-zinc-500 bg-surface-2 hover:text-zinc-300'
+        }`}
+      >
+        {category.notificationsEnabled ? '🔔' : '🔕'}
+      </button>
+      <button
+        onClick={flipDomain}
+        className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded text-zinc-400 bg-surface-2 hover:text-zinc-100 shrink-0"
+        title="Move to other domain"
+      >
+        →{category.domain === 'finance' ? 'News' : 'Fin'}
+      </button>
+      <button
+        onClick={remove}
+        className="text-[11px] text-zinc-500 hover:text-red-400 px-1 shrink-0"
+        title="Delete category"
+      >
+        ✕
+      </button>
+    </li>
+  )
+}
+
+function FeedsTab({
+  feeds,
+  categories,
+  reload
+}: {
+  feeds: Feed[]
+  categories: Category[]
+  reload: () => Promise<void>
+}): JSX.Element {
+  const [url, setUrl] = useState('')
+  const [title, setTitle] = useState('')
+  const [categoryId, setCategoryId] = useState<number | ''>(
+    categories[0]?.id ?? ''
+  )
+  const [probing, setProbing] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [probeError, setProbeError] = useState<string | null>(null)
+  const [filterCategoryId, setFilterCategoryId] = useState<number | 'all'>('all')
+
+  useEffect(() => {
+    if (categoryId === '' && categories[0]) setCategoryId(categories[0].id)
+  }, [categories, categoryId])
+
+  const probe = async (): Promise<void> => {
+    const u = url.trim()
+    if (!u || probing) return
+    setProbing(true)
+    setProbeError(null)
+    try {
+      const res = await window.api.feeds.probe(u)
+      if (res.status === 'ok' && res.title) {
+        setTitle(res.title)
+      } else {
+        setProbeError(res.error ?? 'Could not read feed')
+      }
+    } finally {
+      setProbing(false)
+    }
+  }
+
+  const add = async (): Promise<void> => {
+    const u = url.trim()
+    const t = title.trim()
+    if (!u || !t || categoryId === '' || adding) return
+    setAdding(true)
+    try {
+      await window.api.feeds.create({ title: t, url: u, categoryId: Number(categoryId) })
+      setUrl('')
+      setTitle('')
+      setProbeError(null)
+      await reload()
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const visibleFeeds =
+    filterCategoryId === 'all' ? feeds : feeds.filter((f) => f.categoryId === filterCategoryId)
+
+  return (
+    <div className="p-5 space-y-6">
+      <section>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-2">Add feed</div>
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onBlur={() => url.trim() && !title && void probe()}
+              placeholder="Feed URL (RSS / Atom)"
+              className="flex-1 px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent"
+            />
+            <button
+              onClick={probe}
+              disabled={probing || !url.trim()}
+              className="px-3 py-1.5 text-[11px] uppercase tracking-wider bg-surface-2 text-zinc-300 rounded hover:bg-surface-3 disabled:opacity-40"
+            >
+              {probing ? 'Probing…' : 'Probe'}
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Feed title (auto-fills from probe)"
+              className="flex-1 px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent"
+            />
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value === '' ? '' : Number(e.target.value))}
+              className="px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 focus:outline-none focus:border-accent"
+            >
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.domain === 'finance' ? 'Fin' : 'News'} · {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={add}
+              disabled={adding || !url.trim() || !title.trim() || categoryId === ''}
+              className="px-3 py-1.5 text-[11px] uppercase tracking-wider bg-accent/20 text-accent rounded hover:bg-accent/30 disabled:opacity-40"
+            >
+              Add
+            </button>
+          </div>
+          {probeError && <div className="text-[11px] text-red-400">{probeError}</div>}
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center gap-2 mb-2">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Feeds</div>
+          <select
+            value={filterCategoryId}
+            onChange={(e) =>
+              setFilterCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))
+            }
+            className="ml-auto px-2 py-1 text-[11px] bg-surface-2 border border-edge rounded text-zinc-300 focus:outline-none focus:border-accent"
+          >
+            <option value="all">All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <span className="text-[11px] text-zinc-500 tabular-nums">{visibleFeeds.length}</span>
+        </div>
+        <ul className="border border-edge rounded divide-y divide-edge">
+          {visibleFeeds.map((f) => (
+            <FeedRow key={f.id} feed={f} categories={categories} reload={reload} />
+          ))}
+          {visibleFeeds.length === 0 && (
+            <li className="px-3 py-4 text-sm text-zinc-500 text-center">No feeds</li>
+          )}
+        </ul>
+      </section>
+    </div>
+  )
+}
+
+function FeedRow({
+  feed,
+  categories,
+  reload
+}: {
+  feed: Feed
+  categories: Category[]
+  reload: () => Promise<void>
+}): JSX.Element {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(feed.title)
+
+  useEffect(() => setTitle(feed.title), [feed.title])
+
+  const saveRename = async (): Promise<void> => {
+    setEditing(false)
+    const t = title.trim()
+    if (!t || t === feed.title) {
+      setTitle(feed.title)
+      return
+    }
+    await window.api.feeds.rename(feed.id, t)
+    await reload()
+  }
+
+  const toggleEnabled = async (): Promise<void> => {
+    await window.api.feeds.setEnabled(feed.id, !feed.isEnabled)
+    await reload()
+  }
+
+  const changeCategory = async (catId: number): Promise<void> => {
+    if (catId === feed.categoryId) return
+    await window.api.feeds.setCategory(feed.id, catId)
+    await reload()
+  }
+
+  const remove = async (): Promise<void> => {
+    const ok = window.confirm(`Delete feed "${feed.title}" and its articles?`)
+    if (!ok) return
+    await window.api.feeds.delete(feed.id)
+    await reload()
+  }
+
+  return (
+    <li className={`flex items-center gap-2 px-3 py-2 ${feed.isEnabled ? '' : 'opacity-50'}`}>
+      <div className="flex-1 min-w-0">
+        {editing ? (
+          <input
+            value={title}
+            autoFocus
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={saveRename}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void saveRename()
+              if (e.key === 'Escape') {
+                setTitle(feed.title)
+                setEditing(false)
+              }
+            }}
+            className="w-full px-2 py-1 text-sm bg-surface-2 border border-edge rounded text-zinc-100 focus:outline-none focus:border-accent"
+          />
+        ) : (
+          <button
+            onClick={() => setEditing(true)}
+            className="block w-full text-left text-sm text-zinc-100 hover:text-accent truncate"
+            title="Click to rename"
+          >
+            {feed.title}
+          </button>
+        )}
+        <div className="text-[11px] text-zinc-500 truncate">{feed.url}</div>
+      </div>
+      <select
+        value={feed.categoryId}
+        onChange={(e) => void changeCategory(Number(e.target.value))}
+        className="px-2 py-1 text-[11px] bg-surface-2 border border-edge rounded text-zinc-300 focus:outline-none focus:border-accent shrink-0"
+      >
+        {categories.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.domain === 'finance' ? 'Fin' : 'News'} · {c.name}
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={toggleEnabled}
+        title={feed.isEnabled ? 'Enabled' : 'Disabled'}
+        className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded shrink-0 ${
+          feed.isEnabled
+            ? 'text-emerald-400 bg-emerald-400/10 hover:bg-emerald-400/20'
+            : 'text-zinc-500 bg-surface-2 hover:text-zinc-300'
+        }`}
+      >
+        {feed.isEnabled ? 'On' : 'Off'}
+      </button>
+      <button
+        onClick={remove}
+        className="text-[11px] text-zinc-500 hover:text-red-400 px-1 shrink-0"
+        title="Delete feed"
+      >
+        ✕
+      </button>
+    </li>
+  )
+}
+
+function TickersTab({
+  tickers,
+  reload
+}: {
+  tickers: Ticker[]
+  reload: () => Promise<void>
+}): JSX.Element {
+  const [query, setQuery] = useState('')
+  const [symbol, setSymbol] = useState('')
+  const [name, setName] = useState('')
+  const [sector, setSector] = useState('')
+  const [industry, setIndustry] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const existing = useMemo(() => new Set(tickers.map((t) => t.symbol)), [tickers])
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    const out: TickerRef[] = []
+    for (const t of REFERENCE_TICKERS) {
+      if (existing.has(t.symbol)) continue
+      const hay =
+        `${t.symbol} ${t.name} ${(t.aliases ?? []).join(' ')} ${t.sector ?? ''} ${t.industry ?? ''}`.toLowerCase()
+      if (hay.includes(q)) out.push(t)
+      if (out.length >= 8) break
+    }
+    return out
+  }, [query, existing])
+
+  const pickReference = (ref: TickerRef): void => {
+    setSymbol(ref.symbol)
+    setName(ref.name)
+    setSector(ref.sector ?? '')
+    setIndustry(ref.industry ?? '')
+    setQuery('')
+    setError(null)
+  }
+
+  const clearForm = (): void => {
+    setSymbol('')
+    setName('')
+    setSector('')
+    setIndustry('')
+    setError(null)
+  }
+
+  const add = async (): Promise<void> => {
+    const sym = symbol.trim().toUpperCase()
+    const nm = name.trim()
+    if (!sym || !nm || adding) return
+    if (existing.has(sym)) {
+      setError(`${sym} is already in the watchlist.`)
+      return
+    }
+    setAdding(true)
+    setError(null)
+    try {
+      await window.api.tickers.create({
+        symbol: sym,
+        companyName: nm,
+        sector: sector.trim() || null,
+        industry: industry.trim() || null
+      })
+      clearForm()
+      await reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const remove = async (t: Ticker): Promise<void> => {
+    const ok = window.confirm(`Remove ${t.symbol} (${t.companyName}) from the watchlist?`)
+    if (!ok) return
+    await window.api.tickers.delete(t.id)
+    await reload()
+  }
+
+  const grouped = useMemo(() => {
+    const by: Record<string, Ticker[]> = {}
+    for (const t of tickers) {
+      const key = t.sector ?? 'Uncategorized'
+      ;(by[key] ??= []).push(t)
+    }
+    return Object.entries(by).sort(([a], [b]) => a.localeCompare(b))
+  }, [tickers])
+
+  return (
+    <div className="p-5 space-y-6">
+      <section>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-2">
+          Add ticker
+        </div>
+        <div className="space-y-2">
+          <div className="relative">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by symbol, company, or brand (NVDA, TSMC, EUV…)"
+              className="w-full px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent"
+            />
+            {matches.length > 0 && (
+              <ul className="absolute z-10 left-0 right-0 top-full mt-1 bg-surface-1 border border-edge rounded shadow-lg max-h-72 overflow-y-auto">
+                {matches.map((m) => (
+                  <li key={m.symbol}>
+                    <button
+                      onClick={() => pickReference(m)}
+                      className="w-full text-left px-3 py-2 hover:bg-surface-2 flex items-baseline gap-2"
+                    >
+                      <span className="text-[12px] font-semibold text-zinc-100 tabular-nums w-16 shrink-0">
+                        {m.symbol}
+                      </span>
+                      <span className="text-sm text-zinc-300 truncate">{m.name}</span>
+                      <span className="ml-auto text-[10px] uppercase tracking-wider text-zinc-500 shrink-0">
+                        {m.industry ?? m.sector ?? ''}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="grid grid-cols-[120px_1fr] gap-2">
+            <input
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              placeholder="Symbol"
+              className="px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent tabular-nums uppercase"
+            />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Company name"
+              className="px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              value={sector}
+              onChange={(e) => setSector(e.target.value)}
+              placeholder="Sector (optional)"
+              className="px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent"
+            />
+            <input
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
+              placeholder="Industry (optional)"
+              className="px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={add}
+              disabled={adding || !symbol.trim() || !name.trim()}
+              className="px-3 py-1.5 text-[11px] uppercase tracking-wider bg-accent/20 text-accent rounded hover:bg-accent/30 disabled:opacity-40"
+            >
+              {adding ? 'Adding…' : 'Add'}
+            </button>
+            {(symbol || name || sector || industry) && (
+              <button
+                onClick={clearForm}
+                className="text-[11px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300"
+              >
+                Clear
+              </button>
+            )}
+            {error && <span className="text-[11px] text-red-400 ml-auto">{error}</span>}
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center gap-2 mb-2">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Watchlist</div>
+          <span className="ml-auto text-[11px] text-zinc-500 tabular-nums">{tickers.length}</span>
+        </div>
+        {tickers.length === 0 ? (
+          <div className="border border-edge rounded px-3 py-6 text-sm text-zinc-500 text-center">
+            No tickers yet. Search above to add one.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {grouped.map(([sectorLabel, rows]) => (
+              <div key={sectorLabel}>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-1 px-1">
+                  {sectorLabel}
+                </div>
+                <ul className="border border-edge rounded divide-y divide-edge">
+                  {rows.map((t) => (
+                    <li key={t.id} className="flex items-center gap-3 px-3 py-2">
+                      <span className="text-[12px] font-semibold text-zinc-100 tabular-nums w-16 shrink-0">
+                        {t.symbol}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-zinc-100 truncate">{t.companyName}</div>
+                        {t.industry && (
+                          <div className="text-[11px] text-zinc-500 truncate">{t.industry}</div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => void remove(t)}
+                        className="text-[11px] text-zinc-500 hover:text-red-400 px-1 shrink-0"
+                        title="Remove ticker"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+const GEO_TYPES: GeoType[] = ['city', 'state', 'country', 'region']
+
+function autoKeywords(name: string): string[] {
+  const base = name.trim()
+  if (!base) return []
+  return [base]
+}
+
+function LocationsTab({
+  geo,
+  reload
+}: {
+  geo: GeoInterest[]
+  reload: () => Promise<void>
+}): JSX.Element {
+  const [query, setQuery] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [type, setType] = useState<GeoType>('country')
+  const [keywordsText, setKeywordsText] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const existing = useMemo(
+    () => new Set(geo.map((g) => g.displayName.toLowerCase())),
+    [geo]
+  )
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    const out: LocationRef[] = []
+    for (const loc of REFERENCE_LOCATIONS) {
+      if (existing.has(loc.displayName.toLowerCase())) continue
+      const hay = `${loc.displayName} ${loc.keywords.join(' ')} ${loc.type}`.toLowerCase()
+      if (hay.includes(q)) out.push(loc)
+      if (out.length >= 8) break
+    }
+    return out
+  }, [query, existing])
+
+  const pickReference = (ref: LocationRef): void => {
+    setDisplayName(ref.displayName)
+    setType(ref.type)
+    setKeywordsText(ref.keywords.join(', '))
+    setQuery('')
+    setError(null)
+  }
+
+  const clearForm = (): void => {
+    setDisplayName('')
+    setType('country')
+    setKeywordsText('')
+    setError(null)
+  }
+
+  const add = async (): Promise<void> => {
+    const name = displayName.trim()
+    if (!name || adding) return
+    if (existing.has(name.toLowerCase())) {
+      setError(`"${name}" is already in your locations.`)
+      return
+    }
+    const keywords = keywordsText
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean)
+    const finalKeywords = keywords.length > 0 ? keywords : autoKeywords(name)
+    setAdding(true)
+    setError(null)
+    try {
+      await window.api.geo.create({
+        displayName: name,
+        type,
+        keywords: finalKeywords
+      })
+      clearForm()
+      await reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const remove = async (g: GeoInterest): Promise<void> => {
+    const ok = window.confirm(`Remove "${g.displayName}" from your locations?`)
+    if (!ok) return
+    await window.api.geo.delete(g.id)
+    await reload()
+  }
+
+  const grouped = useMemo(() => {
+    const by: Record<GeoType, GeoInterest[]> = {
+      city: [],
+      state: [],
+      country: [],
+      region: []
+    }
+    for (const g of geo) by[g.type].push(g)
+    return GEO_TYPES.filter((t) => by[t].length > 0).map((t) => [t, by[t]] as const)
+  }, [geo])
+
+  return (
+    <div className="p-5 space-y-6">
+      <section>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-2">
+          Add location
+        </div>
+        <div className="space-y-2">
+          <div className="relative">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search countries, regions, states, cities (Taiwan, EU, Indiana…)"
+              className="w-full px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent"
+            />
+            {matches.length > 0 && (
+              <ul className="absolute z-10 left-0 right-0 top-full mt-1 bg-surface-1 border border-edge rounded shadow-lg max-h-72 overflow-y-auto">
+                {matches.map((m) => (
+                  <li key={m.displayName}>
+                    <button
+                      onClick={() => pickReference(m)}
+                      className="w-full text-left px-3 py-2 hover:bg-surface-2 flex items-baseline gap-2"
+                    >
+                      <span className="text-[10px] uppercase tracking-wider text-zinc-500 w-14 shrink-0">
+                        {m.type}
+                      </span>
+                      <span className="text-sm text-zinc-100 truncate">{m.displayName}</span>
+                      <span className="ml-auto text-[10px] text-zinc-500 truncate max-w-[40%]">
+                        {m.keywords.slice(1, 4).join(', ')}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="grid grid-cols-[1fr_140px] gap-2">
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Display name (e.g., Taiwan)"
+              className="px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent"
+            />
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as GeoType)}
+              className="px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 focus:outline-none focus:border-accent capitalize"
+            >
+              {GEO_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <input
+            value={keywordsText}
+            onChange={(e) => setKeywordsText(e.target.value)}
+            placeholder="Matching keywords, comma-separated (Taiwan, Taiwanese, Taipei, ROC)"
+            className="w-full px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={add}
+              disabled={adding || !displayName.trim()}
+              className="px-3 py-1.5 text-[11px] uppercase tracking-wider bg-accent/20 text-accent rounded hover:bg-accent/30 disabled:opacity-40"
+            >
+              {adding ? 'Adding…' : 'Add'}
+            </button>
+            {(displayName || keywordsText) && (
+              <button
+                onClick={clearForm}
+                className="text-[11px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300"
+              >
+                Clear
+              </button>
+            )}
+            <span className="text-[10px] text-zinc-500 ml-2">
+              Leave keywords blank to use the display name alone.
+            </span>
+            {error && <span className="text-[11px] text-red-400 ml-auto">{error}</span>}
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center gap-2 mb-2">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Locations</div>
+          <span className="ml-auto text-[11px] text-zinc-500 tabular-nums">{geo.length}</span>
+        </div>
+        {geo.length === 0 ? (
+          <div className="border border-edge rounded px-3 py-6 text-sm text-zinc-500 text-center">
+            No locations yet. Search above to add one.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {grouped.map(([groupType, rows]) => (
+              <div key={groupType}>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-1 px-1">
+                  {groupType}s
+                </div>
+                <ul className="border border-edge rounded divide-y divide-edge">
+                  {rows.map((g) => (
+                    <LocationRow key={g.id} geo={g} reload={reload} onRemove={() => void remove(g)} />
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function LocationRow({
+  geo,
+  reload,
+  onRemove
+}: {
+  geo: GeoInterest
+  reload: () => Promise<void>
+  onRemove: () => void
+}): JSX.Element {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(geo.keywords.join(', '))
+
+  useEffect(() => setText(geo.keywords.join(', ')), [geo.keywords])
+
+  const save = async (): Promise<void> => {
+    setEditing(false)
+    const next = text
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean)
+    const same =
+      next.length === geo.keywords.length && next.every((k, i) => k === geo.keywords[i])
+    if (same) return
+    const fallback = next.length > 0 ? next : [geo.displayName]
+    await window.api.geo.updateKeywords(geo.id, fallback)
+    await reload()
+  }
+
+  return (
+    <li className="flex items-start gap-3 px-3 py-2">
+      <div className="flex-1 min-w-0">
+        <div className="text-sm text-zinc-100 truncate">{geo.displayName}</div>
+        {editing ? (
+          <input
+            value={text}
+            autoFocus
+            onChange={(e) => setText(e.target.value)}
+            onBlur={save}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void save()
+              if (e.key === 'Escape') {
+                setText(geo.keywords.join(', '))
+                setEditing(false)
+              }
+            }}
+            className="mt-1 w-full px-2 py-1 text-[11px] bg-surface-2 border border-edge rounded text-zinc-100 focus:outline-none focus:border-accent"
+          />
+        ) : (
+          <button
+            onClick={() => setEditing(true)}
+            className="block w-full text-left text-[11px] text-zinc-500 hover:text-accent truncate"
+            title="Click to edit keywords"
+          >
+            {geo.keywords.join(', ') || '(no keywords)'}
+          </button>
+        )}
+      </div>
+      <button
+        onClick={onRemove}
+        className="text-[11px] text-zinc-500 hover:text-red-400 px-1 shrink-0 mt-0.5"
+        title="Remove location"
+      >
+        ✕
+      </button>
+    </li>
+  )
+}
+
+// ---- Preferences tab ----
+
+function PreferencesTab(): JSX.Element {
+  const [prefs, setPrefs] = useState<Preferences | null>(null)
+
+  useEffect(() => {
+    void window.api.prefs.get().then(setPrefs)
+  }, [])
+
+  const update = async (key: keyof Preferences, value: string | number | boolean): Promise<void> => {
+    await window.api.prefs.set(key, value)
+    await window.api.prefs.apply()
+    setPrefs(await window.api.prefs.get())
+  }
+
+  if (!prefs) return <div className="p-6 text-sm text-zinc-500">Loading…</div>
+
+  return (
+    <div className="p-6 space-y-8 max-w-lg">
+      <PrefSection title="Polling">
+        <PrefRow label="Feed poll interval (minutes)">
+          <NumberInput
+            value={prefs.pollIntervalMin}
+            min={1}
+            max={60}
+            onChange={(v) => update('pollIntervalMin', v)}
+          />
+        </PrefRow>
+      </PrefSection>
+
+      <PrefSection title="Notifications">
+        <PrefRow label="Digest interval (minutes)">
+          <NumberInput
+            value={prefs.digestIntervalMin}
+            min={5}
+            max={120}
+            onChange={(v) => update('digestIntervalMin', v)}
+          />
+        </PrefRow>
+        <PrefRow label="Quiet hours">
+          <ToggleSwitch
+            checked={prefs.quietHoursEnabled}
+            onChange={(v) => update('quietHoursEnabled', v)}
+          />
+        </PrefRow>
+        {prefs.quietHoursEnabled && (
+          <div className="flex items-center gap-3 pl-1">
+            <TimeInput value={prefs.quietHoursStart} onChange={(v) => update('quietHoursStart', v)} />
+            <span className="text-zinc-500 text-xs">to</span>
+            <TimeInput value={prefs.quietHoursEnd} onChange={(v) => update('quietHoursEnd', v)} />
+          </div>
+        )}
+      </PrefSection>
+
+      <PrefSection title="Display">
+        <PrefRow label="Density">
+          <select
+            value={prefs.density}
+            onChange={(e) => update('density', e.target.value)}
+            className="bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent"
+          >
+            <option value="comfortable">Comfortable</option>
+            <option value="compact">Compact</option>
+          </select>
+        </PrefRow>
+        <div className="pt-1">
+          <div className="text-[11px] uppercase tracking-wider text-zinc-500 mb-2">Theme</div>
+          <ThemePicker
+            value={prefs.theme}
+            onChange={(t) => update('theme', t)}
+          />
+        </div>
+      </PrefSection>
+
+      <PrefSection title="Sports alerts">
+        <PrefRow label="Favorite team alerts">
+          <ToggleSwitch
+            checked={prefs.favoriteTeamAlertsEnabled}
+            onChange={(v) => update('favoriteTeamAlertsEnabled', v)}
+          />
+        </PrefRow>
+        <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
+          Notifies you when a favorite team&apos;s game starts and when it finishes. Manage teams in the
+          Teams tab; quiet hours still apply.
+        </div>
+      </PrefSection>
+
+      <PrefSection title="System">
+        <PrefRow label="Launch at login">
+          <ToggleSwitch
+            checked={prefs.launchAtLogin}
+            onChange={(v) => update('launchAtLogin', v)}
+          />
+        </PrefRow>
+      </PrefSection>
+
+      <ReelsPrefSection
+        engine={prefs.ttsEngine}
+        voice={prefs.ttsVoice}
+        onUpdate={update}
+      />
+    </div>
+  )
+}
+
+function ReelsPrefSection({
+  engine,
+  voice,
+  onUpdate
+}: {
+  engine: TtsEngine
+  voice: string
+  onUpdate: (key: keyof Preferences, value: string | number | boolean) => Promise<void>
+}): JSX.Element {
+  const [kokoro, setKokoro] = useState<KokoroStatus>({ state: 'idle' })
+  const [voices, setVoices] = useState<KokoroVoice[]>([])
+  const [rebuilding, setRebuilding] = useState(false)
+  const [rebuildMsg, setRebuildMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.api.reels.getKokoroStatus().then(setKokoro)
+    void window.api.reels.listKokoroVoices().then(setVoices)
+    const unsub = window.api.reels.onKokoroStatus(setKokoro)
+    return unsub
+  }, [])
+
+  const rebuild = async (): Promise<void> => {
+    setRebuilding(true)
+    setRebuildMsg('Rebuilding flash audio…')
+    try {
+      const n = await window.api.reels.rebuildAudio()
+      setRebuildMsg(n > 0 ? `Rebuilt ${n} flashes.` : 'Nothing to rebuild.')
+    } catch (err) {
+      setRebuildMsg(err instanceof Error ? err.message : 'Rebuild failed')
+    } finally {
+      setRebuilding(false)
+    }
+  }
+
+  const statusLabel = kokoroStatusLabel(kokoro)
+  const statusTone = kokoroStatusTone(kokoro)
+
+  return (
+    <PrefSection title="Flash narration">
+      <PrefRow label="TTS engine">
+        <select
+          value={engine}
+          onChange={(e) => void onUpdate('ttsEngine', e.target.value as TtsEngine)}
+          className="bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent"
+        >
+          <option value="kokoro">Kokoro-82M (neural, best)</option>
+          <option value="piper">Piper (neural, fallback)</option>
+          <option value="say">macOS say (system)</option>
+        </select>
+      </PrefRow>
+
+      {engine === 'kokoro' && (
+        <PrefRow label="Voice">
+          <select
+            value={voice}
+            onChange={(e) => void onUpdate('ttsVoice', e.target.value)}
+            disabled={voices.length === 0}
+            className="bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent disabled:opacity-50 max-w-[260px]"
+          >
+            {voices.length === 0 ? (
+              <option>{voice}</option>
+            ) : (
+              voices.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))
+            )}
+          </select>
+        </PrefRow>
+      )}
+
+      <div className="flex items-center justify-between pl-1">
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className={`h-1.5 w-1.5 rounded-full ${statusTone}`} />
+          <span className="text-zinc-500 uppercase tracking-wider">Kokoro:</span>
+          <span className="text-zinc-300">{statusLabel}</span>
+        </div>
+        <button
+          onClick={() => void rebuild()}
+          disabled={rebuilding}
+          className="px-3 py-1 text-[11px] uppercase tracking-wider rounded border border-edge bg-surface-2 text-zinc-300 hover:text-zinc-100 hover:border-zinc-600 disabled:opacity-50"
+        >
+          {rebuilding ? 'Rebuilding…' : 'Rebuild all audio'}
+        </button>
+      </div>
+      {rebuildMsg && (
+        <div className="text-[11px] text-zinc-500 pl-1">{rebuildMsg}</div>
+      )}
+      <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
+        Kokoro is the primary TTS. Piper and macOS say are automatic fallbacks
+        when Kokoro is unavailable. Changing voice applies to new flashes — use
+        Rebuild to re-synthesize existing ones.
+      </div>
+    </PrefSection>
+  )
+}
+
+function kokoroStatusLabel(s: KokoroStatus): string {
+  switch (s.state) {
+    case 'idle':
+      return 'idle'
+    case 'unsupported':
+      return `unavailable (${s.reason})`
+    case 'checking-python':
+      return 'checking python…'
+    case 'creating-venv':
+      return 'creating venv…'
+    case 'installing-deps':
+      return 'installing dependencies…'
+    case 'starting-worker':
+      return 'starting worker…'
+    case 'loading-model':
+      return 'loading model…'
+    case 'ready':
+      return 'ready'
+    case 'failed':
+      return `failed (${s.reason})`
+  }
+}
+
+function kokoroStatusTone(s: KokoroStatus): string {
+  if (s.state === 'ready') return 'bg-emerald-400'
+  if (s.state === 'failed' || s.state === 'unsupported') return 'bg-rose-500'
+  if (s.state === 'idle') return 'bg-zinc-500'
+  return 'bg-amber-400 animate-pulse'
+}
+
+function TeamsTab(): JSX.Element {
+  const [leagues, setLeagues] = useState<SportsLeague[]>([])
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null)
+  const [teamsByLeague, setTeamsByLeague] = useState<Record<string, SportsTeam[]>>({})
+  const [loadingTeams, setLoadingTeams] = useState(false)
+  const [favorites, setFavorites] = useState<FavoriteTeam[]>([])
+  const [query, setQuery] = useState('')
+
+  useEffect(() => {
+    void window.api.sports.listLeagues().then((ls) => {
+      setLeagues(ls)
+      if (ls.length > 0) setSelectedLeagueId((prev) => prev ?? ls[0].id)
+    })
+    void window.api.favoriteTeams.list().then(setFavorites)
+  }, [])
+
+  useEffect(() => {
+    if (!selectedLeagueId) return
+    if (teamsByLeague[selectedLeagueId]) return
+    setLoadingTeams(true)
+    void window.api.sports
+      .listTeams(selectedLeagueId)
+      .then((teams) => setTeamsByLeague((prev) => ({ ...prev, [selectedLeagueId]: teams })))
+      .finally(() => setLoadingTeams(false))
+  }, [selectedLeagueId, teamsByLeague])
+
+  const reloadFavorites = async (): Promise<void> => {
+    setFavorites(await window.api.favoriteTeams.list())
+  }
+
+  const favoriteIds = useMemo(() => {
+    const byLeague: Record<string, Set<string>> = {}
+    for (const f of favorites) {
+      const set = byLeague[f.leagueId] ?? (byLeague[f.leagueId] = new Set())
+      set.add(f.teamId)
+    }
+    return byLeague
+  }, [favorites])
+
+  const selectedLeague = leagues.find((l) => l.id === selectedLeagueId)
+  const teams = selectedLeagueId ? teamsByLeague[selectedLeagueId] ?? [] : []
+  const filteredTeams = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return teams
+    return teams.filter((t) =>
+      [t.displayName, t.name, t.location, t.abbreviation, t.shortName]
+        .filter(Boolean)
+        .some((s) => s!.toLowerCase().includes(q))
+    )
+  }, [teams, query])
+
+  const addFavorite = async (team: SportsTeam): Promise<void> => {
+    if (!selectedLeagueId) return
+    await window.api.favoriteTeams.add({
+      leagueId: selectedLeagueId,
+      teamId: team.id,
+      teamName: team.displayName,
+      abbreviation: team.abbreviation,
+      logoURL: team.logoURL
+    })
+    await reloadFavorites()
+  }
+
+  const removeFavorite = async (id: number): Promise<void> => {
+    await window.api.favoriteTeams.delete(id)
+    await reloadFavorites()
+  }
+
+  const toggleAlerts = async (fav: FavoriteTeam): Promise<void> => {
+    await window.api.favoriteTeams.setAlerts(fav.id, !fav.alertsEnabled)
+    await reloadFavorites()
+  }
+
+  const groupedFavorites = useMemo(() => {
+    const byLeague = new Map<string, FavoriteTeam[]>()
+    for (const f of favorites) {
+      const arr = byLeague.get(f.leagueId) ?? []
+      arr.push(f)
+      byLeague.set(f.leagueId, arr)
+    }
+    return byLeague
+  }, [favorites])
+
+  return (
+    <div className="p-5 space-y-6">
+      <section>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-2">
+          Your favorite teams
+        </div>
+        {favorites.length === 0 && (
+          <div className="text-sm text-zinc-500 px-3 py-4 border border-dashed border-edge rounded">
+            No favorites yet. Pick a league and add teams below.
+          </div>
+        )}
+        {favorites.length > 0 && (
+          <ul className="border border-edge rounded divide-y divide-edge">
+            {[...groupedFavorites.entries()].map(([lid, favs]) => {
+              const league = leagues.find((l) => l.id === lid)
+              return (
+                <li key={lid} className="px-3 py-2.5">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-orange-400/90 mb-2">
+                    {league?.shortName ?? lid.toUpperCase()}
+                  </div>
+                  <ul className="space-y-1.5">
+                    {favs.map((f) => (
+                      <li
+                        key={f.id}
+                        className="flex items-center gap-3 px-2 py-1.5 rounded bg-surface-2/60"
+                      >
+                        {f.logoURL && (
+                          <img src={f.logoURL} alt="" className="w-5 h-5 object-contain" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-zinc-100 truncate">{f.teamName}</div>
+                          <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+                            {f.abbreviation}
+                          </div>
+                        </div>
+                        <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] text-zinc-500 mr-1">
+                          Alerts
+                          <ToggleSwitch
+                            checked={f.alertsEnabled}
+                            onChange={() => void toggleAlerts(f)}
+                          />
+                        </label>
+                        <button
+                          onClick={() => void removeFavorite(f.id)}
+                          className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-red-300 px-2 py-1"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-2">Add a team</div>
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {leagues.map((l) => (
+            <button
+              key={l.id}
+              onClick={() => {
+                setSelectedLeagueId(l.id)
+                setQuery('')
+              }}
+              className={`px-2.5 py-1 text-[11px] uppercase tracking-wider rounded ${
+                selectedLeagueId === l.id
+                  ? 'bg-accent/20 text-accent'
+                  : 'bg-surface-2 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              {l.shortName}
+            </button>
+          ))}
+        </div>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Search ${selectedLeague?.shortName ?? ''} teams…`}
+          className="w-full px-3 py-1.5 text-sm bg-surface-2 border border-edge rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-accent mb-3"
+        />
+        {loadingTeams && (
+          <div className="text-sm text-zinc-500 px-3 py-3">Loading teams…</div>
+        )}
+        {!loadingTeams && filteredTeams.length === 0 && (
+          <div className="text-sm text-zinc-500 px-3 py-3">No teams match.</div>
+        )}
+        {!loadingTeams && filteredTeams.length > 0 && (
+          <ul className="border border-edge rounded divide-y divide-edge max-h-80 overflow-y-auto">
+            {filteredTeams.map((t) => {
+              const isFav = favoriteIds[selectedLeagueId ?? '']?.has(t.id) ?? false
+              return (
+                <li
+                  key={t.id}
+                  className="flex items-center gap-3 px-3 py-2 hover:bg-surface-2/40"
+                >
+                  {t.logoURL && (
+                    <img src={t.logoURL} alt="" className="w-6 h-6 object-contain" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-zinc-100 truncate">{t.displayName}</div>
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+                      {t.abbreviation}
+                      {t.location && t.location !== t.displayName && (
+                        <span> · {t.location}</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    disabled={isFav}
+                    onClick={() => void addFavorite(t)}
+                    className={`px-2.5 py-1 text-[11px] uppercase tracking-wider rounded ${
+                      isFav
+                        ? 'bg-surface-2 text-zinc-500 cursor-not-allowed'
+                        : 'bg-accent/20 text-accent hover:bg-accent/30'
+                    }`}
+                  >
+                    {isFav ? 'Added' : 'Add'}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function PrefSection({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
+  return (
+    <div>
+      <h3 className="text-[10px] font-semibold tracking-[0.18em] uppercase text-zinc-400 mb-3">{title}</h3>
+      <div className="space-y-3">{children}</div>
+    </div>
+  )
+}
+
+// Each theme's preview is a fixed 3-swatch triplet (background / accent /
+// highlight). We render without relying on the actual theme variables because
+// the picker lives inside Settings, which itself follows the active theme —
+// we need static previews so all 7 options are visually distinguishable.
+const THEME_OPTIONS: Array<{
+  value: Theme
+  label: string
+  hint: string
+  swatches: [string, string, string]
+}> = [
+  { value: 'system', label: 'System', hint: 'Follow macOS', swatches: ['#1a1a1a', '#ffffff', '#3b82f6'] },
+  { value: 'default', label: 'Default', hint: 'Pulse dark', swatches: ['#0a0b0d', '#171a1f', '#f59e0b'] },
+  { value: 'light', label: 'Light', hint: 'Daylight', swatches: ['#ffffff', '#eef0f3', '#2563eb'] },
+  { value: 'fiesta', label: 'Fiesta', hint: 'Red heat', swatches: ['#14060a', '#300e12', '#ef4444'] },
+  { value: 'zazu', label: 'Zazu', hint: 'Jungle', swatches: ['#06140e', '#0e2c1e', '#22c55e'] },
+  { value: 'ocean', label: 'Ocean', hint: 'Deep blue', swatches: ['#050e1c', '#0a1e36', '#38bdf8'] },
+  { value: 'casino', label: 'Casino', hint: 'Black & gold', swatches: ['#06060422', '#18140a', '#eab308'] }
+]
+
+function ThemePicker({
+  value,
+  onChange
+}: {
+  value: Theme
+  onChange: (t: Theme) => void
+}): JSX.Element {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {THEME_OPTIONS.map((opt) => {
+        const active = value === opt.value
+        return (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`flex flex-col items-start gap-2 p-2.5 rounded-md border text-left transition-colors ${
+              active
+                ? 'border-accent bg-surface-2'
+                : 'border-edge bg-surface-1 hover:bg-surface-2'
+            }`}
+          >
+            <div className="flex gap-1 w-full">
+              {opt.swatches.map((c, i) => (
+                <span
+                  key={i}
+                  className="flex-1 h-8 rounded-sm border border-black/20"
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+            <div className="w-full">
+              <div className={`text-[12px] font-medium ${active ? 'text-zinc-100' : 'text-zinc-200'}`}>
+                {opt.label}
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-zinc-500">{opt.hint}</div>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function PrefRow({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm text-zinc-300">{label}</span>
+      {children}
+    </div>
+  )
+}
+
+function NumberInput({
+  value,
+  min,
+  max,
+  onChange
+}: {
+  value: number
+  min: number
+  max: number
+  onChange: (v: number) => void
+}): JSX.Element {
+  return (
+    <input
+      type="number"
+      value={value}
+      min={min}
+      max={max}
+      onChange={(e) => {
+        const n = Number(e.target.value)
+        if (Number.isFinite(n) && n >= min && n <= max) onChange(n)
+      }}
+      className="w-16 bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 text-right outline-none focus:border-accent tabular-nums"
+    />
+  )
+}
+
+function TimeInput({
+  value,
+  onChange
+}: {
+  value: string
+  onChange: (v: string) => void
+}): JSX.Element {
+  return (
+    <input
+      type="time"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent"
+    />
+  )
+}
+
+function ToggleSwitch({
+  checked,
+  onChange
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+}): JSX.Element {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+        checked ? 'bg-accent' : 'bg-surface-3'
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+          checked ? 'translate-x-[18px]' : 'translate-x-[3px]'
+        }`}
+      />
+    </button>
+  )
+}

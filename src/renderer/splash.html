@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en" data-theme="default">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'none'; child-src 'none'" />
+    <title>Pulse</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body {
+        height: 100%;
+        font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        background: transparent;
+        color: #e4e4e7;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .frame {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: 14px;
+        overflow: hidden;
+        background: radial-gradient(120% 120% at 0% 0%, #1b1c22 0%, #0b0c0f 70%);
+        border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+        padding: 22px 26px 20px;
+        display: flex;
+        flex-direction: column;
+        -webkit-app-region: drag;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      .brand-dot {
+        width: 10px; height: 10px; border-radius: 999px;
+        background: #ef4444;
+        box-shadow: 0 0 0 3px rgba(239,68,68,0.18);
+        animation: dot-pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes dot-pulse {
+        0%,100% { box-shadow: 0 0 0 3px rgba(239,68,68,0.18); }
+        50% { box-shadow: 0 0 0 8px rgba(239,68,68,0.0); }
+      }
+      .brand-name {
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        color: #fafafa;
+      }
+      .brand-sub {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.22em;
+        color: #a1a1aa;
+      }
+      .lead {
+        margin-top: 6px;
+        font-size: 12px;
+        color: #a1a1aa;
+      }
+      .list {
+        margin-top: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        font-size: 12px;
+        line-height: 1.4;
+        flex: 1;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .icon {
+        width: 14px; height: 14px; flex-shrink: 0;
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .icon .sp {
+        width: 11px; height: 11px;
+        border-radius: 999px;
+        border: 1.5px solid rgba(228,228,231,0.3);
+        border-top-color: #e4e4e7;
+        animation: spin 0.9s linear infinite;
+      }
+      .icon .ok {
+        color: #22c55e; font-weight: 700; font-size: 13px;
+      }
+      .icon .skip {
+        color: #52525b; font-size: 13px;
+      }
+      .icon .err {
+        color: #f59e0b; font-weight: 700; font-size: 13px;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .label { color: #d4d4d8; }
+      .row.done .label { color: #71717a; }
+      .footer {
+        margin-top: 14px;
+        font-size: 10px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: #52525b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <span class="brand-name">Pulse</span>
+      </div>
+      <div class="brand-sub">Starting services</div>
+      <div class="lead" id="lead">Warming up your intelligence dashboard…</div>
+      <div class="list" id="list"></div>
+      <div class="footer">Local · Private · No cloud</div>
+    </div>
+    <script>
+      const STAGES = [
+        { id: 'db', label: 'Loading saved articles & preferences' },
+        { id: 'adblock', label: 'Arming tracker & ad blocker' },
+        { id: 'feeds', label: 'Pulling the latest from 40+ feeds' },
+        { id: 'stocks', label: 'Refreshing market quotes' },
+        { id: 'ollama', label: 'Connecting to local AI (Ollama)' },
+        { id: 'piper', label: 'Preparing narration voice' },
+        { id: 'kokoro', label: 'Preparing neural narration' },
+        { id: 'video', label: 'Loading Flash video model' },
+        { id: 'mediaTools', label: 'Checking video tools' }
+      ]
+      const state = Object.fromEntries(STAGES.map((s) => [s.id, 'pending']))
+      const listEl = document.getElementById('list')
+
+      function render() {
+        listEl.innerHTML = ''
+        for (const s of STAGES) {
+          const st = state[s.id]
+          const row = document.createElement('div')
+          row.className = 'row' + (st === 'ok' || st === 'skip' ? ' done' : '')
+          const icon = document.createElement('span')
+          icon.className = 'icon'
+          if (st === 'pending') {
+            icon.innerHTML = '<span class="sp"></span>'
+          } else if (st === 'ok') {
+            icon.innerHTML = '<span class="ok">&check;</span>'
+          } else if (st === 'skip') {
+            icon.innerHTML = '<span class="skip">&minus;</span>'
+          } else {
+            icon.innerHTML = '<span class="err">!</span>'
+          }
+          const label = document.createElement('span')
+          label.className = 'label'
+          label.textContent = s.label
+          row.appendChild(icon)
+          row.appendChild(label)
+          listEl.appendChild(row)
+        }
+      }
+      render()
+
+      window.splash = {
+        update(id, status) {
+          if (state[id] !== undefined) {
+            state[id] = status
+            render()
+          }
+        },
+        message(text) {
+          document.getElementById('lead').textContent = text
+        }
+      }
+
+      window.addEventListener('message', (ev) => {
+        const data = ev.data
+        if (data && data.type === 'splash:update') {
+          window.splash.update(data.id, data.status)
+        } else if (data && data.type === 'splash:message') {
+          window.splash.message(data.text)
+        }
+      })
+    </script>
+  </body>
+</html>
