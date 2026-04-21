@@ -11,6 +11,7 @@ const UA =
 const FETCH_TIMEOUT_MS = 10_000
 const CACHE_TTL_MS = 5 * 60_000
 const FUNDAMENTALS_TTL_MS = 30 * 60_000
+const EARNINGS_TTL_MS = 24 * 60 * 60_000
 
 // Yahoo's v10 quoteSummary endpoint has required a crumb + cookie auth dance
 // since 2023. Without it, every request returns HTTP 401. We do a one-time
@@ -277,5 +278,110 @@ export async function getFundamentals(symbol: string): Promise<Fundamentals | nu
     fetchedAt: Date.now()
   }
   fundamentalsCache.set(sym, { value })
+  return value
+}
+
+export interface EarningsCalendar {
+  symbol: string
+  // Unix ms of the earliest upcoming earnings date Yahoo lists for this symbol,
+  // or null if none is scheduled. Yahoo returns estimate windows as arrays of
+  // two timestamps (start/end) — when `isEstimate` is true, `nextDate` is the
+  // start of that window and the actual date is still unconfirmed.
+  nextDate: number | null
+  isEstimate: boolean
+  fetchedAt: number
+}
+
+interface EarningsCacheEntry {
+  value: EarningsCalendar
+}
+
+const earningsCache = new Map<string, EarningsCacheEntry>()
+
+interface CalendarEventsResponse {
+  quoteSummary: {
+    result:
+      | Array<{
+          calendarEvents?: {
+            earnings?: {
+              earningsDate?: Array<RawField | { raw?: number; fmt?: string }>
+            }
+          }
+        }>
+      | null
+    error: { code?: string; description?: string } | null
+  }
+}
+
+export async function getEarnings(symbol: string): Promise<EarningsCalendar | null> {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return null
+  const cached = earningsCache.get(sym)
+  if (cached && Date.now() - cached.value.fetchedAt < EARNINGS_TTL_MS) {
+    return cached.value
+  }
+
+  const modules = 'calendarEvents'
+  const fetchOnce = async (): Promise<CalendarEventsResponse> => {
+    const ok = await ensureYahooCreds()
+    if (!ok || !yahooCrumb || !yahooCookie) throw new Error('no-creds')
+    const url = `${YAHOO_QUOTE_SUMMARY}${encodeURIComponent(sym)}?modules=${modules}&crumb=${encodeURIComponent(yahooCrumb)}`
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': UA, Cookie: yahooCookie, Accept: 'application/json' },
+        signal: controller.signal
+      })
+      if (res.status === 401) {
+        yahooCookie = null
+        yahooCrumb = null
+        throw new Error('HTTP 401')
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return (await res.json()) as CalendarEventsResponse
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  let json: CalendarEventsResponse
+  try {
+    json = await fetchOnce()
+  } catch (err) {
+    if (err instanceof Error && err.message === 'HTTP 401') {
+      try {
+        await ensureYahooCreds(true)
+        json = await fetchOnce()
+      } catch (err2) {
+        console.warn('[yahoo] earnings fetch failed:', err2 instanceof Error ? err2.message : err2)
+        return cached?.value ?? null
+      }
+    } else {
+      console.warn('[yahoo] earnings fetch failed:', err instanceof Error ? err.message : err)
+      return cached?.value ?? null
+    }
+  }
+
+  const dates = json.quoteSummary.result?.[0]?.calendarEvents?.earnings?.earningsDate ?? []
+  const now = Date.now()
+  let nextUnixMs: number | null = null
+  for (const entry of dates) {
+    const r = (entry as RawField).raw
+    if (typeof r !== 'number' || !Number.isFinite(r)) continue
+    const ms = r * 1000
+    if (ms < now) continue
+    if (nextUnixMs === null || ms < nextUnixMs) nextUnixMs = ms
+  }
+  // Yahoo returns a 2-element array when the date is still an estimate window.
+  const isEstimate = dates.length > 1
+
+  const value: EarningsCalendar = {
+    symbol: sym,
+    nextDate: nextUnixMs,
+    isEstimate,
+    fetchedAt: Date.now()
+  }
+  earningsCache.set(sym, { value })
   return value
 }

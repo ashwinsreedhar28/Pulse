@@ -47,6 +47,7 @@ import {
   probeCandidate,
   addSuggestedFeed
 } from '../services/feedFinderService'
+import { getCalendarStrip } from '../services/calendarService'
 import {
   listHyperChats,
   getHyperChat,
@@ -224,6 +225,9 @@ export function registerDbIpc(): void {
   ipcMain.handle('sports:listTeamLeaders', (_e, leagueId: string, teamId: string) =>
     listTeamLeaders(leagueId, teamId)
   )
+
+  // calendar
+  ipcMain.handle('calendar:get', () => getCalendarStrip())
 
   // favorite teams
   ipcMain.handle('db:favoriteTeams:list', () => favoriteTeamsDb.listFavoriteTeams())

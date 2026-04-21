@@ -5,6 +5,7 @@ import { Settings } from './components/Settings'
 import { Discovery } from './components/Discovery'
 import { Hyperintelligence } from './components/Hyperintelligence'
 import { Reels } from './components/Reels'
+import { CalendarStrip } from './components/CalendarStrip'
 import {
   ScoreFlourish,
   sportForLeagueId,
@@ -173,6 +174,15 @@ export default function App(): JSX.Element {
     setReelsOpen(false)
     setSelectedId(null)
   }, [])
+  const handleCalendarOpenGame = useCallback(
+    (leagueId: string, gameId: string): void => {
+      void window.api.sports.listGames(leagueId).then((games) => {
+        const match = games.find((g) => g.id === gameId)
+        if (match) handleTickerOpenGame(match)
+      })
+    },
+    [handleTickerOpenGame]
+  )
   const handleSettingsChange = useCallback(() => {
     void refresh()
     void refreshCategories()
@@ -306,6 +316,16 @@ export default function App(): JSX.Element {
 
   const activeCategory =
     selectedCategoryId !== null ? categories.find((c) => c.id === selectedCategoryId) : null
+  // Category-aware calendar filter. Bookmarks spans both domains, so it falls
+  // back to 'all'. A selected category's domain wins over the active tab so
+  // the strip matches what the user is actually looking at.
+  const calendarFilter: 'all' | 'finance' | 'news' = bookmarksOnly
+    ? 'all'
+    : activeCategory
+      ? activeCategory.domain === 'finance'
+        ? 'finance'
+        : 'news'
+      : filter
   const feedLookupContext = bookmarksOnly
     ? 'Bookmarked news articles across finance (semiconductor value chain, defense, mining) and general news (US geopolitics, space, world events).'
     : activeCategory
@@ -471,6 +491,9 @@ export default function App(): JSX.Element {
             loading={loading}
             onSelect={handleSelect}
             onRefresh={handleRefresh}
+            calendarFilter={calendarFilter}
+            onOpenStock={handleTickerOpenStock}
+            onOpenGame={handleCalendarOpenGame}
           />
         )}
       </main>
@@ -1388,7 +1411,10 @@ function FeedView({
   articles,
   loading,
   onSelect,
-  onRefresh
+  onRefresh,
+  calendarFilter,
+  onOpenStock,
+  onOpenGame
 }: {
   heading: { eyebrow: string; title: string; eyebrowClass: string }
   lookupContext: string
@@ -1396,6 +1422,9 @@ function FeedView({
   loading: boolean
   onSelect: (id: number) => void
   onRefresh: () => Promise<void>
+  calendarFilter: 'all' | 'finance' | 'news'
+  onOpenStock: (symbol: string) => void
+  onOpenGame: (leagueId: string, gameId: string) => void
 }): JSX.Element {
   const dateGroups = useMemo(() => groupArticlesByDate(articles), [articles])
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null)
@@ -1430,6 +1459,11 @@ function FeedView({
   return (
     <div className="h-full overflow-y-auto" data-lookup-context={lookupContext}>
       <FeedHeader heading={heading} totalCount={articles.length} urgentCount={urgentCount} unreadCount={unreadCount} />
+      <CalendarStrip
+        filter={calendarFilter}
+        onOpenStock={onOpenStock}
+        onOpenGame={onOpenGame}
+      />
       {dateGroups.length > 1 && (
         <ArticleDateRail
           groups={dateGroups}
@@ -2664,6 +2698,16 @@ function StocksPage({
         </div>
       </header>
       <div className="flex-1 min-h-0 overflow-y-auto">
+        <CalendarStrip
+          filter="finance"
+          onOpenStock={(symbol) => {
+            const match = tickers.find(
+              (t) => t.symbol.toUpperCase() === symbol.toUpperCase()
+            )
+            if (match) setSelectedTickerId(match.id)
+          }}
+          onOpenGame={() => {}}
+        />
         {tickers.filter((t) => t.isActive).length === 0 ? (
           <div className="px-6 py-20 text-center text-sm text-zinc-500">
             No active tickers in your watchlist. Add some from Settings → Tickers.

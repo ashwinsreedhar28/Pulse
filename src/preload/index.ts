@@ -432,6 +432,35 @@ export interface FeedFinderCandidate {
   alreadySubscribed: boolean
 }
 
+export type CalendarEventKind = 'earnings' | 'game' | 'launch'
+
+export interface CalendarEvent {
+  id: string
+  kind: CalendarEventKind
+  date: number
+  title: string
+  subtitle: string | null
+  meta: {
+    symbol?: string
+    isEstimate?: boolean
+    leagueId?: string
+    gameId?: string
+    homeAbbrev?: string
+    awayAbbrev?: string
+    homeColor?: string | null
+    awayColor?: string | null
+    provider?: string
+    padLocation?: string | null
+  }
+}
+
+export interface CalendarStrip {
+  from: number
+  to: number
+  events: CalendarEvent[]
+  fetchedAt: number
+}
+
 export interface FeedFinderResult {
   status: 'ok' | 'ollama-offline' | 'no-candidates'
   reply: string
@@ -645,6 +674,9 @@ const api = {
         ipcRenderer.off('sports:openGame', listener)
       }
     }
+  },
+  calendar: {
+    get: () => invoke<CalendarStrip>('calendar:get')
   },
   favoriteTeams: {
     list: () => invoke<FavoriteTeam[]>('db:favoriteTeams:list'),
