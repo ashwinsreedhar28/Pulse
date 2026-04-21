@@ -211,12 +211,22 @@ export default function App(): JSX.Element {
   }, [])
 
   useEffect(() => {
+    // document.hidden only flips on minimize / Cmd+H / other-Space; it stays
+    // false when another app simply covers our window. Combine with window
+    // focus so animations also pause when Pulse is out of focus.
     const sync = (): void => {
-      document.body.classList.toggle('pulse-hidden', document.hidden)
+      const inactive = document.hidden || !document.hasFocus()
+      document.body.classList.toggle('pulse-hidden', inactive)
     }
     sync()
     document.addEventListener('visibilitychange', sync)
-    return () => document.removeEventListener('visibilitychange', sync)
+    window.addEventListener('blur', sync)
+    window.addEventListener('focus', sync)
+    return () => {
+      document.removeEventListener('visibilitychange', sync)
+      window.removeEventListener('blur', sync)
+      window.removeEventListener('focus', sync)
+    }
   }, [])
 
   const refreshReelsCount = useCallback(async () => {
