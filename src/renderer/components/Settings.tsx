@@ -664,14 +664,18 @@ function TickersTab({
     await reload()
   }
 
+  // Passive (isActive=0) rows back the Value Chain graph but don't belong in
+  // the Settings watchlist list — they're shown/activated from the graph view.
+  const watchlist = useMemo(() => tickers.filter((t) => t.isActive), [tickers])
+
   const grouped = useMemo(() => {
     const by: Record<string, Ticker[]> = {}
-    for (const t of tickers) {
+    for (const t of watchlist) {
       const key = t.sector ?? 'Uncategorized'
       ;(by[key] ??= []).push(t)
     }
     return Object.entries(by).sort(([a], [b]) => a.localeCompare(b))
-  }, [tickers])
+  }, [watchlist])
 
   return (
     <div className="p-5 space-y-6">
@@ -760,9 +764,9 @@ function TickersTab({
       <section>
         <div className="flex items-center gap-2 mb-2">
           <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Watchlist</div>
-          <span className="ml-auto text-[11px] text-zinc-500 tabular-nums">{tickers.length}</span>
+          <span className="ml-auto text-[11px] text-zinc-500 tabular-nums">{watchlist.length}</span>
         </div>
-        {tickers.length === 0 ? (
+        {watchlist.length === 0 ? (
           <div className="border border-edge rounded px-3 py-6 text-sm text-zinc-500 text-center">
             No tickers yet. Search above to add one.
           </div>

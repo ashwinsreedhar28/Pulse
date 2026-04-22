@@ -443,5 +443,197 @@ export const migrations: Migration[] = [
         insert.run(t.symbol, t.name, t.sector, t.industry, now)
       }
     }
+  },
+  {
+    version: 21,
+    name: 'article-ticker relevance matches',
+    // Replaces the per-request regex matcher (`listArticlesMatching`) with a
+    // persisted join table populated at ingest time. Each row carries a
+    // `strength` tier ('strong' vs 'weak') so briefs can require strong matches
+    // and drop noise like "ARM instruction set" articles being surfaced under
+    // Arm Holdings. Backfill of existing articles happens on app start —
+    // keeping it out of the migration avoids pulling TS service code into the
+    // raw DDL path, and lets the classifier evolve without bumping schema.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE article_ticker_matches (
+          articleId INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+          symbol TEXT NOT NULL,
+          strength TEXT NOT NULL CHECK (strength IN ('strong', 'weak')),
+          PRIMARY KEY (articleId, symbol)
+        );
+        CREATE INDEX idx_atm_symbol_strength ON article_ticker_matches(symbol, strength);
+      `)
+    }
+  },
+  {
+    version: 22,
+    name: 'ticker_summaries.relevantCount',
+    // The summarizer now returns a separate count of headlines it considered
+    // materially about the ticker. `articleCount` is "strong matches in the
+    // last 24h" (retrieval-level), `relevantCount` is "headlines the LLM
+    // agreed were on-topic" (judgment-level). The UI distinguishes three
+    // empty-ish states using both:
+    //   articleCount = 0  → no strong matches at all (nothing fetched)
+    //   relevantCount = 0 → LLM saw articles but rejected them as noise
+    //   summary = null + relevantCount = null → Ollama offline or never ran
+    up: (db) => {
+      db.exec(`ALTER TABLE ticker_summaries ADD COLUMN relevantCount INTEGER;`)
+    }
+  },
+  {
+    version: 23,
+    name: 'ticker-owned news feeds (Yahoo + Nasdaq per ticker)',
+    // Per-ticker news sourcing: the 44 curated feeds only surface tickers that
+    // make the front page of a generalist outlet. To guarantee baseline
+    // coverage for every watchlist symbol we provision two virtual feeds per
+    // ticker — Yahoo Finance and Nasdaq per-ticker RSS — and route them
+    // through the normal poller. They live in a hidden "Watchlist Sources"
+    // category (notifications off) and are filtered out of the Settings feed
+    // list via `feeds.tickerId IS NULL`. The main article list also hides
+    // them so the home view isn't flooded with per-ticker syndication.
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE feeds ADD COLUMN tickerId INTEGER
+          REFERENCES tickers(id) ON DELETE CASCADE;
+        CREATE INDEX idx_feeds_tickerId ON feeds(tickerId) WHERE tickerId IS NOT NULL;
+      `)
+      const catInsert = db
+        .prepare<[string, number, number, string], { id: number }>(
+          `INSERT INTO categories (name, sortOrder, notificationsEnabled, domain)
+           VALUES (?, ?, ?, ?)
+           RETURNING id`
+        )
+        .get('Watchlist Sources', 99, 0, 'finance')
+      if (!catInsert) return
+      const categoryId = catInsert.id
+      const tickers = db
+        .prepare<[], { id: number; symbol: string; companyName: string }>(
+          `SELECT id, symbol, companyName FROM tickers WHERE isActive = 1`
+        )
+        .all()
+      const feedInsert = db.prepare(
+        `INSERT OR IGNORE INTO feeds (title, url, categoryId, tickerId, isEnabled)
+         VALUES (?, ?, ?, ?, 1)`
+      )
+      for (const t of tickers) {
+        const yahooSym = t.symbol.replace('.', '-')
+        feedInsert.run(
+          `${t.symbol} — Yahoo Finance`,
+          `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(yahooSym)}&region=US&lang=en-US`,
+          categoryId,
+          t.id
+        )
+        feedInsert.run(
+          `${t.symbol} — Nasdaq`,
+          `https://www.nasdaq.com/feed/rssoutbound?symbol=${encodeURIComponent(t.symbol)}`,
+          categoryId,
+          t.id
+        )
+      }
+    }
+  },
+  {
+    version: 24,
+    name: 'seed passive graph tickers (isActive=0)',
+    // Every symbol that appears in the Value Chain graph now gets a row in the
+    // tickers table. Watchlist membership is the existing `isActive` flag —
+    // passive rows get `isActive=0` so they're invisible to watchlist-scoped
+    // code (urgency scoring, article classification, per-ticker RSS feeds,
+    // summary generation, etc.) but the stocks scheduler (which no longer
+    // filters on isActive) will poll their quotes. Activating a passive
+    // ticker is a simple UPDATE handled by the `db:tickers:activate` IPC.
+    up: (db) => {
+      const passive: Array<{
+        symbol: string
+        name: string
+        sector: string
+        industry: string
+      }> = [
+        { symbol: 'MP', name: 'MP Materials', sector: 'Materials', industry: 'Rare Earths' },
+        { symbol: 'USAR', name: 'USA Rare Earth', sector: 'Materials', industry: 'Rare Earths' },
+        { symbol: 'LAC', name: 'Lithium Americas', sector: 'Materials', industry: 'Lithium Mining' },
+        { symbol: 'ALB', name: 'Albemarle', sector: 'Materials', industry: 'Lithium' },
+        { symbol: 'SQM', name: 'Sociedad Química y Minera', sector: 'Materials', industry: 'Lithium' },
+        { symbol: 'FCX', name: 'Freeport-McMoRan', sector: 'Materials', industry: 'Copper' },
+        { symbol: 'SCCO', name: 'Southern Copper', sector: 'Materials', industry: 'Copper' },
+        { symbol: 'RIO', name: 'Rio Tinto', sector: 'Materials', industry: 'Diversified Mining' },
+        { symbol: 'BHP', name: 'BHP Group', sector: 'Materials', industry: 'Diversified Mining' },
+        { symbol: 'VALE', name: 'Vale SA', sector: 'Materials', industry: 'Iron Ore / Nickel' },
+        { symbol: 'NEM', name: 'Newmont', sector: 'Materials', industry: 'Gold Mining' },
+        { symbol: 'APD', name: 'Air Products and Chemicals', sector: 'Materials', industry: 'Industrial Gases' },
+        { symbol: 'AIQUY', name: 'Air Liquide', sector: 'Materials', industry: 'Industrial Gases' },
+        { symbol: 'ENTG', name: 'Entegris', sector: 'Materials', industry: 'Semi Consumables' },
+        { symbol: 'HOCPY', name: 'Hoya Corporation', sector: 'Materials', industry: 'Photomask Blanks / Optics' },
+        { symbol: 'MKSI', name: 'MKS Instruments', sector: 'Semiconductors', industry: 'Vacuum / Subsystems' },
+        { symbol: 'UCTT', name: 'Ultra Clean Holdings', sector: 'Semiconductors', industry: 'Gas Delivery Subsystems' },
+        { symbol: 'SNPS', name: 'Synopsys', sector: 'Semiconductors', industry: 'EDA / IP' },
+        { symbol: 'CDNS', name: 'Cadence Design Systems', sector: 'Semiconductors', industry: 'EDA / IP' },
+        { symbol: 'ARM', name: 'Arm Holdings', sector: 'Semiconductors', industry: 'CPU IP' },
+        { symbol: 'RMBS', name: 'Rambus', sector: 'Semiconductors', industry: 'Memory IP' },
+        { symbol: 'CEVA', name: 'CEVA Inc.', sector: 'Semiconductors', industry: 'DSP / Connectivity IP' },
+        { symbol: 'ADEA', name: 'Adeia', sector: 'Semiconductors', industry: 'Hybrid Bonding IP' },
+        { symbol: 'LRCX', name: 'Lam Research', sector: 'Semiconductors', industry: 'Equipment / Etch' },
+        { symbol: 'KLAC', name: 'KLA Corporation', sector: 'Semiconductors', industry: 'Process Control' },
+        { symbol: 'ONTO', name: 'Onto Innovation', sector: 'Semiconductors', industry: 'Metrology / Inspection' },
+        { symbol: 'ACMR', name: 'ACM Research', sector: 'Semiconductors', industry: 'Wet Cleaning' },
+        { symbol: 'AEHR', name: 'Aehr Test Systems', sector: 'Semiconductors', industry: 'SiC Burn-In Test' },
+        { symbol: 'FORM', name: 'FormFactor', sector: 'Semiconductors', industry: 'Probe Cards' },
+        { symbol: 'GFS', name: 'GlobalFoundries', sector: 'Semiconductors', industry: 'Foundry' },
+        { symbol: 'UMC', name: 'United Microelectronics', sector: 'Semiconductors', industry: 'Foundry' },
+        { symbol: 'TSEM', name: 'Tower Semiconductor', sector: 'Semiconductors', industry: 'Specialty Foundry' },
+        { symbol: 'SKYT', name: 'SkyWater Technology', sector: 'Semiconductors', industry: 'Trusted Foundry' },
+        { symbol: 'TXN', name: 'Texas Instruments', sector: 'Semiconductors', industry: 'Analog IDM' },
+        { symbol: 'ADI', name: 'Analog Devices', sector: 'Semiconductors', industry: 'Analog IDM' },
+        { symbol: 'ON', name: 'onsemi', sector: 'Semiconductors', industry: 'Power / SiC IDM' },
+        { symbol: 'MU', name: 'Micron Technology', sector: 'Semiconductors', industry: 'Memory IDM' },
+        { symbol: 'STM', name: 'STMicroelectronics', sector: 'Semiconductors', industry: 'IDM / Auto' },
+        { symbol: 'NXPI', name: 'NXP Semiconductors', sector: 'Semiconductors', industry: 'Automotive MCU' },
+        { symbol: 'MCHP', name: 'Microchip Technology', sector: 'Semiconductors', industry: 'MCU / Analog' },
+        { symbol: 'WOLF', name: 'Wolfspeed', sector: 'Semiconductors', industry: 'SiC IDM' },
+        { symbol: 'QCOM', name: 'Qualcomm', sector: 'Semiconductors', industry: 'Fabless / Mobile' },
+        { symbol: 'AMBA', name: 'Ambarella', sector: 'Semiconductors', industry: 'Fabless / Vision SoC' },
+        { symbol: 'LSCC', name: 'Lattice Semiconductor', sector: 'Semiconductors', industry: 'Fabless / FPGA' },
+        { symbol: 'ALGM', name: 'Allegro MicroSystems', sector: 'Semiconductors', industry: 'Fabless / Sensors' },
+        { symbol: 'AMKR', name: 'Amkor Technology', sector: 'Semiconductors', industry: 'OSAT / Packaging' },
+        { symbol: 'ASX', name: 'ASE Technology Holding', sector: 'Semiconductors', industry: 'OSAT / Packaging' },
+        { symbol: 'IMOS', name: 'ChipMOS Technologies', sector: 'Semiconductors', industry: 'OSAT / Memory Packaging' },
+        { symbol: 'KLIC', name: 'Kulicke & Soffa Industries', sector: 'Semiconductors', industry: 'Packaging Equipment' },
+        { symbol: 'TEL', name: 'TE Connectivity', sector: 'Electronic Components', industry: 'Connectors / Sensors' },
+        { symbol: 'FLEX', name: 'Flex Ltd', sector: 'Electronic Manufacturing', industry: 'EMS' },
+        { symbol: 'JBL', name: 'Jabil', sector: 'Electronic Manufacturing', industry: 'EMS' },
+        { symbol: 'SMCI', name: 'Super Micro Computer', sector: 'Technology Hardware', industry: 'AI Servers' },
+        { symbol: 'ANET', name: 'Arista Networks', sector: 'Technology Hardware', industry: 'Cloud Networking' },
+        { symbol: 'DELL', name: 'Dell Technologies', sector: 'Technology Hardware', industry: 'Servers / Storage' },
+        { symbol: 'HPE', name: 'Hewlett Packard Enterprise', sector: 'Technology Hardware', industry: 'Enterprise Systems' },
+        { symbol: 'CIEN', name: 'Ciena', sector: 'Technology Hardware', industry: 'Optical Transport' },
+        { symbol: 'JNPR', name: 'Juniper Networks', sector: 'Technology Hardware', industry: 'Networking' },
+        { symbol: 'MSFT', name: 'Microsoft', sector: 'Cloud Infrastructure', industry: 'Hyperscaler / AI' },
+        { symbol: 'GOOGL', name: 'Alphabet', sector: 'Cloud Infrastructure', industry: 'Hyperscaler / AI' },
+        { symbol: 'AMZN', name: 'Amazon', sector: 'Cloud Infrastructure', industry: 'Hyperscaler / AI' },
+        { symbol: 'META', name: 'Meta Platforms', sector: 'Cloud Infrastructure', industry: 'AI Buyer' },
+        { symbol: 'ORCL', name: 'Oracle', sector: 'Cloud Infrastructure', industry: 'Hyperscaler / AI' },
+        { symbol: 'NBIS', name: 'Nebius Group', sector: 'Cloud Infrastructure', industry: 'GPU Cloud' },
+        { symbol: 'IBM', name: 'International Business Machines', sector: 'Cloud Infrastructure', industry: 'Hybrid Cloud / AI' },
+        { symbol: 'LMT', name: 'Lockheed Martin', sector: 'Aerospace & Defense', industry: 'Prime Contractor' },
+        { symbol: 'NOC', name: 'Northrop Grumman', sector: 'Aerospace & Defense', industry: 'Prime Contractor' },
+        { symbol: 'RTX', name: 'RTX Corporation', sector: 'Aerospace & Defense', industry: 'Prime Contractor' },
+        { symbol: 'GD', name: 'General Dynamics', sector: 'Aerospace & Defense', industry: 'Prime Contractor' },
+        { symbol: 'BA', name: 'Boeing', sector: 'Aerospace & Defense', industry: 'Commercial / Defense Aircraft' },
+        { symbol: 'LHX', name: 'L3Harris Technologies', sector: 'Aerospace & Defense', industry: 'C4ISR / Space' },
+        { symbol: 'HII', name: 'Huntington Ingalls Industries', sector: 'Aerospace & Defense', industry: 'Naval Shipbuilding' },
+        { symbol: 'KTOS', name: 'Kratos Defense & Security Solutions', sector: 'Aerospace & Defense', industry: 'Unmanned Systems' },
+        { symbol: 'MRCY', name: 'Mercury Systems', sector: 'Aerospace & Defense', industry: 'Mission Computing' },
+        { symbol: 'TDG', name: 'TransDigm Group', sector: 'Aerospace & Defense', industry: 'Aerospace Components' }
+      ]
+      const insert = db.prepare(
+        `INSERT OR IGNORE INTO tickers (symbol, companyName, sector, industry, isActive, addedAt)
+         VALUES (?, ?, ?, ?, 0, ?)`
+      )
+      const now = Date.now()
+      for (const t of passive) {
+        insert.run(t.symbol, t.name, t.sector, t.industry, now)
+      }
+    }
   }
 ]

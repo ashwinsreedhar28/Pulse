@@ -67,3 +67,23 @@ export function createTicker(input: CreateTickerInput): Ticker {
 export function deleteTicker(id: number): void {
   getDb().prepare(`DELETE FROM tickers WHERE id = ?`).run(id)
 }
+
+export function getTicker(id: number): Ticker | null {
+  const row = getDb()
+    .prepare<[number], TickerRow>(`SELECT * FROM tickers WHERE id = ?`)
+    .get(id)
+  return row ? toTicker(row) : null
+}
+
+export function getTickerBySymbol(symbol: string): Ticker | null {
+  const row = getDb()
+    .prepare<[string], TickerRow>(`SELECT * FROM tickers WHERE symbol = ?`)
+    .get(symbol.toUpperCase())
+  return row ? toTicker(row) : null
+}
+
+export function setTickerActive(id: number, active: boolean): void {
+  getDb()
+    .prepare(`UPDATE tickers SET isActive = ? WHERE id = ?`)
+    .run(active ? 1 : 0, id)
+}

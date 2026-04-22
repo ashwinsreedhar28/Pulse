@@ -67,7 +67,10 @@ export interface ListArticlesOptions {
 }
 
 export function listArticles(opts: ListArticlesOptions = {}): Article[] {
-  const where: string[] = []
+  // Always exclude articles whose source is a ticker-owned virtual feed.
+  // Those are reachable via `listArticlesForTicker`; letting them into the
+  // main view would flood it with per-ticker syndication noise.
+  const where: string[] = ['f.tickerId IS NULL']
   const params: Array<string | number> = []
   if (opts.domain) {
     where.push('a.domain = ?')
@@ -79,7 +82,7 @@ export function listArticles(opts: ListArticlesOptions = {}): Article[] {
   }
   if (opts.unreadOnly) where.push('a.isRead = 0')
   if (opts.bookmarkedOnly) where.push('a.isBookmarked = 1')
-  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  const whereSql = `WHERE ${where.join(' AND ')}`
   const limit = Math.min(opts.limit ?? 200, 1000)
 
   const rows = getDb()
@@ -106,7 +109,7 @@ export function countUnreadByCategory(): Record<number, number> {
     .prepare<[], { categoryId: number; n: number }>(
       `SELECT f.categoryId AS categoryId, COUNT(*) AS n
        FROM articles a JOIN feeds f ON f.id = a.feedId
-       WHERE a.isRead = 0
+       WHERE a.isRead = 0 AND f.tickerId IS NULL
        GROUP BY f.categoryId`
     )
     .all()
@@ -122,6 +125,7 @@ export function countRecentByCategory(sinceMs: number): Record<number, number> {
       `SELECT f.categoryId AS categoryId, COUNT(*) AS n
        FROM articles a JOIN feeds f ON f.id = a.feedId
        WHERE a.publishedAt IS NOT NULL AND a.publishedAt >= ?
+         AND f.tickerId IS NULL
        GROUP BY f.categoryId`
     )
     .all(sinceMs)
@@ -227,6 +231,44 @@ export function rescoreArticles(
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Join against the article_ticker_matches table populated by the relevance
+// classifier at ingest. `strong` filters to articles that mention the full
+// company name (or a distinctive alias/ticker-formatted symbol); pass
+// `includeWeak` to also surface bare-symbol matches.
+export interface ListForTickerOptions {
+  limit?: number
+  sinceMs?: number
+  includeWeak?: boolean
+}
+
+export function listArticlesForTicker(
+  symbol: string,
+  opts: ListForTickerOptions = {}
+): Article[] {
+  const limit = Math.min(opts.limit ?? 60, 500)
+  const strengthClause = opts.includeWeak
+    ? `m.strength IN ('strong', 'weak')`
+    : `m.strength = 'strong'`
+  const params: Array<string | number> = [symbol.toUpperCase()]
+  let sinceClause = ''
+  if (opts.sinceMs !== undefined) {
+    sinceClause = `AND a.publishedAt IS NOT NULL AND a.publishedAt >= ?`
+    params.push(opts.sinceMs)
+  }
+  const rows = getDb()
+    .prepare<typeof params, ArticleRow>(
+      `SELECT a.*, f.title AS feedTitle, f.iconURL AS feedIconURL
+       FROM articles a
+       JOIN feeds f ON f.id = a.feedId
+       JOIN article_ticker_matches m ON m.articleId = a.id
+       WHERE m.symbol = ? AND ${strengthClause} ${sinceClause}
+       ORDER BY a.publishedAt DESC, a.id DESC
+       LIMIT ${limit}`
+    )
+    .all(...params)
+  return rows.map(toArticle)
 }
 
 export function listArticlesMatching(terms: string[], limit = 40): Article[] {

@@ -40,7 +40,10 @@ import {
   rebuildReelAudio,
   runReelGeneration
 } from '../services/reelService'
-import { buildTickerTerms } from '../services/tickerTerms'
+import { classifyAllArticlesForTicker, pollAllFeeds } from '../services/feedPoller'
+import { invalidateMatcherCache } from '../services/tickerRelevance'
+import { deleteMatchesForSymbol } from '../database/articleTickerMatches'
+import { provisionFeedsForTicker } from '../services/tickerFeedsService'
 import {
   getTickerSummary,
   refreshTickerSummary
@@ -120,7 +123,10 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:articles:listForTicker', (_e, tickerId: number) => {
     const ticker = tickersDb.listTickers().find((t) => t.id === tickerId)
     if (!ticker) return []
-    return articlesDb.listArticlesMatching(buildTickerTerms(ticker), 60)
+    // Strong-only: only articles that mention the full company name or a
+    // distinctive alias. Drops "ARM instruction set" noise under Arm Holdings
+    // and keeps the coverage list aligned with what the summarizer sees.
+    return articlesDb.listArticlesForTicker(ticker.symbol, { limit: 60 })
   })
 
   ipcMain.handle('tickers:summarize', (_e, tickerId: number) => {
@@ -130,11 +136,12 @@ export function registerDbIpc(): void {
     // the next event updates the UI.
     if (!cached) {
       refreshTickerSummary(tickerId)
-      return { summary: null, articleCount: 0, generatedAt: null }
+      return { summary: null, articleCount: 0, relevantCount: null, generatedAt: null }
     }
     return {
       summary: cached.summary,
       articleCount: cached.articleCount,
+      relevantCount: cached.relevantCount,
       generatedAt: cached.generatedAt
     }
   })
@@ -142,14 +149,55 @@ export function registerDbIpc(): void {
   // tickers
   ipcMain.handle('db:tickers:list', () => tickersDb.listTickers())
   ipcMain.handle('db:tickers:create', (_e, input: tickersDb.CreateTickerInput) => {
-    const t = tickersDb.createTicker(input)
-    refreshTickerSummary(t.id)
+    // A passive graph row may already exist for this symbol (migration v24
+    // seeds ~75 value-chain tickers with isActive=0). In that case, promote
+    // the existing row instead of hitting the UNIQUE-constraint.
+    const existing = tickersDb.getTickerBySymbol(input.symbol)
+    const t = existing
+      ? (tickersDb.setTickerActive(existing.id, true), tickersDb.getTicker(existing.id)!)
+      : tickersDb.createTicker(input)
+    invalidateMatcherCache()
+    // Provision this ticker's dedicated Yahoo + Nasdaq news feeds so the
+    // poller picks them up on its next cycle (and on the force-triggered
+    // poll we kick below).
+    provisionFeedsForTicker(t)
+    // Classify existing articles against the newly-added ticker so the brief
+    // and coverage list aren't empty until the next poll. Runs in the
+    // background; summary refresh chains after it completes.
+    void classifyAllArticlesForTicker(t).finally(() => refreshTickerSummary(t.id))
+    // Kick an immediate full-feed poll so the newly-provisioned ticker feeds
+    // ingest their first articles right away instead of waiting up to five
+    // minutes for the scheduler. `force: true` bypasses the ML-cold-start
+    // deferral check since we're explicitly responding to user intent.
+    void pollAllFeeds({ force: true })
     // Fire-and-forget profile warm-up so opening the new ticker's detail page
     // doesn't hit the cold path.
     void ensureCompanyProfile(t.symbol, t.companyName ?? t.symbol)
     return t
   })
-  ipcMain.handle('db:tickers:delete', (_e, id: number) => tickersDb.deleteTicker(id))
+  ipcMain.handle('db:tickers:delete', (_e, id: number) => {
+    const t = tickersDb.listTickers().find((x) => x.id === id)
+    tickersDb.deleteTicker(id)
+    if (t) {
+      invalidateMatcherCache()
+      deleteMatchesForSymbol(t.symbol)
+    }
+  })
+  // Promote a passive graph ticker into the watchlist. Mirrors the warm-up
+  // behavior of `db:tickers:create` (provision per-ticker RSS, classify
+  // existing articles, force a poll, warm the company profile) but on an
+  // already-existing row rather than creating a new one.
+  ipcMain.handle('db:tickers:activate', (_e, id: number) => {
+    tickersDb.setTickerActive(id, true)
+    const t = tickersDb.getTicker(id)
+    if (!t) return null
+    invalidateMatcherCache()
+    provisionFeedsForTicker(t)
+    void classifyAllArticlesForTicker(t).finally(() => refreshTickerSummary(t.id))
+    void pollAllFeeds({ force: true })
+    void ensureCompanyProfile(t.symbol, t.companyName ?? t.symbol)
+    return t
+  })
 
   // geo interests
   ipcMain.handle('db:geo:list', () => geoDb.listGeoInterests())

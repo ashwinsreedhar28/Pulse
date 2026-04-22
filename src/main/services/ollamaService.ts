@@ -605,27 +605,54 @@ export async function suggestFeeds(
 export interface TickerSummaryInput {
   symbol: string
   companyName: string
+  companyDescription?: string | null
   headlines: { title: string; summary: string | null; source: string }[]
 }
 
-export async function summarizeTickerNews(input: TickerSummaryInput): Promise<string | null> {
-  if (input.headlines.length === 0) return null
+export interface TickerSummaryResult {
+  summary: string | null
+  relevantCount: number
+}
+
+// Returns both the written summary and the model's count of how many headlines
+// were materially about the company. A `relevantCount` of 0 is a signal from
+// the model that nothing in the list actually concerned the ticker's business
+// — the service layer uses that to show "No material news today" instead of a
+// manufactured 3-sentence brief.
+export async function summarizeTickerNews(
+  input: TickerSummaryInput
+): Promise<TickerSummaryResult | null> {
+  if (input.headlines.length === 0) return { summary: null, relevantCount: 0 }
   if (!(await checkOllamaHealth())) return null
 
   const bullets = input.headlines
     .slice(0, 10)
     .map((h, i) => {
-      const snippet = (h.summary ?? '').replace(/\s+/g, ' ').slice(0, 220)
+      const snippet = (h.summary ?? '').replace(/\s+/g, ' ').slice(0, 260)
       return `${i + 1}. [${h.source}] ${h.title}${snippet ? ` — ${snippet}` : ''}`
     })
     .join('\n')
 
+  const profileLine = input.companyDescription
+    ? `\nCompany context (what ${input.symbol} actually does): ${input.companyDescription}`
+    : ''
+
+  // The prompt is intentionally strict: the old version ("what an investor
+  // should know right now") invited the model to invent causal chains from
+  // weakly-related articles (e.g., surfacing Navy missile contracts under
+  // Arm Holdings because "ARM" appeared in the Aegis computing discussion).
+  // We now require the model to (a) count the headlines materially about
+  // THIS company, (b) refuse to speculate, and (c) return an empty summary
+  // when no headline actually concerns the company's business.
   const system =
-    `You brief an investor on today's news for a single stock. Given headlines, ` +
-    `write a tight 2-3 sentence summary of what an investor in ${input.symbol} (${input.companyName}) ` +
-    `should know right now. Focus on material impact: earnings, products, regulation, supply chain, ` +
-    `competitors, management. No filler, no "here is a summary" preamble. ` +
-    `Respond in JSON only: {"summary": "..."}`
+    `You write an investor brief for a single stock, grounded only in the supplied headlines.${profileLine}\n\n` +
+    `Rules (strict):\n` +
+    `- Only mention facts explicitly stated in the headlines/snippets. Never speculate about what the company "may", "might", "could", or "potentially" do or benefit from.\n` +
+    `- A headline is "relevant" only if it directly concerns ${input.companyName}'s business — its products, customers, suppliers, earnings, regulators, or executives. Generic industry news or articles that merely namecheck "${input.symbol}" are NOT relevant.\n` +
+    `- If relevantCount is 0, return summary as an empty string. Do not write a summary from irrelevant headlines.\n` +
+    `- If relevantCount >= 1, write 2-3 tight sentences (max 70 words) covering the most material news. No preamble, no "here is a summary", no hedging words.\n` +
+    `- Do NOT name specific unrelated companies, products, or events from the headlines that don't concern ${input.symbol}.\n\n` +
+    `Respond in JSON only: {"relevantCount": <integer>, "summary": "<string>"}`
 
   try {
     const controller = new AbortController()
@@ -639,7 +666,10 @@ export async function summarizeTickerNews(input: TickerSummaryInput): Promise<st
           model: OLLAMA_MODEL,
           messages: [
             { role: 'system', content: system },
-            { role: 'user', content: `Today's headlines:\n${bullets}` }
+            {
+              role: 'user',
+              content: `Headlines for ${input.symbol} (${input.companyName}):\n${bullets}`
+            }
           ],
           stream: false,
           format: 'json'
@@ -656,10 +686,17 @@ export async function summarizeTickerNews(input: TickerSummaryInput): Promise<st
     const body = (await res.json()) as { message?: { content?: string } }
     const content = body.message?.content
     if (!content) return null
-    const parsed = JSON.parse(content) as { summary?: unknown }
-    const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : ''
+    const parsed = JSON.parse(content) as { summary?: unknown; relevantCount?: unknown }
+    const summaryStr = typeof parsed.summary === 'string' ? parsed.summary.trim() : ''
+    const relevantCountRaw =
+      typeof parsed.relevantCount === 'number' ? parsed.relevantCount : 0
+    const relevantCount = Math.max(0, Math.min(relevantCountRaw, input.headlines.length))
     emitHealth(true)
-    return summary.length > 0 ? summary : null
+    // Belt-and-braces: if the model says 0 relevant but still produced prose,
+    // trust the count and drop the prose. This is the layer that catches the
+    // hallucination mode even when the model disobeys the no-summary rule.
+    if (relevantCount === 0) return { summary: null, relevantCount: 0 }
+    return { summary: summaryStr.length > 0 ? summaryStr : null, relevantCount }
   } catch (err) {
     console.warn('[ollama] summary failed:', err instanceof Error ? err.message : err)
     emitHealth(false)

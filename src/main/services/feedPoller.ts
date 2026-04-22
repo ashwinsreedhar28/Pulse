@@ -1,13 +1,21 @@
 import { BrowserWindow, powerMonitor } from 'electron'
 import { listEnabledFeedsForPolling, updateFeedFetchMeta, type PollableFeed } from '../database/feeds'
 import { upsertArticles, updateArticleScore } from '../database/articles'
-import { listTickers } from '../database/tickers'
+import { listTickers, type Ticker } from '../database/tickers'
 import { listGeoInterests } from '../database/geoInterests'
+import {
+  listArticlesNeedingClassification,
+  markClassifiedWithNoMatches,
+  upsertMatches,
+  type ArticleTickerMatch
+} from '../database/articleTickerMatches'
+import { getDb } from '../database/connection'
 import { fetchFeed } from './rssParser'
 import { buildUrgencyContext, scoreArticle, type UrgencyContext } from './urgencyScorer'
 import { notifyUrgent, trackMedium } from './notificationManager'
 import { enqueueOllamaTask, scoreWithOllama } from './ollamaService'
 import { refreshAllTickerSummaries } from './tickerSummaryService'
+import { classifyArticleAgainstTickers } from './tickerRelevance'
 import { isVideoGenBusy, onVideoGenSettled } from './videoGenService'
 import { isKokoroBusy, onKokoroSettled } from './kokoroService'
 import { isMediaToolsBusy, onMediaToolsSettled } from './mediaToolsService'
@@ -76,13 +84,20 @@ export async function pollAllFeeds(options: { force?: boolean } = {}): Promise<P
   const feeds = listEnabledFeedsForPolling()
   const scoringCtx = buildUrgencyContext()
   const promptLists = buildPromptLists()
+  // Snapshot the active watchlist once per poll so every inserted article is
+  // classified against the same ticker set — cheaper than re-reading from DB
+  // per feed batch and identical in behaviour since ticker changes are rare
+  // relative to poll cadence.
+  const activeTickers = listTickers().filter((t) => t.isActive)
   let articlesInserted = 0
   const errors: PollSummary['errors'] = []
 
   try {
     for (let i = 0; i < feeds.length; i += POLL_CONCURRENCY) {
       const batch = feeds.slice(i, i + POLL_CONCURRENCY)
-      const results = await Promise.allSettled(batch.map((f) => pollOne(f, scoringCtx, promptLists)))
+      const results = await Promise.allSettled(
+        batch.map((f) => pollOne(f, scoringCtx, promptLists, activeTickers))
+      )
       results.forEach((res, idx) => {
         const feed = batch[idx]!
         if (res.status === 'fulfilled') {
@@ -143,7 +158,8 @@ function buildPromptLists(): PromptLists {
 async function pollOne(
   feed: PollableFeed,
   ctx: UrgencyContext,
-  promptLists: PromptLists
+  promptLists: PromptLists,
+  activeTickers: Ticker[]
 ): Promise<{ inserted: number; error?: string }> {
   const result = await fetchFeed(feed.url, feed.etag, feed.lastModified)
   const now = Date.now()
@@ -178,6 +194,23 @@ async function pollOne(
       }
     })
   )
+
+  classifyInsertedArticles(inserted, activeTickers)
+
+  // Ticker-owned feeds carry a built-in relevance guarantee: Yahoo / Nasdaq
+  // only emit an item under NVDA's per-ticker RSS when it's about NVDA. Write
+  // a strong match directly so the classifier's word-boundary caution doesn't
+  // miss a real NVDA article whose headline doesn't happen to contain the
+  // literal string "Nvidia".
+  if (feed.tickerId !== null && feed.tickerSymbol && inserted.length > 0) {
+    upsertMatches(
+      inserted.map((row) => ({
+        articleId: row.id,
+        symbol: feed.tickerSymbol!,
+        strength: 'strong' as const
+      }))
+    )
+  }
 
   const notifyOnPromote = notificationsArmed && feed.notificationsEnabled
   for (const row of inserted) {
@@ -274,5 +307,100 @@ export function stopPolling(): void {
   if (idleDrainHandle) {
     clearInterval(idleDrainHandle)
     idleDrainHandle = null
+  }
+}
+
+// Classify a fresh batch of inserted articles against the active watchlist
+// and persist strong/weak matches. Articles that touch no ticker get a
+// sentinel row so the startup backfill knows they're already considered.
+function classifyInsertedArticles(
+  inserted: Array<{ id: number; title: string; summary: string | null }>,
+  activeTickers: Ticker[]
+): void {
+  if (inserted.length === 0 || activeTickers.length === 0) {
+    // Still mark articles as classified so the backfill skips them — otherwise
+    // a watchlist-less install would re-scan the same articles every boot.
+    for (const row of inserted) markClassifiedWithNoMatches(row.id)
+    return
+  }
+  const rows: ArticleTickerMatch[] = []
+  for (const article of inserted) {
+    const matches = classifyArticleAgainstTickers(
+      { title: article.title, summary: article.summary },
+      activeTickers
+    )
+    if (matches.size === 0) {
+      markClassifiedWithNoMatches(article.id)
+      continue
+    }
+    for (const [symbol, strength] of matches) {
+      rows.push({ articleId: article.id, symbol, strength })
+    }
+  }
+  if (rows.length > 0) upsertMatches(rows)
+}
+
+// Backfill classifications for articles that predate the matches table or
+// that were ingested when the watchlist was empty. Runs once at startup in
+// batches so we don't block boot — the UI degrades gracefully if a ticker's
+// matches aren't yet populated (it just shows fewer articles than expected
+// until the backfill catches up).
+const BACKFILL_BATCH = 500
+let backfilling = false
+
+export async function backfillArticleTickerMatches(): Promise<void> {
+  if (backfilling) return
+  backfilling = true
+  try {
+    const activeTickers = listTickers().filter((t) => t.isActive)
+    // Even with no tickers we still stamp the sentinel so future runs skip.
+    let total = 0
+    while (true) {
+      const batch = listArticlesNeedingClassification(BACKFILL_BATCH)
+      if (batch.length === 0) break
+      classifyInsertedArticles(batch, activeTickers)
+      total += batch.length
+      // Yield back to the event loop between batches so we don't monopolize
+      // the main thread during boot.
+      await new Promise((r) => setImmediate(r))
+    }
+    if (total > 0) {
+      console.log(`[poller] backfilled article-ticker matches for ${total} articles`)
+    }
+  } finally {
+    backfilling = false
+  }
+}
+
+// Re-classify every article against a single ticker. Called when the user
+// adds a ticker to the watchlist — existing articles haven't been considered
+// against this symbol yet, so the brief would be empty until the next poll.
+export async function classifyAllArticlesForTicker(ticker: Ticker): Promise<void> {
+  const db = getDb()
+  const BATCH = 500
+  let offset = 0
+  while (true) {
+    const batch = db
+      .prepare<[number, number], { id: number; title: string; summary: string | null }>(
+        `SELECT id, title, summary FROM articles
+         ORDER BY publishedAt DESC, id DESC
+         LIMIT ? OFFSET ?`
+      )
+      .all(BATCH, offset)
+    if (batch.length === 0) break
+    const rows: ArticleTickerMatch[] = []
+    for (const a of batch) {
+      const matches = classifyArticleAgainstTickers(
+        { title: a.title, summary: a.summary },
+        [ticker]
+      )
+      const strength = matches.get(ticker.symbol.toUpperCase())
+      if (strength && strength !== 'none') {
+        rows.push({ articleId: a.id, symbol: ticker.symbol, strength })
+      }
+    }
+    if (rows.length > 0) upsertMatches(rows)
+    offset += batch.length
+    await new Promise((r) => setImmediate(r))
   }
 }

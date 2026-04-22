@@ -47,9 +47,11 @@ function pickCadence(): number {
 }
 
 async function tick(): Promise<void> {
-  const symbols = listTickers()
-    .filter((t) => t.isActive)
-    .map((t) => t.symbol)
+  // Poll every ticker row, not just watchlist entries. Passive rows (isActive=0)
+  // back the Value Chain graph view so those tiles show live prices. Watchlist
+  // gating happens at UI/service layers that care (notifications, summaries,
+  // per-ticker RSS), not here.
+  const symbols = listTickers().map((t) => t.symbol)
   if (symbols.length === 0) {
     lastQuotes = []
     broadcast([])

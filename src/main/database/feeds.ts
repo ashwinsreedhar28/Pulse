@@ -5,6 +5,7 @@ export interface Feed {
   title: string
   url: string
   categoryId: number
+  tickerId: number | null
   isEnabled: boolean
   lastFetchedAt: number | null
   iconURL: string | null
@@ -15,6 +16,7 @@ interface FeedRow {
   title: string
   url: string
   categoryId: number
+  tickerId: number | null
   isEnabled: number
   lastFetchedAt: number | null
   iconURL: string | null
@@ -25,14 +27,19 @@ const toFeed = (row: FeedRow): Feed => ({
   title: row.title,
   url: row.url,
   categoryId: row.categoryId,
+  tickerId: row.tickerId,
   isEnabled: row.isEnabled === 1,
   lastFetchedAt: row.lastFetchedAt,
   iconURL: row.iconURL
 })
 
+// Hides ticker-owned feeds from the user's Settings view. They're auto-
+// managed alongside the watchlist and would only clutter the feed list.
 export function listFeeds(): Feed[] {
   return getDb()
-    .prepare<[], FeedRow>(`SELECT * FROM feeds ORDER BY categoryId, title`)
+    .prepare<[], FeedRow>(
+      `SELECT * FROM feeds WHERE tickerId IS NULL ORDER BY categoryId, title`
+    )
     .all()
     .map(toFeed)
 }
@@ -42,6 +49,8 @@ export interface PollableFeed {
   title: string
   url: string
   categoryId: number
+  tickerId: number | null
+  tickerSymbol: string | null
   domain: 'finance' | 'general'
   etag: string | null
   lastModified: string | null
@@ -53,6 +62,8 @@ interface PollableFeedRow {
   title: string
   url: string
   categoryId: number
+  tickerId: number | null
+  tickerSymbol: string | null
   domain: 'finance' | 'general'
   etag: string | null
   lastModified: string | null
@@ -62,9 +73,13 @@ interface PollableFeedRow {
 export function listEnabledFeedsForPolling(): PollableFeed[] {
   return getDb()
     .prepare<[], PollableFeedRow>(
-      `SELECT f.id, f.title, f.url, f.categoryId, c.domain, f.etag, f.lastModified,
+      `SELECT f.id, f.title, f.url, f.categoryId, f.tickerId,
+              t.symbol AS tickerSymbol,
+              c.domain, f.etag, f.lastModified,
               c.notificationsEnabled AS notificationsEnabled
-       FROM feeds f JOIN categories c ON c.id = f.categoryId
+       FROM feeds f
+       JOIN categories c ON c.id = f.categoryId
+       LEFT JOIN tickers t ON t.id = f.tickerId
        WHERE f.isEnabled = 1`
     )
     .all()
@@ -73,7 +88,9 @@ export function listEnabledFeedsForPolling(): PollableFeed[] {
 
 export function listFeedsByCategory(categoryId: number): Feed[] {
   return getDb()
-    .prepare<[number], FeedRow>(`SELECT * FROM feeds WHERE categoryId = ? ORDER BY title`)
+    .prepare<[number], FeedRow>(
+      `SELECT * FROM feeds WHERE categoryId = ? AND tickerId IS NULL ORDER BY title`
+    )
     .all(categoryId)
     .map(toFeed)
 }
@@ -81,7 +98,7 @@ export function listFeedsByCategory(categoryId: number): Feed[] {
 export function countFeedsByCategory(): Record<number, number> {
   const rows = getDb()
     .prepare<[], { categoryId: number; n: number }>(
-      `SELECT categoryId, COUNT(*) AS n FROM feeds GROUP BY categoryId`
+      `SELECT categoryId, COUNT(*) AS n FROM feeds WHERE tickerId IS NULL GROUP BY categoryId`
     )
     .all()
   return Object.fromEntries(rows.map((r) => [r.categoryId, r.n]))
@@ -91,6 +108,7 @@ export interface CreateFeedInput {
   title: string
   url: string
   categoryId: number
+  tickerId?: number | null
   iconURL?: string | null
 }
 
@@ -98,9 +116,16 @@ export function createFeed(input: CreateFeedInput): Feed {
   const db = getDb()
   const info = db
     .prepare(
-      `INSERT INTO feeds (title, url, categoryId, iconURL, isEnabled) VALUES (?, ?, ?, ?, 1)`
+      `INSERT INTO feeds (title, url, categoryId, tickerId, iconURL, isEnabled)
+       VALUES (?, ?, ?, ?, ?, 1)`
     )
-    .run(input.title, input.url, input.categoryId, input.iconURL ?? null)
+    .run(
+      input.title,
+      input.url,
+      input.categoryId,
+      input.tickerId ?? null,
+      input.iconURL ?? null
+    )
   return getFeed(info.lastInsertRowid as number)!
 }
 

@@ -713,10 +713,12 @@ const api = {
     list: () => invoke<Ticker[]>('db:tickers:list'),
     create: (input: CreateTickerInput) => invoke<Ticker>('db:tickers:create', input),
     delete: (id: number) => invoke<void>('db:tickers:delete', id),
+    activate: (id: number) => invoke<Ticker | null>('db:tickers:activate', id),
     summarize: (id: number) =>
       invoke<{
         summary: string | null
         articleCount: number
+        relevantCount: number | null
         generatedAt: number | null
       } | null>('tickers:summarize', id),
     onSummaryUpdated: (cb: (tickerId: number) => void): (() => void) => {

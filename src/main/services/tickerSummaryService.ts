@@ -1,9 +1,9 @@
 import { BrowserWindow } from 'electron'
-import { listArticlesMatching } from '../database/articles'
+import { listArticlesForTicker } from '../database/articles'
 import { listTickers } from '../database/tickers'
 import { getTickerSummary, upsertTickerSummary } from '../database/tickerSummaries'
 import { checkOllamaHealth, summarizeTickerNews } from './ollamaService'
-import { buildTickerTerms } from './tickerTerms'
+import { getCompanyProfile } from './companyProfileService'
 
 const WINDOW_MS = 24 * 60 * 60 * 1000
 const MIN_REGEN_INTERVAL_MS = 15 * 60 * 1000
@@ -24,8 +24,10 @@ async function refreshOne(tickerId: number, force: boolean): Promise<void> {
   if (!ticker) return
   const prev = getTickerSummary(tickerId)
   const cutoff = Date.now() - WINDOW_MS
-  const matches = listArticlesMatching(buildTickerTerms(ticker), 40)
-  const recent = matches.filter((a) => (a.publishedAt ?? 0) >= cutoff)
+  // Strong-match only: articles that name the company directly. The classifier
+  // has already filtered out bare-symbol noise ("ARM" in a laptop article),
+  // so what we pass to the LLM is guaranteed on-topic at the retrieval level.
+  const recent = listArticlesForTicker(ticker.symbol, { limit: 40, sinceMs: cutoff })
   const lastArticleAt = recent.length > 0 ? (recent[0].publishedAt ?? null) : null
 
   // Skip if nothing material changed since the last successful run.
@@ -45,6 +47,7 @@ async function refreshOne(tickerId: number, force: boolean): Promise<void> {
       tickerId,
       summary: null,
       articleCount: 0,
+      relevantCount: 0,
       generatedAt: Date.now(),
       lastArticleAt: null
     })
@@ -60,6 +63,7 @@ async function refreshOne(tickerId: number, force: boolean): Promise<void> {
       tickerId,
       summary: prev?.summary ?? null,
       articleCount: recent.length,
+      relevantCount: prev?.relevantCount ?? null,
       generatedAt: Date.now(),
       lastArticleAt
     })
@@ -67,9 +71,15 @@ async function refreshOne(tickerId: number, force: boolean): Promise<void> {
     return
   }
 
-  const summary = await summarizeTickerNews({
+  // Feed the summarizer the company's own description so the model knows what
+  // the ticker actually does — shields against hallucinations that extrapolate
+  // "may benefit from" claims by anchoring every sentence to the company's
+  // real business.
+  const profile = getCompanyProfile(ticker.symbol)
+  const result = await summarizeTickerNews({
     symbol: ticker.symbol,
     companyName: ticker.companyName ?? ticker.symbol,
+    companyDescription: profile?.description ?? null,
     headlines: recent.slice(0, 10).map((a) => ({
       title: a.title,
       summary: a.summary,
@@ -77,10 +87,20 @@ async function refreshOne(tickerId: number, force: boolean): Promise<void> {
     }))
   })
 
+  // `result === null` is a hard failure (Ollama crashed / HTTP error) — keep
+  // any previous summary so we don't wipe a valid brief on transient trouble.
+  // `result.summary === null` with a valid relevantCount=0 is the "nothing
+  // material" signal; we store null to show the empty state in the UI.
+  const nextSummary =
+    result === null ? (prev?.summary ?? null) : result.summary
+  const nextRelevantCount =
+    result === null ? (prev?.relevantCount ?? null) : result.relevantCount
+
   upsertTickerSummary({
     tickerId,
-    summary: summary ?? prev?.summary ?? null,
+    summary: nextSummary,
     articleCount: recent.length,
+    relevantCount: nextRelevantCount,
     generatedAt: Date.now(),
     lastArticleAt
   })

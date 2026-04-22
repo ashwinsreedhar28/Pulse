@@ -26,9 +26,16 @@ const toCategory = (row: CategoryRow): Category => ({
   domain: row.domain
 })
 
+// "Watchlist Sources" holds the auto-provisioned per-ticker RSS feeds. Hide
+// it from the Settings Categories tab so users don't see an empty-looking
+// row they can't meaningfully interact with.
 export function listCategories(): Category[] {
   const rows = getDb()
-    .prepare<[], CategoryRow>(`SELECT * FROM categories ORDER BY domain, sortOrder, id`)
+    .prepare<[], CategoryRow>(
+      `SELECT * FROM categories
+       WHERE name != 'Watchlist Sources'
+       ORDER BY domain, sortOrder, id`
+    )
     .all()
   return rows.map(toCategory)
 }

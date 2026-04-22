@@ -15,7 +15,12 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { initDatabase, closeDatabase } from './database/connection'
 import { registerDbIpc } from './ipc/handlers'
-import { startPolling, stopPolling, pollAllFeeds } from './services/feedPoller'
+import {
+  startPolling,
+  stopPolling,
+  pollAllFeeds,
+  backfillArticleTickerMatches
+} from './services/feedPoller'
 import { rescoreArticles } from './database/articles'
 import { buildUrgencyContext, scoreArticle } from './services/urgencyScorer'
 import { initAdblocker, registerAdblockerHooks } from './services/adblockerService'
@@ -554,7 +559,14 @@ app.whenReady().then(async () => {
     .catch(() => splashUpdate('ollama', 'skip'))
   setInterval(() => void checkOllamaHealth(true), 2 * 60 * 1000)
 
-  void refreshAllTickerSummaries()
+  // Backfill article↔ticker classifications for pre-v21 articles (or any
+  // article ingested before a ticker was added to the watchlist). Runs
+  // sequentially ahead of the first summary refresh so the briefs see the
+  // historical matches — otherwise Today's brief would be empty on the first
+  // boot after the migration.
+  void backfillArticleTickerMatches().finally(() => {
+    void refreshAllTickerSummaries()
+  })
   // Pre-generate company profiles so the stock detail page never shows the
   // "generating…" placeholder. Runs in the background after boot so it doesn't
   // block the splash reveal.

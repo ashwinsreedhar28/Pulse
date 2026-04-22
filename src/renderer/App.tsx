@@ -7,6 +7,8 @@ import { Hyperintelligence } from './components/Hyperintelligence'
 import { Reels } from './components/Reels'
 import { CalendarStrip } from './components/CalendarStrip'
 import { ExternalReader } from './components/ExternalReader'
+import { ValueChain } from './components/ValueChain'
+import { StockValueChainCard } from './components/StockValueChainCard'
 import {
   ScoreFlourish,
   sportForLeagueId,
@@ -1633,6 +1635,29 @@ function Stat({
   )
 }
 
+function StocksViewTab({
+  label,
+  active,
+  onClick
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1 rounded-full text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors ${
+        active
+          ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-inset ring-emerald-500/40'
+          : 'text-zinc-400 hover:text-zinc-200'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
 interface ArticleDateGroup {
   key: string
   ts: number
@@ -2727,6 +2752,7 @@ function StocksPage({
   const [busy, setBusy] = useState(false)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
   const [selectedTickerId, setSelectedTickerId] = useState<number | null>(null)
+  const [view, setView] = useState<'holdings' | 'chain'>('holdings')
 
   useEffect(() => {
     if (!initialTickerSymbol || tickers.length === 0) return
@@ -2795,6 +2821,10 @@ function StocksPage({
           </div>
         </div>
         <div className="flex items-center gap-5 text-[11px] uppercase tracking-wider">
+          <div className="flex items-center gap-1 rounded-full bg-surface-1 ring-1 ring-edge/60 p-0.5">
+            <StocksViewTab label="Holdings" active={view === 'holdings'} onClick={() => setView('holdings')} />
+            <StocksViewTab label="Value Chain" active={view === 'chain'} onClick={() => setView('chain')} />
+          </div>
           <Stat label="Holdings" value={tickers.filter((t) => t.isActive).length} />
           <Stat label="Gainers" value={gainers} tone="accent" />
           <Stat label="Losers" value={losers} tone={losers > 0 ? 'urgent' : 'muted'} />
@@ -2826,7 +2856,18 @@ function StocksPage({
           onOpenURL={onOpenURL}
           onOpenIpoBrief={onOpenIpoBrief}
         />
-        {tickers.filter((t) => t.isActive).length === 0 ? (
+        {view === 'chain' ? (
+          <ValueChain
+            tickers={tickers}
+            quotes={quotes}
+            onOpenTicker={(id) => setSelectedTickerId(id)}
+            onActivateTicker={async (id) => {
+              await window.api.tickers.activate(id)
+              const updated = await window.api.tickers.list()
+              setTickers(updated)
+            }}
+          />
+        ) : tickers.filter((t) => t.isActive).length === 0 ? (
           <div className="px-6 py-20 text-center text-sm text-zinc-500">
             No active tickers in your watchlist. Add some from Settings → Tickers.
           </div>
@@ -2865,6 +2906,11 @@ function StocksPage({
             quote={bySymbol.get(t.symbol.toUpperCase())}
             onClose={() => setSelectedTickerId(null)}
             onOpenArticle={onOpenArticle}
+            onActivate={async () => {
+              await window.api.tickers.activate(t.id)
+              const updated = await window.api.tickers.list()
+              setTickers(updated)
+            }}
           />
         )
       })()}
@@ -3058,12 +3104,14 @@ function StockDetail({
   ticker,
   quote,
   onClose,
-  onOpenArticle
+  onOpenArticle,
+  onActivate
 }: {
   ticker: Ticker
   quote: StockQuote | undefined
   onClose: () => void
   onOpenArticle: (id: number) => void
+  onActivate: () => void
 }): JSX.Element {
   const [history, setHistory] = useState<HistoryPoint[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
@@ -3072,9 +3120,9 @@ function StockDetail({
   const [loadingArticles, setLoadingArticles] = useState(true)
   const [summary, setSummary] = useState<string | null>(null)
   const [summaryCount, setSummaryCount] = useState<number>(0)
-  const [summaryState, setSummaryState] = useState<'loading' | 'ready' | 'offline' | 'empty'>(
-    'loading'
-  )
+  const [summaryState, setSummaryState] = useState<
+    'loading' | 'ready' | 'offline' | 'empty' | 'no-material'
+  >('loading')
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null)
   const [profile, setProfile] = useState<CompanyProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
@@ -3155,8 +3203,14 @@ function StockDetail({
         if (res.summary) {
           setSummary(res.summary)
           setSummaryState('ready')
+          return
+        }
+        // summary === null. Disambiguate with relevantCount: 0 = LLM ran and
+        // found nothing material; null = LLM never ran (Ollama offline / pre-v22).
+        setSummary(null)
+        if (res.relevantCount === 0) {
+          setSummaryState('no-material')
         } else {
-          setSummary(null)
           setSummaryState('offline')
         }
       })
@@ -3198,7 +3252,7 @@ function StockDetail({
 
   return (
     <div
-      className="absolute inset-0 z-30 bg-surface-0/95 backdrop-blur-sm flex flex-col overflow-hidden"
+      className="absolute inset-0 z-30 bg-surface-0 flex flex-col overflow-hidden"
       data-lookup-context={stockLookupContext}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
@@ -3248,6 +3302,21 @@ function StockDetail({
                   </div>
                 )}
               </div>
+              {ticker.isActive ? (
+                <span
+                  className="ml-2 px-3 h-9 flex items-center rounded-full bg-emerald-500/15 text-emerald-200 text-[11px] font-semibold uppercase tracking-[0.18em] ring-1 ring-inset ring-emerald-500/40"
+                  title="This ticker is in your watchlist — news and briefs are ingested."
+                >
+                  ✓ Watchlist
+                </span>
+              ) : (
+                <button
+                  onClick={onActivate}
+                  className="ml-2 px-3 h-9 rounded-full bg-indigo-500/15 text-indigo-200 text-[11px] font-semibold uppercase tracking-[0.18em] ring-1 ring-inset ring-indigo-500/40 hover:bg-indigo-500/25 transition-colors"
+                >
+                  + Watchlist
+                </button>
+              )}
               <button
                 onClick={onClose}
                 className="ml-2 h-9 w-9 flex items-center justify-center rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2 transition-colors text-xl"
@@ -3312,6 +3381,11 @@ function StockDetail({
                 <StockChart points={points} color={chartColor} />
               )}
             </div>
+            <div className="px-5 pb-3 flex justify-end">
+              <span className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+                via Yahoo Finance
+              </span>
+            </div>
           </section>
 
           {fundamentals && (
@@ -3336,6 +3410,32 @@ function StockDetail({
             </section>
           )}
 
+          <StockValueChainCard symbol={ticker.symbol} />
+
+          {!ticker.isActive ? (
+            <section className="mt-6 rounded-2xl border border-dashed border-edge/70 bg-surface-1 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
+                  News coverage
+                </h2>
+                <span className="h-px flex-1 bg-edge/80" />
+                <span className="text-[10px] uppercase tracking-[0.22em] text-indigo-300">
+                  tracked · not in watchlist
+                </span>
+              </div>
+              <p className="text-[13px] text-zinc-400 leading-snug">
+                {ticker.symbol} is tracked for quotes and value-chain context, but no news
+                feeds are ingested until it's added to your watchlist.
+              </p>
+              <button
+                onClick={onActivate}
+                className="mt-4 px-3 h-9 rounded-full bg-indigo-500/15 text-indigo-200 text-[11px] font-semibold uppercase tracking-[0.18em] ring-1 ring-inset ring-indigo-500/40 hover:bg-indigo-500/25 transition-colors"
+              >
+                + Add {ticker.symbol} to watchlist
+              </button>
+            </section>
+          ) : (
+            <>
           <section className="mt-6 rounded-2xl border border-edge bg-surface-1 p-5">
             <div className="flex items-center gap-3 mb-3">
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
@@ -3356,6 +3456,13 @@ function StockDetail({
             {summaryState === 'empty' && (
               <div className="text-[13px] text-zinc-500">
                 No news today for {ticker.symbol}.
+              </div>
+            )}
+            {summaryState === 'no-material' && (
+              <div className="text-[13px] text-zinc-500">
+                No material news today for {ticker.symbol}. {summaryCount}{' '}
+                {summaryCount === 1 ? 'article' : 'articles'} surfaced but none were
+                substantively about the company (see below).
               </div>
             )}
             {summaryState === 'offline' && (
@@ -3446,6 +3553,8 @@ function StockDetail({
               </div>
             )}
           </section>
+            </>
+          )}
         </div>
       </div>
     </div>
