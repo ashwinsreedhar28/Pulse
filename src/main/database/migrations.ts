@@ -352,5 +352,96 @@ export const migrations: Migration[] = [
         CREATE INDEX idx_reader_cache_extractedAt ON reader_cache(extractedAt);
       `)
     }
+  },
+  {
+    version: 19,
+    name: 'articles_fts: full-text search index',
+    // Contentless FTS5 table + triggers that keep it in sync with the
+    // `articles` table. Storing content externally (`content=`) halves the
+    // on-disk overhead vs. a standalone FTS table, since the text already
+    // lives in `articles.title` / `articles.summary`. We index only title
+    // and summary — article bodies live in reader_cache and aren't worth
+    // 3-5× the disk to index. Backfill runs once here; steady-state cost
+    // is a trigger per INSERT/UPDATE/DELETE.
+    up: (db) => {
+      db.exec(`
+        CREATE VIRTUAL TABLE articles_fts USING fts5(
+          title,
+          summary,
+          content='articles',
+          content_rowid='id',
+          tokenize='porter unicode61 remove_diacritics 1'
+        );
+
+        -- Backfill from existing rows.
+        INSERT INTO articles_fts(rowid, title, summary)
+          SELECT id, title, COALESCE(summary, '') FROM articles;
+
+        -- Keep the index in sync on article mutations.
+        CREATE TRIGGER articles_fts_ai AFTER INSERT ON articles BEGIN
+          INSERT INTO articles_fts(rowid, title, summary)
+            VALUES (new.id, new.title, COALESCE(new.summary, ''));
+        END;
+        CREATE TRIGGER articles_fts_ad AFTER DELETE ON articles BEGIN
+          INSERT INTO articles_fts(articles_fts, rowid, title, summary)
+            VALUES ('delete', old.id, old.title, COALESCE(old.summary, ''));
+        END;
+        CREATE TRIGGER articles_fts_au AFTER UPDATE OF title, summary ON articles BEGIN
+          INSERT INTO articles_fts(articles_fts, rowid, title, summary)
+            VALUES ('delete', old.id, old.title, COALESCE(old.summary, ''));
+          INSERT INTO articles_fts(rowid, title, summary)
+            VALUES (new.id, new.title, COALESCE(new.summary, ''));
+        END;
+      `)
+    }
+  },
+  {
+    version: 20,
+    name: 'replace ticker watchlist with curated set',
+    // The v4 seed was a generic semi/defense starter pack. This migration
+    // replaces it (and any hand-added rows) with the owner's curated
+    // watchlist. ON DELETE CASCADE on ticker_summaries handles the dependent
+    // rows; company_profiles is keyed by symbol so it survives and gets
+    // reused if a symbol returns.
+    up: (db) => {
+      const curated: Array<{
+        symbol: string
+        name: string
+        sector: string | null
+        industry: string | null
+      }> = [
+        { symbol: 'AMD', name: 'Advanced Micro Devices', sector: 'Semiconductors', industry: 'Fabless CPU / GPU' },
+        { symbol: 'APH', name: 'Amphenol', sector: 'Electronic Components', industry: 'Connectors / Interconnect' },
+        { symbol: 'AMAT', name: 'Applied Materials', sector: 'Semiconductors', industry: 'Equipment' },
+        { symbol: 'ASML', name: 'ASML Holding NV', sector: 'Semiconductors', industry: 'Equipment / Lithography' },
+        { symbol: 'ACLS', name: 'Axcelis Technologies', sector: 'Semiconductors', industry: 'Equipment / Implant' },
+        { symbol: 'AVGO', name: 'Broadcom', sector: 'Semiconductors', industry: 'Fabless / Networking' },
+        { symbol: 'CLS', name: 'Celestica', sector: 'Electronic Manufacturing', industry: 'EMS / ODM (AI networking)' },
+        { symbol: 'COHR', name: 'Coherent', sector: 'Semiconductors', industry: 'Photonics / Lasers' },
+        { symbol: 'CRWV', name: 'CoreWeave', sector: 'Cloud Infrastructure', industry: 'GPU Cloud / AI Hyperscaler' },
+        { symbol: 'GLW', name: 'Corning', sector: 'Materials', industry: 'Specialty Glass / Optical' },
+        { symbol: 'CRDO', name: 'Credo Technology Group', sector: 'Semiconductors', industry: 'Fabless / Connectivity' },
+        { symbol: 'INTC', name: 'Intel', sector: 'Semiconductors', industry: 'IDM' },
+        { symbol: 'LIN', name: 'Linde plc', sector: 'Materials', industry: 'Industrial Gases' },
+        { symbol: 'LITE', name: 'Lumentum', sector: 'Semiconductors', industry: 'Photonics / Lasers' },
+        { symbol: 'MRVL', name: 'Marvell Technology', sector: 'Semiconductors', industry: 'Fabless / Networking' },
+        { symbol: 'MPWR', name: 'Monolithic Power Systems', sector: 'Semiconductors', industry: 'Fabless / Power ICs' },
+        { symbol: 'NVDA', name: 'NVIDIA', sector: 'Semiconductors', industry: 'Fabless AI / GPU' },
+        { symbol: 'RKLB', name: 'Rocket Lab Corporation', sector: 'Aerospace', industry: 'Launch / Satellites' },
+        { symbol: 'SNDK', name: 'Sandisk Corporation', sector: 'Semiconductors', industry: 'IDM / NAND Flash' },
+        { symbol: 'TSM', name: 'Taiwan Semiconductor Manufacturing', sector: 'Semiconductors', industry: 'Foundry' },
+        { symbol: 'TER', name: 'Teradyne', sector: 'Semiconductors', industry: 'Test Equipment' },
+        { symbol: 'VRT', name: 'Vertiv', sector: 'Industrials', industry: 'Data Center Infrastructure' }
+      ]
+      db.exec(`DELETE FROM tickers`)
+      const insert = db.prepare(
+        `INSERT INTO tickers (symbol, companyName, sector, industry, isActive, addedAt)
+         VALUES (?, ?, ?, ?, 1, ?)`
+      )
+      const now = Date.now()
+      for (const t of curated) {
+        insert.run(t.symbol, t.name, t.sector, t.industry, now)
+      }
+    }
   }
 ]

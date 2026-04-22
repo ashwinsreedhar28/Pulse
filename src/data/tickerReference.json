@@ -1,5 +1,5 @@
 [
-  { "symbol": "NVDA", "name": "NVIDIA Corporation", "sector": "Semiconductors", "industry": "Fabless AI / GPU", "aliases": ["Nvidia", "GeForce", "CUDA", "Hopper", "Blackwell"] },
+  { "symbol": "NVDA", "name": "NVIDIA Corporation", "sector": "Semiconductors", "industry": "Fabless AI / GPU", "aliases": ["Nvidia", "GeForce", "CUDA"] },
   { "symbol": "AMD", "name": "Advanced Micro Devices", "sector": "Semiconductors", "industry": "Fabless CPU / GPU", "aliases": ["Ryzen", "EPYC", "Radeon", "Xilinx", "Pensando"] },
   { "symbol": "AVGO", "name": "Broadcom Inc.", "sector": "Semiconductors", "industry": "Fabless / Networking", "aliases": ["Broadcom", "VMware"] },
   { "symbol": "QCOM", "name": "Qualcomm", "sector": "Semiconductors", "industry": "Fabless / Mobile", "aliases": ["Snapdragon"] },
@@ -12,7 +12,7 @@
   { "symbol": "TXN", "name": "Texas Instruments", "sector": "Semiconductors", "industry": "IDM / Analog" },
   { "symbol": "ADI", "name": "Analog Devices", "sector": "Semiconductors", "industry": "IDM / Analog", "aliases": ["Maxim Integrated"] },
   { "symbol": "ON", "name": "onsemi", "sector": "Semiconductors", "industry": "IDM / Power", "aliases": ["On Semiconductor"] },
-  { "symbol": "MU", "name": "Micron Technology", "sector": "Semiconductors", "industry": "IDM / Memory", "aliases": ["HBM", "DRAM", "NAND"] },
+  { "symbol": "MU", "name": "Micron Technology", "sector": "Semiconductors", "industry": "IDM / Memory" },
   { "symbol": "STM", "name": "STMicroelectronics", "sector": "Semiconductors", "industry": "IDM / Europe" },
   { "symbol": "NXPI", "name": "NXP Semiconductors", "sector": "Semiconductors", "industry": "IDM / Automotive" },
   { "symbol": "MCHP", "name": "Microchip Technology", "sector": "Semiconductors", "industry": "IDM / Microcontrollers" },
@@ -21,7 +21,7 @@
   { "symbol": "GFS", "name": "GlobalFoundries", "sector": "Semiconductors", "industry": "Foundry" },
   { "symbol": "UMC", "name": "United Microelectronics", "sector": "Semiconductors", "industry": "Foundry" },
   { "symbol": "TSEM", "name": "Tower Semiconductor", "sector": "Semiconductors", "industry": "Foundry / Specialty" },
-  { "symbol": "ASML", "name": "ASML Holding", "sector": "Semiconductors", "industry": "Equipment / Lithography", "aliases": ["EUV", "DUV", "High NA"] },
+  { "symbol": "ASML", "name": "ASML Holding", "sector": "Semiconductors", "industry": "Equipment / Lithography" },
   { "symbol": "AMAT", "name": "Applied Materials", "sector": "Semiconductors", "industry": "Equipment" },
   { "symbol": "LRCX", "name": "Lam Research", "sector": "Semiconductors", "industry": "Equipment / Etch" },
   { "symbol": "KLAC", "name": "KLA Corporation", "sector": "Semiconductors", "industry": "Equipment / Metrology" },
@@ -63,5 +63,15 @@
   { "symbol": "BHP", "name": "BHP Group", "sector": "Mining", "industry": "Diversified" },
   { "symbol": "VALE", "name": "Vale S.A.", "sector": "Mining", "industry": "Iron Ore / Nickel" },
   { "symbol": "NEM", "name": "Newmont", "sector": "Mining", "industry": "Gold" },
-  { "symbol": "USAR", "name": "USA Rare Earth", "sector": "Mining", "industry": "Rare Earths" }
+  { "symbol": "USAR", "name": "USA Rare Earth", "sector": "Mining", "industry": "Rare Earths" },
+  { "symbol": "APH", "name": "Amphenol", "sector": "Electronic Components", "industry": "Connectors / Interconnect" },
+  { "symbol": "CLS", "name": "Celestica", "sector": "Electronic Manufacturing", "industry": "EMS / ODM (AI networking)" },
+  { "symbol": "CRWV", "name": "CoreWeave", "sector": "Cloud Infrastructure", "industry": "GPU Cloud / AI Hyperscaler" },
+  { "symbol": "GLW", "name": "Corning", "sector": "Materials", "industry": "Specialty Glass / Optical" },
+  { "symbol": "CRDO", "name": "Credo Technology Group", "sector": "Semiconductors", "industry": "Fabless / Connectivity (SerDes, AEC)" },
+  { "symbol": "LITE", "name": "Lumentum", "sector": "Semiconductors", "industry": "Photonics / Lasers" },
+  { "symbol": "MPWR", "name": "Monolithic Power Systems", "sector": "Semiconductors", "industry": "Fabless / Power ICs" },
+  { "symbol": "RKLB", "name": "Rocket Lab Corporation", "sector": "Aerospace", "industry": "Launch / Satellites", "aliases": ["Rocket Lab"] },
+  { "symbol": "SNDK", "name": "Sandisk Corporation", "sector": "Semiconductors", "industry": "IDM / NAND Flash", "aliases": ["SanDisk"] },
+  { "symbol": "VRT", "name": "Vertiv", "sector": "Industrials", "industry": "Data Center Infrastructure / Power & Cooling" }
 ]

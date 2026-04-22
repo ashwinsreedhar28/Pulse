@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, dialog, ipcMain } from 'electron'
 import * as categoriesDb from '../database/categories'
 import * as feedsDb from '../database/feeds'
 import * as articlesDb from '../database/articles'
@@ -25,6 +25,10 @@ import {
   listLeagueLeaders,
   listTeamLeaders
 } from '../services/sportsService'
+import {
+  getLastReelGroups,
+  isSportsReelWarmed
+} from '../services/sportsReelScheduler'
 import * as favoriteTeamsDb from '../database/favoriteTeams'
 import * as favoriteAthletesDb from '../database/favoriteAthletes'
 import { resetSportsAlertState } from '../services/sportsAlertsService'
@@ -47,7 +51,17 @@ import {
   probeCandidate,
   addSuggestedFeed
 } from '../services/feedFinderService'
+import { dispatchHyperMessage } from '../services/hyperDispatcherService'
 import { getCalendarStrip } from '../services/calendarService'
+import { getIpoBrief } from '../services/ipoBriefService'
+import {
+  CONFIG_FILENAME,
+  exportConfigTo,
+  importConfigFrom,
+  loadConfig,
+  updateConfig,
+  type ConfigPatch
+} from '../services/configFileService'
 import {
   listHyperChats,
   getHyperChat,
@@ -184,6 +198,12 @@ export function registerDbIpc(): void {
     }) => addSuggestedFeed(input)
   )
 
+  // hyperintelligence dispatcher — routes to feeds, articles, Q&A, or
+  // settings based on intent classification. The old feedFinder:ask handler
+  // stays in place for back-compat (e.g. tests) but the renderer now calls
+  // hyper:ask so the router can pick.
+  ipcMain.handle('hyper:ask', (_e, message: string) => dispatchHyperMessage(message))
+
   // hyperintelligence chat history (last 5 sessions)
   ipcMain.handle('hyperChats:list', () => listHyperChats())
   ipcMain.handle('hyperChats:get', (_e, id: number) => getHyperChat(id))
@@ -225,9 +245,65 @@ export function registerDbIpc(): void {
   ipcMain.handle('sports:listTeamLeaders', (_e, leagueId: string, teamId: string) =>
     listTeamLeaders(leagueId, teamId)
   )
+  ipcMain.handle('sports:getReelGroups', () => ({
+    groups: getLastReelGroups(),
+    warmed: isSportsReelWarmed()
+  }))
 
   // calendar
   ipcMain.handle('calendar:get', () => getCalendarStrip())
+  ipcMain.handle(
+    'ipo:getBrief',
+    (_e, input: { symbol: string; companyName: string }) => getIpoBrief(input)
+  )
+
+  // user config (pulse-preferences.json)
+  ipcMain.handle('config:get', () => loadConfig())
+  ipcMain.handle('config:update', (_e, patch: ConfigPatch) => updateConfig(patch))
+  ipcMain.handle('config:export', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const result = win
+      ? await dialog.showSaveDialog(win, {
+          title: 'Export Pulse preferences',
+          defaultPath: CONFIG_FILENAME,
+          filters: [{ name: 'JSON', extensions: ['json'] }]
+        })
+      : await dialog.showSaveDialog({
+          title: 'Export Pulse preferences',
+          defaultPath: CONFIG_FILENAME,
+          filters: [{ name: 'JSON', extensions: ['json'] }]
+        })
+    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true }
+    try {
+      await exportConfigTo(result.filePath)
+      return { ok: true as const, path: result.filePath }
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+  ipcMain.handle('config:import', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const result = win
+      ? await dialog.showOpenDialog(win, {
+          title: 'Import Pulse preferences',
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+          properties: ['openFile']
+        })
+      : await dialog.showOpenDialog({
+          title: 'Import Pulse preferences',
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+          properties: ['openFile']
+        })
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false as const, canceled: true }
+    }
+    try {
+      const config = await importConfigFrom(result.filePaths[0])
+      return { ok: true as const, config }
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
 
   // favorite teams
   ipcMain.handle('db:favoriteTeams:list', () => favoriteTeamsDb.listFavoriteTeams())

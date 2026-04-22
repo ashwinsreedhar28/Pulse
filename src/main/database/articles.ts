@@ -278,6 +278,50 @@ export function listArticlesMatching(terms: string[], limit = 40): Article[] {
   return out
 }
 
+// Build an FTS5 MATCH expression from untrusted user input. Stripping
+// everything outside `[A-Za-z0-9]` sidesteps injection into the query DSL
+// (unquoted punctuation like `"` or `*` is interpreted by FTS5). Each token
+// gets a `*` suffix for prefix matching, so "inflat" hits "inflation".
+function sanitizeFtsQuery(raw: string): string {
+  const tokens = raw
+    .split(/\s+/)
+    .map((t) => t.replace(/[^A-Za-z0-9]/g, ''))
+    .filter((t) => t.length >= 2)
+  if (tokens.length === 0) return ''
+  return tokens.map((t) => `${t}*`).join(' ')
+}
+
+export function searchArticlesFts(
+  query: string,
+  limit = 20
+): Article[] {
+  const ftsQuery = sanitizeFtsQuery(query)
+  if (!ftsQuery) return []
+  const cap = Math.min(limit, 100)
+  try {
+    const rows = getDb()
+      .prepare<[string, number], ArticleRow>(
+        // Rank orders by FTS5's BM25 score; we blend with recency (half-life
+        // ~14 days) so a great older match still surfaces but recency wins
+        // ties. Pure BM25 returned 2018 articles for current-events queries.
+        `SELECT a.*, f.title AS feedTitle, f.iconURL AS feedIconURL
+         FROM articles_fts
+         JOIN articles a ON a.id = articles_fts.rowid
+         JOIN feeds f ON f.id = a.feedId
+         WHERE articles_fts MATCH ?
+         ORDER BY (articles_fts.rank * (1.0 + (? - COALESCE(a.publishedAt, 0)) / 1209600000.0)) ASC
+         LIMIT ${cap}`
+      )
+      .all(ftsQuery, Date.now())
+    return rows.map(toArticle)
+  } catch {
+    // Malformed query or FTS-specific syntax error — return empty rather
+    // than crashing the handler. Sanitize should prevent this but defense
+    // in depth.
+    return []
+  }
+}
+
 export function updateArticleScore(id: number, score: number, reason: string): void {
   getDb()
     .prepare(`UPDATE articles SET urgencyScore = ?, urgencyReason = ?, scoredAt = ? WHERE id = ?`)

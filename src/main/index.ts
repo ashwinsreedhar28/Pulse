@@ -38,6 +38,10 @@ import {
   stopStocksScheduler
 } from './services/stocksScheduler'
 import {
+  startSportsReelScheduler,
+  stopSportsReelScheduler
+} from './services/sportsReelScheduler'
+import {
   setAlertsWindowOpener,
   startSportsAlerts,
   stopSportsAlerts
@@ -64,6 +68,10 @@ import {
 } from './services/videoGenService'
 import { ensureMediaTools, getMediaToolsStatus } from './services/mediaToolsService'
 import { startMaintenanceSchedule, stopMaintenanceSchedule } from './services/maintenanceService'
+import {
+  applySettingsChange as commitSettingsChange,
+  type SettingsChange
+} from './services/settingsWriteService'
 
 const isDev = !app.isPackaged
 
@@ -379,6 +387,13 @@ function registerIpc(): void {
   ipcMain.handle('app:getOllamaStatus', () => getOllamaStatus())
   ipcMain.handle('feeds:refreshAll', () => pollAllFeeds({ force: true }))
   ipcMain.handle('prefs:apply', () => applyPreferences())
+  // Hyperintelligence write: commits the change to the right store (sqlite
+  // prefs or the PulseConfig JSON) and then fans out via applyPreferences
+  // so timers restart, theme/density broadcast, login-item flips, etc.
+  ipcMain.handle('hyper:applySettings', async (_e, change: SettingsChange) => {
+    await commitSettingsChange(change)
+    applyPreferences()
+  })
   ipcMain.handle('reels:piperStatus', () => getPiperStatus())
   ipcMain.handle('reels:videoGenStatus', () => getVideoGenStatus())
   ipcMain.handle('reels:mediaToolsStatus', () => getMediaToolsStatus())
@@ -508,6 +523,7 @@ app.whenReady().then(async () => {
   app.setLoginItemSettings({ openAtLogin: prefs.launchAtLogin })
   startDiscoverySchedule()
   startStocksScheduler()
+  startSportsReelScheduler()
   setAlertsWindowOpener(showMainWindow)
   if (prefs.favoriteTeamAlertsEnabled) startSportsAlerts()
   startReelScheduler()
@@ -562,6 +578,7 @@ app.on('will-quit', () => {
   stopDigestTimer()
   stopDiscoverySchedule()
   stopStocksScheduler()
+  stopSportsReelScheduler()
   stopSportsAlerts()
   stopReelScheduler()
   stopMaintenanceSchedule()

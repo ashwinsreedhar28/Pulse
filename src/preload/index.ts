@@ -377,6 +377,16 @@ export interface SeasonGames {
   range: { start: number; end: number; label: string } | null
 }
 
+export interface SportsReelGroup {
+  league: SportsLeague
+  games: Game[]
+}
+
+export interface SportsReelSnapshot {
+  groups: SportsReelGroup[]
+  warmed: boolean
+}
+
 export interface StatLeader {
   athleteId: string
   athleteName: string
@@ -432,7 +442,16 @@ export interface FeedFinderCandidate {
   alreadySubscribed: boolean
 }
 
-export type CalendarEventKind = 'earnings' | 'game' | 'launch'
+export type CalendarEventKind =
+  | 'earnings'
+  | 'game'
+  | 'launch'
+  | 'dividend'
+  | 'ipo'
+  | 'stockSplit'
+  | 'fedMeeting'
+  | 'econRelease'
+  | 'worldEvent'
 
 export interface CalendarEvent {
   id: string
@@ -451,6 +470,13 @@ export interface CalendarEvent {
     awayColor?: string | null
     provider?: string
     padLocation?: string | null
+    ratio?: string
+    priceRange?: string | null
+    consensus?: string | null
+    previous?: string | null
+    country?: string | null
+    url?: string
+    category?: string
   }
 }
 
@@ -475,6 +501,93 @@ export interface FeedProbeResult {
   error?: string
 }
 
+// Hyperintelligence dispatcher payload shapes. The renderer switches on
+// `kind` and renders the appropriate card cluster per turn.
+export type SettingsTab =
+  | 'categories'
+  | 'feeds'
+  | 'tickers'
+  | 'locations'
+  | 'teams'
+  | 'preferences'
+
+export interface SettingsDescriptor {
+  key: string
+  label: string
+  tab: SettingsTab
+  keywords: string[]
+}
+
+export interface SettingsSnapshot {
+  descriptor: SettingsDescriptor
+  value: string
+  note?: string
+}
+
+export interface InspectSettingsResult {
+  status: 'ok' | 'no-match'
+  question: string
+  snapshots: SettingsSnapshot[]
+  reply: string
+}
+
+export interface HyperQaResult {
+  answer: string
+  source: 'wikipedia' | 'ollama' | 'none'
+  sourceTitle: string | null
+  sourceURL: string | null
+  confident: boolean
+}
+
+// Settings write path — the Hyperintelligence dispatcher can propose a
+// change, the renderer shows a before→after card with an APPLY button, and
+// the opaque `change` blob rides back through hyper:applySettings for the
+// actual commit.
+export interface SettingsProposalDescriptor {
+  key: string
+  label: string
+  tab: SettingsTab
+}
+
+export type SettingsChange =
+  | {
+      kind: 'pref'
+      // `keyof Preferences` — stringly typed here because Preferences is
+      // declared separately and both sides share the underlying store.
+      key: string
+      value: string | number | boolean
+    }
+  | { kind: 'calendarWindow'; days: number }
+
+export interface SettingsProposal {
+  descriptor: SettingsProposalDescriptor
+  currentValueDisplay: string
+  proposedValueDisplay: string
+  change: SettingsChange
+  reply: string
+}
+
+export interface SettingsRejection {
+  descriptor: SettingsProposalDescriptor
+  requestedValue: string
+  reason: string
+  allowedValues: string[]
+  reply: string
+}
+
+export type HyperResponse =
+  | { kind: 'feeds'; reply: string; payload: FeedFinderResult }
+  | {
+      kind: 'articles'
+      reply: string
+      payload: { articles: Article[]; query: string }
+    }
+  | { kind: 'qa'; reply: string; payload: HyperQaResult }
+  | { kind: 'settings'; reply: string; payload: InspectSettingsResult }
+  | { kind: 'settings-proposal'; reply: string; payload: SettingsProposal }
+  | { kind: 'settings-rejection'; reply: string; payload: SettingsRejection }
+  | { kind: 'offline'; reply: string }
+
 export interface HyperChatMeta {
   id: number
   title: string
@@ -491,6 +604,40 @@ export interface SaveHyperChatInput {
   title: string
   turns: unknown[]
 }
+
+export type CalendarEventKindId =
+  | 'earnings'
+  | 'games'
+  | 'launches'
+  | 'dividends'
+  | 'ipos'
+  | 'stockSplits'
+  | 'fedMeetings'
+  | 'econReleases'
+  | 'worldEvents'
+
+export interface PulseConfig {
+  version: number
+  calendar: {
+    windowDays: number
+    eventKinds: Record<CalendarEventKindId, { enabled: boolean }>
+  }
+}
+
+export interface PulseConfigPatch {
+  calendar?: {
+    windowDays?: number
+    eventKinds?: Partial<Record<CalendarEventKindId, { enabled: boolean }>>
+  }
+}
+
+export type ConfigExportResult =
+  | { ok: true; path: string }
+  | { ok: false; canceled?: true; error?: string }
+
+export type ConfigImportResult =
+  | { ok: true; config: PulseConfig }
+  | { ok: false; canceled?: true; error?: string }
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>
@@ -623,11 +770,20 @@ const api = {
     smartLookup: (term: string, context?: string) =>
       invoke<SmartLookup | null>('reader:smartLookup', term, context)
   },
+  ipo: {
+    getBrief: (input: { symbol: string; companyName: string }) =>
+      invoke<ReaderResult>('ipo:getBrief', input)
+  },
   feedFinder: {
     ask: (message: string) => invoke<FeedFinderResult>('feedFinder:ask', message),
     probe: (url: string) => invoke<FeedProbeResult>('feedFinder:probe', url),
     add: (input: { title: string; url: string; categoryName: string; domain: Domain }) =>
       invoke<Feed>('feedFinder:add', input)
+  },
+  hyper: {
+    ask: (message: string) => invoke<HyperResponse>('hyper:ask', message),
+    applySettings: (change: SettingsChange) =>
+      invoke<void>('hyper:applySettings', change)
   },
   hyperChats: {
     list: () => invoke<HyperChatMeta[]>('hyperChats:list'),
@@ -667,6 +823,14 @@ const api = {
       invoke<StatCategory[]>('sports:listLeagueLeaders', leagueId),
     listTeamLeaders: (leagueId: string, teamId: string) =>
       invoke<StatCategory[]>('sports:listTeamLeaders', leagueId, teamId),
+    getReelGroups: () => invoke<SportsReelSnapshot>('sports:getReelGroups'),
+    onReelUpdated: (cb: (snapshot: SportsReelSnapshot) => void): (() => void) => {
+      const listener = (_e: unknown, snapshot: SportsReelSnapshot): void => cb(snapshot)
+      ipcRenderer.on('sports:reelUpdated', listener)
+      return (): void => {
+        ipcRenderer.off('sports:reelUpdated', listener)
+      }
+    },
     onOpenGame: (cb: (payload: SportsGameOpenPayload) => void): (() => void) => {
       const listener = (_e: unknown, payload: SportsGameOpenPayload): void => cb(payload)
       ipcRenderer.on('sports:openGame', listener)
@@ -677,6 +841,12 @@ const api = {
   },
   calendar: {
     get: () => invoke<CalendarStrip>('calendar:get')
+  },
+  config: {
+    get: () => invoke<PulseConfig>('config:get'),
+    update: (patch: PulseConfigPatch) => invoke<PulseConfig>('config:update', patch),
+    export: () => invoke<ConfigExportResult>('config:export'),
+    import: () => invoke<ConfigImportResult>('config:import')
   },
   favoriteTeams: {
     list: () => invoke<FavoriteTeam[]>('db:favoriteTeams:list'),

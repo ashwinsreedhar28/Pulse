@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type {
+  CalendarEventKindId,
   Category,
   Domain,
   FavoriteTeam,
@@ -10,6 +11,7 @@ import type {
   KokoroStatus,
   KokoroVoice,
   Preferences,
+  PulseConfig,
   SportsLeague,
   SportsTeam,
   Theme,
@@ -40,12 +42,17 @@ type Tab = 'categories' | 'feeds' | 'tickers' | 'locations' | 'teams' | 'prefere
 
 export function Settings({
   onClose,
-  onDataChanged
+  onDataChanged,
+  initialTab
 }: {
   onClose: () => void
   onDataChanged: () => void
+  // Hyperintelligence deep-links into a specific tab when it surfaces a
+  // settings snapshot ("your theme is X — [open Settings]"). Unset = default
+  // landing tab (categories).
+  initialTab?: Tab
 }): JSX.Element {
-  const [tab, setTab] = useState<Tab>('categories')
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'categories')
   const [categories, setCategories] = useState<Category[]>([])
   const [feeds, setFeeds] = useState<Feed[]>([])
   const [tickers, setTickers] = useState<Ticker[]>([])
@@ -1083,30 +1090,100 @@ function LocationRow({
 
 // ---- Preferences tab ----
 
+// Keys live in the sqlite `preferences` table. We split them into two scopes
+// so the Preferences and Flash-narration (Reels) subsections each get their
+// own APPLY button — changes in one don't force a commit of the other.
+const CORE_PREF_KEYS: (keyof Preferences)[] = [
+  'pollIntervalMin',
+  'digestIntervalMin',
+  'quietHoursEnabled',
+  'quietHoursStart',
+  'quietHoursEnd',
+  'density',
+  'theme',
+  'favoriteTeamAlertsEnabled',
+  'launchAtLogin'
+]
+const REELS_PREF_KEYS: (keyof Preferences)[] = ['ttsEngine', 'ttsVoice']
+
 function PreferencesTab(): JSX.Element {
+  // `prefs` = last known committed state from the DB.
+  // `draft` = user's uncommitted edits. APPLY sends the diff to the main
+  // process; Reset snaps draft back to prefs. We never mutate prefs directly.
   const [prefs, setPrefs] = useState<Preferences | null>(null)
+  const [draft, setDraft] = useState<Preferences | null>(null)
+  const [coreStatus, setCoreStatus] = useState<ApplyStatus>(null)
+  const [reelsStatus, setReelsStatus] = useState<ApplyStatus>(null)
 
   useEffect(() => {
-    void window.api.prefs.get().then(setPrefs)
+    void window.api.prefs.get().then((p) => {
+      setPrefs(p)
+      setDraft(p)
+    })
   }, [])
 
-  const update = async (key: keyof Preferences, value: string | number | boolean): Promise<void> => {
-    await window.api.prefs.set(key, value)
-    await window.api.prefs.apply()
-    setPrefs(await window.api.prefs.get())
+  const patch = <K extends keyof Preferences>(key: K, value: Preferences[K]): void => {
+    setDraft((prev) => (prev ? { ...prev, [key]: value } : prev))
+    // Any edit invalidates the "applied" / "failed" status stripe so the
+    // user doesn't see a stale confirmation while actively editing.
+    setCoreStatus(null)
+    setReelsStatus(null)
   }
 
-  if (!prefs) return <div className="p-6 text-sm text-zinc-500">Loading…</div>
+  const diffKeys = (scope: (keyof Preferences)[]): (keyof Preferences)[] => {
+    if (!prefs || !draft) return []
+    return scope.filter((k) => prefs[k] !== draft[k])
+  }
+
+  const applyScope = async (
+    scope: (keyof Preferences)[],
+    setStatus: (s: ApplyStatus) => void
+  ): Promise<void> => {
+    if (!draft) return
+    const changed = diffKeys(scope)
+    if (changed.length === 0) return
+    setStatus('applying')
+    try {
+      for (const k of changed) {
+        await window.api.prefs.set(k, draft[k] as string | number | boolean)
+      }
+      await window.api.prefs.apply()
+      const fresh = await window.api.prefs.get()
+      setPrefs(fresh)
+      setDraft(fresh)
+      setStatus('applied')
+    } catch {
+      setStatus('failed')
+    }
+  }
+
+  const resetScope = (scope: (keyof Preferences)[]): void => {
+    setDraft((prev) => {
+      if (!prev || !prefs) return prev
+      const next = { ...prev }
+      for (const k of scope) {
+        ;(next[k] as Preferences[typeof k]) = prefs[k]
+      }
+      return next
+    })
+    setCoreStatus(null)
+    setReelsStatus(null)
+  }
+
+  if (!prefs || !draft) return <div className="p-6 text-sm text-zinc-500">Loading…</div>
+
+  const coreDirty = diffKeys(CORE_PREF_KEYS).length
+  const reelsDirty = diffKeys(REELS_PREF_KEYS).length
 
   return (
     <div className="p-6 space-y-8 max-w-lg">
       <PrefSection title="Polling">
         <PrefRow label="Feed poll interval (minutes)">
           <NumberInput
-            value={prefs.pollIntervalMin}
+            value={draft.pollIntervalMin}
             min={1}
             max={60}
-            onChange={(v) => update('pollIntervalMin', v)}
+            onChange={(v) => patch('pollIntervalMin', v)}
           />
         </PrefRow>
       </PrefSection>
@@ -1114,23 +1191,23 @@ function PreferencesTab(): JSX.Element {
       <PrefSection title="Notifications">
         <PrefRow label="Digest interval (minutes)">
           <NumberInput
-            value={prefs.digestIntervalMin}
+            value={draft.digestIntervalMin}
             min={5}
             max={120}
-            onChange={(v) => update('digestIntervalMin', v)}
+            onChange={(v) => patch('digestIntervalMin', v)}
           />
         </PrefRow>
         <PrefRow label="Quiet hours">
           <ToggleSwitch
-            checked={prefs.quietHoursEnabled}
-            onChange={(v) => update('quietHoursEnabled', v)}
+            checked={draft.quietHoursEnabled}
+            onChange={(v) => patch('quietHoursEnabled', v)}
           />
         </PrefRow>
-        {prefs.quietHoursEnabled && (
+        {draft.quietHoursEnabled && (
           <div className="flex items-center gap-3 pl-1">
-            <TimeInput value={prefs.quietHoursStart} onChange={(v) => update('quietHoursStart', v)} />
+            <TimeInput value={draft.quietHoursStart} onChange={(v) => patch('quietHoursStart', v)} />
             <span className="text-zinc-500 text-xs">to</span>
-            <TimeInput value={prefs.quietHoursEnd} onChange={(v) => update('quietHoursEnd', v)} />
+            <TimeInput value={draft.quietHoursEnd} onChange={(v) => patch('quietHoursEnd', v)} />
           </div>
         )}
       </PrefSection>
@@ -1138,8 +1215,8 @@ function PreferencesTab(): JSX.Element {
       <PrefSection title="Display">
         <PrefRow label="Density">
           <select
-            value={prefs.density}
-            onChange={(e) => update('density', e.target.value)}
+            value={draft.density}
+            onChange={(e) => patch('density', e.target.value as Preferences['density'])}
             className="bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent"
           >
             <option value="comfortable">Comfortable</option>
@@ -1148,18 +1225,15 @@ function PreferencesTab(): JSX.Element {
         </PrefRow>
         <div className="pt-1">
           <div className="text-[11px] uppercase tracking-wider text-zinc-500 mb-2">Theme</div>
-          <ThemePicker
-            value={prefs.theme}
-            onChange={(t) => update('theme', t)}
-          />
+          <ThemePicker value={draft.theme} onChange={(t) => patch('theme', t)} />
         </div>
       </PrefSection>
 
       <PrefSection title="Sports alerts">
         <PrefRow label="Favorite team alerts">
           <ToggleSwitch
-            checked={prefs.favoriteTeamAlertsEnabled}
-            onChange={(v) => update('favoriteTeamAlertsEnabled', v)}
+            checked={draft.favoriteTeamAlertsEnabled}
+            onChange={(v) => patch('favoriteTeamAlertsEnabled', v)}
           />
         </PrefRow>
         <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
@@ -1171,16 +1245,322 @@ function PreferencesTab(): JSX.Element {
       <PrefSection title="System">
         <PrefRow label="Launch at login">
           <ToggleSwitch
-            checked={prefs.launchAtLogin}
-            onChange={(v) => update('launchAtLogin', v)}
+            checked={draft.launchAtLogin}
+            onChange={(v) => patch('launchAtLogin', v)}
           />
         </PrefRow>
       </PrefSection>
 
+      <ApplyBar
+        label="Preferences"
+        dirtyCount={coreDirty}
+        status={coreStatus}
+        onApply={() => void applyScope(CORE_PREF_KEYS, setCoreStatus)}
+        onReset={() => resetScope(CORE_PREF_KEYS)}
+      />
+
+      <CalendarPrefSection />
+
       <ReelsPrefSection
-        engine={prefs.ttsEngine}
-        voice={prefs.ttsVoice}
-        onUpdate={update}
+        engine={draft.ttsEngine}
+        voice={draft.ttsVoice}
+        dirtyCount={reelsDirty}
+        status={reelsStatus}
+        onPatch={(k, v) => patch(k, v as Preferences[typeof k])}
+        onApply={() => void applyScope(REELS_PREF_KEYS, setReelsStatus)}
+        onReset={() => resetScope(REELS_PREF_KEYS)}
+      />
+    </div>
+  )
+}
+
+type ApplyStatus = null | 'applying' | 'applied' | 'failed'
+
+function ApplyBar({
+  label,
+  dirtyCount,
+  status,
+  onApply,
+  onReset
+}: {
+  label: string
+  dirtyCount: number
+  status: ApplyStatus
+  onApply: () => void
+  onReset: () => void
+}): JSX.Element {
+  const hasChanges = dirtyCount > 0
+  const applying = status === 'applying'
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-edge bg-surface-1 px-4 py-2.5">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+        {hasChanges ? (
+          <span className="text-amber-300/90">
+            {dirtyCount} unsaved {dirtyCount === 1 ? 'change' : 'changes'}
+          </span>
+        ) : status === 'applied' ? (
+          <span className="text-teal-300">{label} saved</span>
+        ) : status === 'failed' ? (
+          <span className="text-rose-300">Save failed — try again</span>
+        ) : (
+          <span>{label} · no changes</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={!hasChanges || applying}
+          className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.16em] bg-surface-2 text-zinc-300 ring-1 ring-inset ring-edge hover:bg-surface-3 disabled:opacity-40"
+        >
+          Reset
+        </button>
+        <button
+          type="button"
+          onClick={onApply}
+          disabled={!hasChanges || applying}
+          className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.16em] bg-teal-500/25 text-teal-100 ring-1 ring-inset ring-teal-500/50 hover:bg-teal-500/35 disabled:opacity-40"
+        >
+          {applying ? 'Applying…' : 'Apply'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+interface EventKindMeta {
+  id: CalendarEventKindId
+  label: string
+  description: string
+}
+
+const EVENT_KINDS: EventKindMeta[] = [
+  {
+    id: 'earnings',
+    label: 'Earnings',
+    description: 'Upcoming earnings dates for tickers in your watchlist.'
+  },
+  {
+    id: 'dividends',
+    label: 'Ex-dividend dates',
+    description: 'Next ex-dividend date for tickers in your watchlist.'
+  },
+  {
+    id: 'stockSplits',
+    label: 'Stock splits',
+    description: 'Upcoming splits for tickers in your watchlist.'
+  },
+  {
+    id: 'ipos',
+    label: 'IPOs',
+    description: 'Upcoming IPOs listing on US exchanges (market-wide).'
+  },
+  {
+    id: 'fedMeetings',
+    label: 'Fed meetings',
+    description: 'FOMC rate decisions and Fed policy events.'
+  },
+  {
+    id: 'econReleases',
+    label: 'Economic releases',
+    description: 'CPI, NFP, GDP, retail sales, jobless claims, PCE, and similar macro data.'
+  },
+  {
+    id: 'games',
+    label: 'Favorite team games',
+    description: 'Scheduled games for teams you follow in Sports.'
+  },
+  {
+    id: 'launches',
+    label: 'Space launches',
+    description: 'Upcoming rocket launches from Launch Library 2.'
+  },
+  {
+    id: 'worldEvents',
+    label: 'World events',
+    description:
+      'Significant world events from the last few days, curated from Wikipedia’s Current Events Portal.'
+  }
+]
+
+function CalendarPrefSection(): JSX.Element {
+  // Same pattern as PreferencesTab: `config` is the committed copy, `draft`
+  // is the editable one. The PulseConfig JSON file is rewritten atomically
+  // only when the user clicks APPLY.
+  const [config, setConfig] = useState<PulseConfig | null>(null)
+  const [draft, setDraft] = useState<PulseConfig | null>(null)
+  const [applyStatus, setApplyStatus] = useState<ApplyStatus>(null)
+  const [ioStatus, setIoStatus] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void window.api.config.get().then((c) => {
+      setConfig(c)
+      setDraft(c)
+    })
+  }, [])
+
+  const patchWindow = (v: number): void => {
+    setDraft((prev) =>
+      prev ? { ...prev, calendar: { ...prev.calendar, windowDays: v } } : prev
+    )
+    setApplyStatus(null)
+  }
+
+  const patchKind = (id: CalendarEventKindId, enabled: boolean): void => {
+    setDraft((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        calendar: {
+          ...prev.calendar,
+          eventKinds: {
+            ...prev.calendar.eventKinds,
+            [id]: { enabled }
+          }
+        }
+      }
+    })
+    setApplyStatus(null)
+  }
+
+  const dirtyCount = ((): number => {
+    if (!config || !draft) return 0
+    let n = 0
+    if (config.calendar.windowDays !== draft.calendar.windowDays) n++
+    for (const k of Object.keys(draft.calendar.eventKinds) as CalendarEventKindId[]) {
+      if (draft.calendar.eventKinds[k].enabled !== config.calendar.eventKinds[k].enabled) n++
+    }
+    return n
+  })()
+
+  const doApply = async (): Promise<void> => {
+    if (!draft || dirtyCount === 0) return
+    setApplyStatus('applying')
+    try {
+      // Build a minimal patch — only send fields that actually changed.
+      const patch: { calendar: { windowDays?: number; eventKinds?: Partial<Record<CalendarEventKindId, { enabled: boolean }>> } } = {
+        calendar: {}
+      }
+      if (config && config.calendar.windowDays !== draft.calendar.windowDays) {
+        patch.calendar.windowDays = draft.calendar.windowDays
+      }
+      const kindPatch: Partial<Record<CalendarEventKindId, { enabled: boolean }>> = {}
+      if (config) {
+        for (const k of Object.keys(draft.calendar.eventKinds) as CalendarEventKindId[]) {
+          if (draft.calendar.eventKinds[k].enabled !== config.calendar.eventKinds[k].enabled) {
+            kindPatch[k] = { enabled: draft.calendar.eventKinds[k].enabled }
+          }
+        }
+      }
+      if (Object.keys(kindPatch).length > 0) patch.calendar.eventKinds = kindPatch
+      const next = await window.api.config.update(patch)
+      setConfig(next)
+      setDraft(next)
+      setApplyStatus('applied')
+    } catch {
+      setApplyStatus('failed')
+    }
+  }
+
+  const doReset = (): void => {
+    if (!config) return
+    setDraft(config)
+    setApplyStatus(null)
+  }
+
+  const doExport = async (): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    setIoStatus(null)
+    try {
+      const result = await window.api.config.export()
+      if (result.ok) setIoStatus(`Exported to ${result.path}`)
+      else if (!result.canceled) setIoStatus(`Export failed: ${result.error ?? 'unknown'}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const doImport = async (): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    setIoStatus(null)
+    try {
+      const result = await window.api.config.import()
+      if (result.ok) {
+        setConfig(result.config)
+        setDraft(result.config)
+        setApplyStatus(null)
+        setIoStatus('Imported preferences applied.')
+      } else if (!result.canceled) {
+        setIoStatus(`Import failed: ${result.error ?? 'unknown'}`)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!config || !draft)
+    return (
+      <PrefSection title="Calendar">
+        <div className="text-xs text-zinc-500">Loading…</div>
+      </PrefSection>
+    )
+
+  return (
+    <div className="space-y-3">
+      <PrefSection title="Calendar">
+        <PrefRow label="Window (days)">
+          <NumberInput
+            value={draft.calendar.windowDays}
+            min={1}
+            max={30}
+            onChange={(v) => patchWindow(v)}
+          />
+        </PrefRow>
+        <div className="pt-1 space-y-2">
+          <div className="text-[11px] uppercase tracking-wider text-zinc-500">Event kinds</div>
+          {EVENT_KINDS.map((kind) => {
+            const enabled = draft.calendar.eventKinds[kind.id]?.enabled ?? false
+            return (
+              <div key={kind.id} className="flex items-start justify-between gap-4 py-1">
+                <div className="min-w-0">
+                  <div className="text-sm text-zinc-200">{kind.label}</div>
+                  <div className="text-[11px] text-zinc-500 leading-relaxed">{kind.description}</div>
+                </div>
+                <ToggleSwitch checked={enabled} onChange={(v) => patchKind(kind.id, v)} />
+              </div>
+            )
+          })}
+        </div>
+        <div className="pt-3 flex items-center gap-2">
+          <button
+            onClick={doExport}
+            disabled={busy}
+            className="px-3 py-1.5 rounded-md bg-surface-2 border border-edge text-[11px] font-medium text-zinc-200 hover:bg-surface-3 disabled:opacity-50"
+          >
+            Export preferences…
+          </button>
+          <button
+            onClick={doImport}
+            disabled={busy}
+            className="px-3 py-1.5 rounded-md bg-surface-2 border border-edge text-[11px] font-medium text-zinc-200 hover:bg-surface-3 disabled:opacity-50"
+          >
+            Import preferences…
+          </button>
+        </div>
+        {ioStatus && <div className="text-[11px] text-zinc-400 pt-1 break-all">{ioStatus}</div>}
+        <div className="text-[11px] text-zinc-500 leading-relaxed pt-1">
+          Saved as <code className="text-zinc-400">pulse-preferences.json</code> in your app data folder.
+        </div>
+      </PrefSection>
+      <ApplyBar
+        label="Calendar"
+        dirtyCount={dirtyCount}
+        status={applyStatus}
+        onApply={() => void doApply()}
+        onReset={doReset}
       />
     </div>
   )
@@ -1189,11 +1569,19 @@ function PreferencesTab(): JSX.Element {
 function ReelsPrefSection({
   engine,
   voice,
-  onUpdate
+  dirtyCount,
+  status,
+  onPatch,
+  onApply,
+  onReset
 }: {
   engine: TtsEngine
   voice: string
-  onUpdate: (key: keyof Preferences, value: string | number | boolean) => Promise<void>
+  dirtyCount: number
+  status: ApplyStatus
+  onPatch: (key: keyof Preferences, value: string | number | boolean) => void
+  onApply: () => void
+  onReset: () => void
 }): JSX.Element {
   const [kokoro, setKokoro] = useState<KokoroStatus>({ state: 'idle' })
   const [voices, setVoices] = useState<KokoroVoice[]>([])
@@ -1224,63 +1612,70 @@ function ReelsPrefSection({
   const statusTone = kokoroStatusTone(kokoro)
 
   return (
-    <PrefSection title="Flash narration">
-      <PrefRow label="TTS engine">
-        <select
-          value={engine}
-          onChange={(e) => void onUpdate('ttsEngine', e.target.value as TtsEngine)}
-          className="bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent"
-        >
-          <option value="kokoro">Kokoro-82M (neural, best)</option>
-          <option value="piper">Piper (neural, fallback)</option>
-          <option value="say">macOS say (system)</option>
-        </select>
-      </PrefRow>
-
-      {engine === 'kokoro' && (
-        <PrefRow label="Voice">
+    <div className="space-y-3">
+      <PrefSection title="Flash narration">
+        <PrefRow label="TTS engine">
           <select
-            value={voice}
-            onChange={(e) => void onUpdate('ttsVoice', e.target.value)}
-            disabled={voices.length === 0}
-            className="bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent disabled:opacity-50 max-w-[260px]"
+            value={engine}
+            onChange={(e) => onPatch('ttsEngine', e.target.value as TtsEngine)}
+            className="bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent"
           >
-            {voices.length === 0 ? (
-              <option>{voice}</option>
-            ) : (
-              voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.label}
-                </option>
-              ))
-            )}
+            <option value="kokoro">Kokoro-82M (neural, best)</option>
+            <option value="piper">Piper (neural, fallback)</option>
+            <option value="say">macOS say (system)</option>
           </select>
         </PrefRow>
-      )}
 
-      <div className="flex items-center justify-between pl-1">
-        <div className="flex items-center gap-2 text-[11px]">
-          <span className={`h-1.5 w-1.5 rounded-full ${statusTone}`} />
-          <span className="text-zinc-500 uppercase tracking-wider">Kokoro:</span>
-          <span className="text-zinc-300">{statusLabel}</span>
+        {engine === 'kokoro' && (
+          <PrefRow label="Voice">
+            <select
+              value={voice}
+              onChange={(e) => onPatch('ttsVoice', e.target.value)}
+              disabled={voices.length === 0}
+              className="bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent disabled:opacity-50 max-w-[260px]"
+            >
+              {voices.length === 0 ? (
+                <option>{voice}</option>
+              ) : (
+                voices.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label}
+                  </option>
+                ))
+              )}
+            </select>
+          </PrefRow>
+        )}
+
+        <div className="flex items-center justify-between pl-1">
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className={`h-1.5 w-1.5 rounded-full ${statusTone}`} />
+            <span className="text-zinc-500 uppercase tracking-wider">Kokoro:</span>
+            <span className="text-zinc-300">{statusLabel}</span>
+          </div>
+          <button
+            onClick={() => void rebuild()}
+            disabled={rebuilding}
+            className="px-3 py-1 text-[11px] uppercase tracking-wider rounded border border-edge bg-surface-2 text-zinc-300 hover:text-zinc-100 hover:border-zinc-600 disabled:opacity-50"
+          >
+            {rebuilding ? 'Rebuilding…' : 'Rebuild all audio'}
+          </button>
         </div>
-        <button
-          onClick={() => void rebuild()}
-          disabled={rebuilding}
-          className="px-3 py-1 text-[11px] uppercase tracking-wider rounded border border-edge bg-surface-2 text-zinc-300 hover:text-zinc-100 hover:border-zinc-600 disabled:opacity-50"
-        >
-          {rebuilding ? 'Rebuilding…' : 'Rebuild all audio'}
-        </button>
-      </div>
-      {rebuildMsg && (
-        <div className="text-[11px] text-zinc-500 pl-1">{rebuildMsg}</div>
-      )}
-      <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
-        Kokoro is the primary TTS. Piper and macOS say are automatic fallbacks
-        when Kokoro is unavailable. Changing voice applies to new flashes — use
-        Rebuild to re-synthesize existing ones.
-      </div>
-    </PrefSection>
+        {rebuildMsg && <div className="text-[11px] text-zinc-500 pl-1">{rebuildMsg}</div>}
+        <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
+          Kokoro is the primary TTS. Piper and macOS say are automatic fallbacks
+          when Kokoro is unavailable. Changing voice applies to new flashes — use
+          Rebuild to re-synthesize existing ones.
+        </div>
+      </PrefSection>
+      <ApplyBar
+        label="Flash narration"
+        dirtyCount={dirtyCount}
+        status={status}
+        onApply={onApply}
+        onReset={onReset}
+      />
+    </div>
   )
 }
 

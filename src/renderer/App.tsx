@@ -6,6 +6,7 @@ import { Discovery } from './components/Discovery'
 import { Hyperintelligence } from './components/Hyperintelligence'
 import { Reels } from './components/Reels'
 import { CalendarStrip } from './components/CalendarStrip'
+import { ExternalReader } from './components/ExternalReader'
 import {
   ScoreFlourish,
   sportForLeagueId,
@@ -29,6 +30,7 @@ import type {
   ReaderResult,
   SmartLookup,
   SportsLeague,
+  SportsReelGroup,
   StatCategory,
   StatLeader,
   StockQuote,
@@ -137,6 +139,68 @@ export default function App(): JSX.Element {
   const [pendingGame, setPendingGame] = useState<Game | null>(null)
   const [density, setDensity] = useState<'compact' | 'comfortable'>('comfortable')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsInitialTab, setSettingsInitialTab] = useState<
+    'categories' | 'feeds' | 'tickers' | 'locations' | 'teams' | 'preferences' | undefined
+  >(undefined)
+  // In-app viewer for arbitrary URLs (calendar pills, smart-lookup source
+  // links, Hyperintelligence feed-candidate links, etc.). Takes precedence
+  // over every other main-area view while non-null.
+  const [externalView, setExternalView] = useState<{
+    url: string | null
+    title: string
+    subtitle: string | null
+    initialReader?: ReaderResult | null
+  } | null>(null)
+
+  const handleOpenURL = useCallback(
+    (url: string, title: string, subtitle?: string | null): void => {
+      if (!url || !url.startsWith('http')) return
+      setExternalView({ url, title, subtitle: subtitle ?? null })
+    },
+    []
+  )
+
+  // IPO briefs synthesize content from Nasdaq calendar + SEC EDGAR + news
+  // search, then render it in reader view with no backing URL. Fetch kicks
+  // off immediately; the ExternalReader shows a loading state until the
+  // brief arrives and then renders it directly (no extra reader extraction).
+  const handleOpenIpoBrief = useCallback(
+    (symbol: string, companyName: string): void => {
+      const title = symbol
+        ? `${symbol} IPO brief`
+        : `${companyName || 'IPO'} brief`
+      setExternalView({
+        url: null,
+        title,
+        subtitle: companyName || null,
+        initialReader: null
+      })
+      void window.api.ipo
+        .getBrief({ symbol, companyName })
+        .then((brief) => {
+          setExternalView((prev) =>
+            prev && prev.title === title
+              ? { ...prev, initialReader: brief }
+              : prev
+          )
+        })
+        .catch((err) => {
+          console.warn('[ipo] brief failed:', err)
+          setExternalView((prev) =>
+            prev && prev.title === title
+              ? {
+                  ...prev,
+                  initialReader: {
+                    status: 'error',
+                    error: 'Could not assemble an IPO brief from the public sources.'
+                  }
+                }
+              : prev
+          )
+        })
+    },
+    []
+  )
 
   const handleTickerOpenStock = useCallback((symbol: string): void => {
     setPendingStockSymbol(symbol)
@@ -146,6 +210,7 @@ export default function App(): JSX.Element {
     setHyperOpen(false)
     setReelsOpen(false)
     setSelectedId(null)
+    setExternalView(null)
   }, [])
   const handleTickerOpenArticle = useCallback(
     (id: number): void => {
@@ -158,6 +223,7 @@ export default function App(): JSX.Element {
       setSelectedCategoryId(null)
       setFilter('all')
       setSelectedId(id)
+      setExternalView(null)
       void window.api.articles.markRead(id, true).then(() => {
         void refresh()
         void refreshCategories()
@@ -173,6 +239,7 @@ export default function App(): JSX.Element {
     setHyperOpen(false)
     setReelsOpen(false)
     setSelectedId(null)
+    setExternalView(null)
   }, [])
   const handleCalendarOpenGame = useCallback(
     (leagueId: string, gameId: string): void => {
@@ -326,6 +393,31 @@ export default function App(): JSX.Element {
         ? 'finance'
         : 'news'
       : filter
+
+  // Stable key for the currently-visible view — Smart Lookup uses this to
+  // clear stale docks when the user navigates. Docks were bound to the
+  // original view, so carrying them into unrelated tabs looks like a ghost.
+  const viewKey: string = externalView
+    ? `ext:${externalView.url ?? externalView.title}`
+    : settingsOpen
+      ? 'settings'
+      : stocksOpen
+        ? 'stocks'
+        : sportsOpen
+          ? 'sports'
+          : discoveryOpen
+            ? 'discovery'
+            : hyperOpen
+              ? 'hyper'
+              : reelsOpen
+                ? 'reels'
+                : selected
+                  ? `article:${selected.id}`
+                  : bookmarksOnly
+                    ? 'bookmarks'
+                    : selectedCategoryId !== null
+                      ? `cat:${selectedCategoryId}`
+                      : `filter:${filter}`
   const feedLookupContext = bookmarksOnly
     ? 'Bookmarked news articles across finance (semiconductor value chain, defense, mining) and general news (US geopolitics, space, world events).'
     : activeCategory
@@ -435,13 +527,25 @@ export default function App(): JSX.Element {
         flashPending={flashPending}
       />
       <main className="flex-1 min-h-0 overflow-hidden relative">
-        {stocksOpen ? (
+        {externalView ? (
+          <ExternalReader
+            url={externalView.url}
+            title={externalView.title}
+            subtitle={externalView.subtitle}
+            initialReader={externalView.initialReader}
+            onClose={() => setExternalView(null)}
+            onLinkClick={handleOpenURL}
+          />
+        ) : stocksOpen ? (
           <StocksPage
             onClose={() => {
               setStocksOpen(false)
               setPendingStockSymbol(null)
             }}
             initialTickerSymbol={pendingStockSymbol}
+            onOpenURL={handleOpenURL}
+            onOpenArticle={handleTickerOpenArticle}
+            onOpenIpoBrief={handleOpenIpoBrief}
           />
         ) : sportsOpen ? (
           <SportsPage
@@ -450,6 +554,7 @@ export default function App(): JSX.Element {
               setPendingGame(null)
             }}
             initialGame={pendingGame}
+            onOpenURL={handleOpenURL}
           />
         ) : discoveryOpen ? (
           <Discovery
@@ -465,6 +570,12 @@ export default function App(): JSX.Element {
             onFeedsChanged={() => {
               void refresh()
               void refreshCategories()
+            }}
+            onOpenURL={handleOpenURL}
+            onOpenArticle={handleTickerOpenArticle}
+            onOpenSettings={(tab) => {
+              setSettingsInitialTab(tab)
+              setSettingsOpen(true)
             }}
           />
         ) : reelsOpen ? (
@@ -494,12 +605,21 @@ export default function App(): JSX.Element {
             calendarFilter={calendarFilter}
             onOpenStock={handleTickerOpenStock}
             onOpenGame={handleCalendarOpenGame}
+            onOpenURL={handleOpenURL}
+            onOpenIpoBrief={handleOpenIpoBrief}
           />
         )}
       </main>
-      <SmartLookupLayer />
+      <SmartLookupLayer viewKey={viewKey} onOpenURL={handleOpenURL} />
       {settingsOpen && (
-        <Settings onClose={() => setSettingsOpen(false)} onDataChanged={handleSettingsChange} />
+        <Settings
+          onClose={() => {
+            setSettingsOpen(false)
+            setSettingsInitialTab(undefined)
+          }}
+          onDataChanged={handleSettingsChange}
+          initialTab={settingsInitialTab}
+        />
       )}
     </div>
   )
@@ -790,19 +910,28 @@ function StoryTickerItem({
   )
 }
 
-type SportsReelGroup = { league: SportsLeague; games: Game[] }
-
 function SportsReel({ onOpenGame }: { onOpenGame: (g: Game) => void }): JSX.Element {
+  // Cache + subscribe. sportsReelScheduler on the main side owns the fetch/
+  // filter/sort and warms itself at boot, so by the time the user cycles to
+  // Sports this invoke resolves against a hot cache and paints immediately.
   const [groups, setGroups] = useState<SportsReelGroup[]>([])
-  const [loaded, setLoaded] = useState(false)
-  const anyLive = groups.some((g) => g.games.some((x) => x.status === 'in_progress'))
-  // Live = 8s, idle = 30s, paused entirely when backgrounded.
-  const interval = useAdaptiveInterval({
-    anyLive,
-    liveMs: 8_000,
-    idleMs: 30_000,
-    hiddenMs: null
-  })
+  const [warmed, setWarmed] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    void window.api.sports.getReelGroups().then((snap) => {
+      if (cancelled) return
+      setGroups(snap.groups)
+      setWarmed(snap.warmed)
+    })
+    const off = window.api.sports.onReelUpdated((snap) => {
+      setGroups(snap.groups)
+      setWarmed(snap.warmed)
+    })
+    return () => {
+      cancelled = true
+      off()
+    }
+  }, [])
   // Look up the sport for each game so animations render correctly without
   // plumbing the league down through props.
   const sportById = useMemo(() => {
@@ -810,65 +939,7 @@ function SportsReel({ onOpenGame }: { onOpenGame: (g: Game) => void }): JSX.Elem
     for (const g of groups) for (const game of g.games) m[game.id] = g.league.sport
     return m
   }, [groups])
-  useEffect(() => {
-    let cancelled = false
-    const load = async (): Promise<void> => {
-      try {
-        const leagues = await window.api.sports.listLeagues()
-        const fetched = await Promise.all(
-          leagues.map((l) =>
-            window.api.sports.listGames(l.id).catch(() => [] as Game[])
-          )
-        )
-        if (cancelled) return
-        const now = Date.now()
-        const todayStart = new Date()
-        todayStart.setHours(0, 0, 0, 0)
-        const tomorrowStart = todayStart.getTime() + 86_400_000
-        const yesterdayStart = todayStart.getTime() - 86_400_000
-        const order: Record<Game['status'], number> = {
-          in_progress: 0,
-          final: 1,
-          scheduled: 2,
-          postponed: 3,
-          canceled: 4
-        }
-        const built: SportsReelGroup[] = leagues
-          .map((league, i) => {
-            const raw = fetched[i]
-            const relevant = raw.filter((g) => {
-              if (g.status === 'in_progress') return true
-              if (g.status === 'final' && g.date >= yesterdayStart) return true
-              if (g.status === 'scheduled' && g.date >= now && g.date < tomorrowStart) return true
-              return false
-            })
-            relevant.sort((a, b) => order[a.status] - order[b.status] || a.date - b.date)
-            return { league, games: relevant.slice(0, 8) }
-          })
-          .filter((g) => g.games.length > 0)
-        built.sort((a, b) => {
-          const la = a.games.filter((g) => g.status === 'in_progress').length
-          const lb = b.games.filter((g) => g.status === 'in_progress').length
-          return lb - la
-        })
-        setGroups(built)
-        setLoaded(true)
-      } catch {
-        if (!cancelled) {
-          setGroups([])
-          setLoaded(true)
-        }
-      }
-    }
-    void load()
-    if (interval === null) return () => { cancelled = true }
-    const t = setInterval(() => void load(), interval)
-    return () => {
-      cancelled = true
-      clearInterval(t)
-    }
-  }, [interval])
-  if (!loaded) return <div className="h-full" />
+  if (!warmed && groups.length === 0) return <ReelPlaceholder text="Warming up scoreboard…" />
   if (groups.length === 0) return <ReelPlaceholder text="No games to show right now" />
 
   type Cell =
@@ -1414,7 +1485,9 @@ function FeedView({
   onRefresh,
   calendarFilter,
   onOpenStock,
-  onOpenGame
+  onOpenGame,
+  onOpenURL,
+  onOpenIpoBrief
 }: {
   heading: { eyebrow: string; title: string; eyebrowClass: string }
   lookupContext: string
@@ -1425,6 +1498,8 @@ function FeedView({
   calendarFilter: 'all' | 'finance' | 'news'
   onOpenStock: (symbol: string) => void
   onOpenGame: (leagueId: string, gameId: string) => void
+  onOpenURL: (url: string, title: string, subtitle?: string | null) => void
+  onOpenIpoBrief: (symbol: string, companyName: string) => void
 }): JSX.Element {
   const dateGroups = useMemo(() => groupArticlesByDate(articles), [articles])
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null)
@@ -1463,6 +1538,8 @@ function FeedView({
         filter={calendarFilter}
         onOpenStock={onOpenStock}
         onOpenGame={onOpenGame}
+        onOpenURL={onOpenURL}
+        onOpenIpoBrief={onOpenIpoBrief}
       />
       {dateGroups.length > 1 && (
         <ArticleDateRail
@@ -2220,7 +2297,7 @@ function ArticleReader({
           <ToolbarButton label="Reload" onClick={reload}>
             ↻
           </ToolbarButton>
-          <ToolbarButton label="Open in browser" onClick={openExternal}>
+          <ToolbarButton label="Open in system browser" onClick={openExternal}>
             ↗
           </ToolbarButton>
         </div>
@@ -2310,10 +2387,24 @@ function ReaderView({
 // App-wide selection watcher so Smart Lookup works on every page, not just
 // the reader. Ignores selections inside inputs / editable fields / the webview
 // so typing in Settings or Hyperintelligence doesn't fire a lookup.
-function SmartLookupLayer(): JSX.Element {
+function SmartLookupLayer({
+  viewKey,
+  onOpenURL
+}: {
+  viewKey: string
+  onOpenURL: (url: string, title: string, subtitle?: string | null) => void
+}): JSX.Element {
   const [lookup, setLookup] = useState<LookupPrompt>({ kind: 'idle' })
   const [docks, setDocks] = useState<DockItem[]>([])
   const dockIdRef = useRef(0)
+
+  // Docks are bound to the page that triggered them, so when the user
+  // navigates away (clicks a tab, opens an article, etc.), clear them. Leaving
+  // docks pinned across unrelated views looks like a ghost.
+  useEffect(() => {
+    setDocks([])
+    setLookup({ kind: 'idle' })
+  }, [viewKey])
 
   useEffect(() => {
     const isEditable = (el: HTMLElement | null): boolean => {
@@ -2422,6 +2513,7 @@ function SmartLookupLayer(): JSX.Element {
           top={dockLayout.get(dock.id) ?? 80}
           onToggleMinimize={() => toggleDockMinimize(dock.id)}
           onClose={() => closeDock(dock.id)}
+          onOpenURL={onOpenURL}
         />
       ))}
     </>
@@ -2467,14 +2559,23 @@ function SmartLookupChip({
 function computeDockLayout(docks: DockItem[]): Map<number, number> {
   const minTop = 80
   const gap = 8
+  const bottomPad = 16
+  // Viewport height — guarded for SSR-ish render (not applicable here but
+  // cheap) and also for the case where window isn't fully laid out yet.
+  const viewportH = typeof window !== 'undefined' ? window.innerHeight : 900
   const sorted = [...docks].sort((a, b) => a.rect.top - b.rect.top)
   const positions = new Map<number, number>()
   let cursor = minTop
   for (const d of sorted) {
-    const raw = Math.max(d.rect.top - 8, minTop)
-    const top = Math.max(raw, cursor)
-    positions.set(d.id, top)
     const height = d.minimized ? 40 : d.kind === 'result' ? 260 : 90
+    const raw = Math.max(d.rect.top - 8, minTop)
+    let top = Math.max(raw, cursor)
+    // Clamp to viewport bottom so a lookup made near the end of a long reader
+    // scroll doesn't spill off-screen. Scrollable dock body handles long
+    // content so cramping the top coord is the right escape.
+    const maxTop = viewportH - height - bottomPad
+    if (top > maxTop) top = Math.max(minTop, maxTop)
+    positions.set(d.id, top)
     cursor = top + height + gap
   }
   return positions
@@ -2484,12 +2585,14 @@ function SmartLookupDock({
   dock,
   top,
   onToggleMinimize,
-  onClose
+  onClose,
+  onOpenURL
 }: {
   dock: DockItem
   top: number
   onToggleMinimize: () => void
   onClose: () => void
+  onOpenURL: (url: string, title: string, subtitle?: string | null) => void
 }): JSX.Element {
   const { minimized } = dock
   const title =
@@ -2553,14 +2656,21 @@ function SmartLookupDock({
                 {dock.result.sourceURL && (
                   <>
                     <span className="text-zinc-700">·</span>
-                    <a
-                      href={dock.result.sourceURL}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = dock.result.sourceURL
+                        if (!url) return
+                        onOpenURL(
+                          url,
+                          dock.result.title ?? dock.term,
+                          dock.result.source === 'wikipedia' ? 'Wikipedia' : null
+                        )
+                      }}
                       className="text-amber-300 hover:text-amber-200 normal-case tracking-normal"
                     >
                       Open article ↗
-                    </a>
+                    </button>
                   </>
                 )}
               </div>
@@ -2601,10 +2711,16 @@ function ToolbarButton({
 
 function StocksPage({
   onClose,
-  initialTickerSymbol
+  initialTickerSymbol,
+  onOpenURL,
+  onOpenArticle,
+  onOpenIpoBrief
 }: {
   onClose: () => void
   initialTickerSymbol?: string | null
+  onOpenURL: (url: string, title: string, subtitle?: string | null) => void
+  onOpenArticle: (id: number) => void
+  onOpenIpoBrief: (symbol: string, companyName: string) => void
 }): JSX.Element {
   const [quotes, setQuotes] = useState<StockQuote[]>([])
   const [tickers, setTickers] = useState<Ticker[]>([])
@@ -2707,6 +2823,8 @@ function StocksPage({
             if (match) setSelectedTickerId(match.id)
           }}
           onOpenGame={() => {}}
+          onOpenURL={onOpenURL}
+          onOpenIpoBrief={onOpenIpoBrief}
         />
         {tickers.filter((t) => t.isActive).length === 0 ? (
           <div className="px-6 py-20 text-center text-sm text-zinc-500">
@@ -2746,6 +2864,7 @@ function StocksPage({
             ticker={t}
             quote={bySymbol.get(t.symbol.toUpperCase())}
             onClose={() => setSelectedTickerId(null)}
+            onOpenArticle={onOpenArticle}
           />
         )
       })()}
@@ -2938,11 +3057,13 @@ function BriefSummary({ summary }: { summary: string }): JSX.Element {
 function StockDetail({
   ticker,
   quote,
-  onClose
+  onClose,
+  onOpenArticle
 }: {
   ticker: Ticker
   quote: StockQuote | undefined
   onClose: () => void
+  onOpenArticle: (id: number) => void
 }): JSX.Element {
   const [history, setHistory] = useState<HistoryPoint[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
@@ -3287,11 +3408,10 @@ function StockDetail({
                     <ul className="divide-y divide-edge/40 rounded-lg border border-edge/60 bg-surface-1 overflow-hidden">
                       {g.items.map((a) => (
                         <li key={a.id}>
-                          <a
-                            href={a.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-start gap-3 px-4 py-3 hover:bg-surface-2 transition-colors"
+                          <button
+                            type="button"
+                            onClick={() => onOpenArticle(a.id)}
+                            className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-surface-2 transition-colors"
                           >
                             <FeedSource article={a} />
                             <div className="flex-1 min-w-0">
@@ -3317,7 +3437,7 @@ function StockDetail({
                                 </div>
                               )}
                             </div>
-                          </a>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -3665,10 +3785,12 @@ function formatRelativeTime(ts: number | null): string {
 
 function SportsPage({
   onClose,
-  initialGame
+  initialGame,
+  onOpenURL
 }: {
   onClose: () => void
   initialGame?: Game | null
+  onOpenURL: (url: string, title: string, subtitle?: string | null) => void
 }): JSX.Element {
   const [leagues, setLeagues] = useState<SportsLeague[]>([])
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null)
@@ -4036,7 +4158,11 @@ function SportsPage({
         )}
       </div>
       {selectedGame && (
-        <GameDetailOverlay game={selectedGame} onClose={() => setSelectedGame(null)} />
+        <GameDetailOverlay
+          game={selectedGame}
+          onClose={() => setSelectedGame(null)}
+          onOpenURL={onOpenURL}
+        />
       )}
     </section>
   )
@@ -4611,10 +4737,12 @@ function formatGameTime(game: Game): string {
 
 function GameDetailOverlay({
   game,
-  onClose
+  onClose,
+  onOpenURL
 }: {
   game: Game
   onClose: () => void
+  onOpenURL: (url: string, title: string, subtitle?: string | null) => void
 }): JSX.Element {
   const [detail, setDetail] = useState<GameDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -4758,7 +4886,7 @@ function GameDetailOverlay({
         {loading ? (
           <div className="px-6 py-12 text-sm text-zinc-500">Loading game details…</div>
         ) : detail ? (
-          <GameDetailBody detail={detail} />
+          <GameDetailBody detail={detail} onOpenURL={onOpenURL} />
         ) : (
           <div className="px-6 py-12 text-sm text-zinc-500">
             No additional detail is available for this game yet.
@@ -4850,7 +4978,13 @@ function LeagueName(leagueId: string): string {
   }
 }
 
-function GameDetailBody({ detail }: { detail: GameDetail }): JSX.Element {
+function GameDetailBody({
+  detail,
+  onOpenURL
+}: {
+  detail: GameDetail
+  onOpenURL: (url: string, title: string, subtitle?: string | null) => void
+}): JSX.Element {
   const homeLeaders = detail.leaders.filter((l) => l.team === 'home')
   const awayLeaders = detail.leaders.filter((l) => l.team === 'away')
   const isMlb = detail.leagueId === 'mlb'
@@ -4932,17 +5066,13 @@ function GameDetailBody({ detail }: { detail: GameDetail }): JSX.Element {
             {detail.headlines.map((h, i) => (
               <li key={i}>
                 {h.link ? (
-                  <a
-                    href={h.link}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      void window.api.app.showMainWindow()
-                      window.open(h.link ?? '', '_blank', 'noopener')
-                    }}
-                    className="text-[13px] text-zinc-200 hover:text-zinc-50"
+                  <button
+                    type="button"
+                    onClick={() => onOpenURL(h.link ?? '', h.title, h.description ?? null)}
+                    className="text-[13px] text-zinc-200 hover:text-zinc-50 text-left"
                   >
                     {h.title}
-                  </a>
+                  </button>
                 ) : (
                   <span className="text-[13px] text-zinc-200">{h.title}</span>
                 )}

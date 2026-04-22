@@ -17,7 +17,7 @@ All 12 stages from the original spec are long done, plus substantial additional 
 
 **Entry points:** [src/main/index.ts](src/main/index.ts) (Electron main — tray, windows, boot orchestration), [src/preload/index.ts](src/preload/index.ts) (typed `window.api` bridge), [src/renderer/](src/renderer/) (React UI). Build config: [electron.vite.config.ts](electron.vite.config.ts) — three renderer entry points (main, popover, splash).
 
-**Database** ([src/main/database/](src/main/database/)): `better-sqlite3` at `app.getPath('userData')/pulse.db`. Schema is at **migration v18** ([src/main/database/migrations.ts](src/main/database/migrations.ts)) — check this file first before adding columns. Tables span articles, feeds, categories, tickers/ticker summaries, geo_interests, discovery_suggestions, preferences, reels, hyper_chats, favorite_teams, favorite_athletes.
+**Database** ([src/main/database/](src/main/database/)): `better-sqlite3` at `app.getPath('userData')/pulse.db`. Schema is at **migration v20** ([src/main/database/migrations.ts](src/main/database/migrations.ts)) — check this file first before adding columns. Tables span articles, feeds, categories, tickers/ticker summaries, geo_interests, discovery_suggestions, preferences, reels, hyper_chats, favorite_teams, favorite_athletes.
 
 **IPC** ([src/main/ipc/handlers.ts](src/main/ipc/handlers.ts)): all DB channels prefixed `db:*`. Service channels use their own prefixes (`reader:`, `reels:`, `sports:`, `hyper:`, `discovery:`, `stocks:`, `lookup:`, etc.). Typed API surface in [src/preload/index.ts](src/preload/index.ts).
 

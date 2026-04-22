@@ -289,6 +289,10 @@ export interface EarningsCalendar {
   // start of that window and the actual date is still unconfirmed.
   nextDate: number | null
   isEstimate: boolean
+  // Ex-dividend date — day before which the stock must be held to receive the
+  // next dividend. Pulled from the same Yahoo calendarEvents module as
+  // earnings, so we return it alongside for "one call, both dates".
+  exDividendDate: number | null
   fetchedAt: number
 }
 
@@ -306,6 +310,8 @@ interface CalendarEventsResponse {
             earnings?: {
               earningsDate?: Array<RawField | { raw?: number; fmt?: string }>
             }
+            exDividendDate?: RawField
+            dividendDate?: RawField
           }
         }>
       | null
@@ -363,7 +369,8 @@ export async function getEarnings(symbol: string): Promise<EarningsCalendar | nu
     }
   }
 
-  const dates = json.quoteSummary.result?.[0]?.calendarEvents?.earnings?.earningsDate ?? []
+  const calendarEvents = json.quoteSummary.result?.[0]?.calendarEvents
+  const dates = calendarEvents?.earnings?.earningsDate ?? []
   const now = Date.now()
   let nextUnixMs: number | null = null
   for (const entry of dates) {
@@ -376,10 +383,17 @@ export async function getEarnings(symbol: string): Promise<EarningsCalendar | nu
   // Yahoo returns a 2-element array when the date is still an estimate window.
   const isEstimate = dates.length > 1
 
+  const exDivRaw = calendarEvents?.exDividendDate?.raw
+  const exDividendMs =
+    typeof exDivRaw === 'number' && Number.isFinite(exDivRaw) && exDivRaw * 1000 >= now
+      ? exDivRaw * 1000
+      : null
+
   const value: EarningsCalendar = {
     symbol: sym,
     nextDate: nextUnixMs,
     isEstimate,
+    exDividendDate: exDividendMs,
     fetchedAt: Date.now()
   }
   earningsCache.set(sym, { value })
