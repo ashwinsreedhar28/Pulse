@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { StockQuote, Ticker } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
+import { resolveDisplayQuote } from './quoteDisplay'
 
 interface ChainStage {
   id: string
@@ -1085,7 +1086,9 @@ function CompetitorChip({
   ticker: Ticker | undefined
   onClick: () => void
 }): JSX.Element {
-  const change = quote?.change ?? 0
+  const rq = quote ? resolveDisplayQuote(quote) : null
+  const change = rq?.change ?? 0
+  const displayPrice = rq?.price ?? null
   const priceColor =
     change > 0 ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-zinc-400'
   const companyName = ticker?.companyName ?? node.name ?? node.symbol
@@ -1099,9 +1102,14 @@ function CompetitorChip({
       <span className="text-[10.5px] font-semibold tracking-[0.12em] text-zinc-100">
         {node.symbol}
       </span>
-      {quote?.price != null && (
+      {rq?.sessionBadge && (
+        <span className="text-[8px] font-semibold uppercase tracking-[0.1em] px-1 py-0 rounded bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/40">
+          {rq.sessionBadge}
+        </span>
+      )}
+      {displayPrice != null && (
         <span className={`tabular-nums text-[10.5px] font-semibold ${priceColor}`}>
-          {quote.price.toFixed(2)}
+          {displayPrice.toFixed(2)}
         </span>
       )}
     </button>
@@ -1175,7 +1183,11 @@ function NodeBox({
     symbolColor = 'rgb(254, 215, 170)'
   }
 
-  const change = n.quote?.changePct ?? null
+  // Resolve the display quote once so the diagram node's change % and the
+  // price cell both track the current trading session (regular / AH / pre).
+  const rq = n.quote ? resolveDisplayQuote(n.quote) : null
+  const change = rq?.changePct ?? null
+  const displayPrice = rq?.price ?? null
   const up = (change ?? 0) > 0
   const down = (change ?? 0) < 0
   const changeColor = up
@@ -1187,7 +1199,7 @@ function NodeBox({
   // Reserve room for the right-aligned price (~60px at 10px tabular-nums)
   // so long company names can't drift into the dollar figure. Fall back to a
   // wider budget when the row won't render a price at all.
-  const hasPrice = n.hasTickerRow && n.quote?.price != null
+  const hasPrice = n.hasTickerRow && displayPrice != null
   const maxChars = hasPrice ? 18 : 26
   const displayName =
     n.companyName.length > maxChars ? n.companyName.slice(0, maxChars - 1) + '…' : n.companyName
@@ -1255,7 +1267,7 @@ function NodeBox({
           textAnchor="end"
           style={{ fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums' }}
         >
-          ${n.quote!.price!.toFixed(2)}
+          ${displayPrice!.toFixed(2)}
         </text>
       )}
     </g>

@@ -30,6 +30,7 @@ import {
   formatPctDelta,
   formatPctValue
 } from './financialsFormat'
+import { resolveDisplayQuote } from './quoteDisplay'
 
 type SortKey =
   | 'symbol'
@@ -58,7 +59,7 @@ function rowSortValue(row: Row, key: SortKey): number | null {
       // caller falls back to string comparison when the key is 'symbol'.
       return null
     case 'changePct':
-      return row.quote?.changePct ?? null
+      return row.quote ? resolveDisplayQuote(row.quote).changePct : null
     case 'revenueTTM':
       return row.financials?.ttm.revenue ?? null
     case 'revYoY':
@@ -71,7 +72,7 @@ function rowSortValue(row: Row, key: SortKey): number | null {
       return q.epsActual - q.epsEstimate
     }
     case 'ptUpside': {
-      const price = row.quote?.price ?? null
+      const price = row.quote ? resolveDisplayQuote(row.quote).price : null
       const target = row.estimates?.targetMean ?? null
       if (price === null || target === null || price <= 0) return null
       return (target - price) / price
@@ -318,8 +319,11 @@ function PeerRow({
   onActivateTicker: (tickerId: number) => void
 }): JSX.Element {
   const fin = row.financials
-  const changePct = row.quote?.changePct ?? null
-  const change = row.quote?.change ?? 0
+  // Resolve to the live session's price so both the 1D Δ column and the PT
+  // upside math below reflect after-hours moves, not yesterday's 4pm close.
+  const rq = row.quote ? resolveDisplayQuote(row.quote) : null
+  const changePct = rq?.changePct ?? null
+  const change = rq?.change ?? 0
   const changeColor =
     change > 0 ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-zinc-500'
   const revenue = formatMoneyCompact(fin?.ttm.revenue ?? null)
@@ -352,7 +356,7 @@ function PeerRow({
           ? 'text-red-300'
           : 'text-zinc-300'
 
-  const price = row.quote?.price ?? null
+  const price = rq?.price ?? null
   const targetMean = row.estimates?.targetMean ?? null
   const ptUpside =
     price !== null && targetMean !== null && price > 0 ? (targetMean - price) / price : null

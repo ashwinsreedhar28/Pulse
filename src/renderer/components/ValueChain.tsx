@@ -26,6 +26,7 @@ import { countdownLabel, pulseClass, pulsePhase } from './earningsPulse'
 import { FcfSparkline } from './FcfSparkline'
 import { EarningsBeatMiss } from './EarningsBeatMiss'
 import { PeerCompareModal } from './PeerCompareModal'
+import { resolveDisplayQuote } from './quoteDisplay'
 
 interface ValueChainSector {
   id: string
@@ -631,7 +632,10 @@ export function ValueChain({
                 />
                 <FocusAnalystStrip
                   estimates={estimatesMap.get(focusSymbol!)}
-                  currentPrice={quoteBySymbol.get(focusSymbol!)?.price ?? null}
+                  currentPrice={(() => {
+                    const q = quoteBySymbol.get(focusSymbol!)
+                    return q ? resolveDisplayQuote(q).price : null
+                  })()}
                 />
                 <FocusOptionsStrip
                   options={focusOptions}
@@ -826,8 +830,14 @@ function ValueChainTile({
   onLeave: () => void
   onClick: () => void
 }): JSX.Element {
-  const change = quote?.change ?? null
-  const changePct = quote?.changePct ?? null
+  // Route through resolveDisplayQuote so the tile shows the live session's
+  // price — post-market during 4-8pm ET, pre-market during 4-9:30am ET,
+  // regular close otherwise.
+  const rq = quote ? resolveDisplayQuote(quote) : null
+  const change = rq?.change ?? null
+  const changePct = rq?.changePct ?? null
+  const displayPrice = rq?.price ?? null
+  const sessionBadge = rq?.sessionBadge ?? null
   const up = (change ?? 0) > 0
   const down = (change ?? 0) < 0
   const color = up ? 'text-emerald-400' : down ? 'text-red-400' : 'text-zinc-500'
@@ -887,6 +897,11 @@ function ValueChainTile({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 min-w-0">
           <span className={`text-[13px] font-bold tracking-[0.04em] ${symbolColor}`}>{symbol}</span>
+          {sessionBadge && (
+            <span className="shrink-0 text-[8.5px] font-semibold uppercase tracking-[0.1em] px-1 py-0.5 rounded bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/40">
+              {sessionBadge}
+            </span>
+          )}
           {recentFilings && recentFilings.length > 0 && (
             <FilingBadge filings={recentFilings} />
           )}
@@ -909,9 +924,7 @@ function ValueChainTile({
           <span
             className={`text-[11px] tabular-nums shrink-0 ${inWatchlist ? 'text-zinc-300' : 'text-zinc-500'}`}
           >
-            {quote?.price !== null && quote?.price !== undefined
-              ? quote.price.toFixed(2)
-              : '—'}
+            {displayPrice !== null ? displayPrice.toFixed(2) : '—'}
           </span>
         )}
       </div>

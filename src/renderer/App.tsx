@@ -14,6 +14,7 @@ import { OptionsSnapshotSection } from './components/OptionsSnapshotSection'
 import { EarningsReleaseSection } from './components/EarningsReleaseSection'
 import { CollapsibleSection } from './components/CollapsibleSection'
 import { WhyThisMatters } from './components/WhyThisMatters'
+import { resolveDisplayQuote } from './components/quoteDisplay'
 import {
   ScoreFlourish,
   sportForLeagueId,
@@ -1139,99 +1140,39 @@ function StockTickerItem({
   quote: StockQuote
   onOpen: () => void
 }): JSX.Element {
-  const up = (quote.change ?? 0) > 0
-  const down = (quote.change ?? 0) < 0
+  const rq = resolveDisplayQuote(quote)
+  const up = (rq.change ?? 0) > 0
+  const down = (rq.change ?? 0) < 0
   const color = up ? 'text-emerald-400' : down ? 'text-red-400' : 'text-zinc-400'
   const arrow = up ? '▲' : down ? '▼' : '·'
-  const pct = quote.changePct !== null ? `${quote.changePct >= 0 ? '+' : ''}${quote.changePct.toFixed(2)}%` : '—'
-  const price = quote.price !== null ? quote.price.toFixed(2) : '—'
-  // Pick the extended-session overlay that matches the current Yahoo
-  // marketState. Post-market dominates the 4-8pm window; pre-market shows
-  // in the 4-9:30am window. Skip the badge entirely during regular hours.
-  const ext = extendedOverlay(quote)
+  const pct =
+    rq.changePct !== null
+      ? `${rq.changePct >= 0 ? '+' : ''}${rq.changePct.toFixed(2)}%`
+      : '—'
+  const price = rq.price !== null ? rq.price.toFixed(2) : '—'
   return (
     <button
       type="button"
       onClick={onOpen}
       title={
-        ext
-          ? `${quote.symbol} · ${ext.label} ${ext.price.toFixed(2)} (${ext.pctLabel})`
+        rq.sessionBadge
+          ? `${quote.symbol} · ${rq.sessionBadge} ${price} (${pct})`
           : `Open ${quote.symbol}`
       }
       className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors min-w-[172px]"
     >
       <span className="font-semibold tracking-[0.14em] text-zinc-100">{quote.symbol}</span>
+      {rq.sessionBadge && (
+        <span className="text-[9px] font-semibold uppercase tracking-[0.18em] px-1 py-0.5 rounded bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/40">
+          {rq.sessionBadge}
+        </span>
+      )}
       <span className="tabular-nums text-zinc-300">{price}</span>
       <span className={`tabular-nums font-semibold ${color}`}>
         {arrow} {pct}
       </span>
-      {ext && (
-        <span
-          className={`tabular-nums text-[10px] font-semibold px-1 py-0.5 rounded ${ext.tone}`}
-        >
-          {ext.label} {ext.pctLabel}
-        </span>
-      )}
     </button>
   )
-}
-
-// Row rendered under the main price on the ticker-detail header. Shows the
-// extended-session price + delta from the regular close with a tone that
-// matches the AH/PRE marquee badges. Renders nothing during regular hours
-// or for symbols that have no extended prints on file.
-function ExtendedHoursLine({
-  quote,
-  currency
-}: {
-  quote: StockQuote
-  currency: string
-}): JSX.Element | null {
-  const ext = extendedOverlay(quote)
-  if (!ext) return null
-  const up = ext.pctLabel.startsWith('+') && !ext.pctLabel.startsWith('+0.00')
-  const down = ext.pctLabel.startsWith('-')
-  const color = up ? 'text-emerald-300' : down ? 'text-red-300' : 'text-zinc-300'
-  return (
-    <div className="mt-1 flex items-center justify-end gap-2 text-[11px] tabular-nums text-zinc-400">
-      <span className="text-[9px] uppercase tracking-[0.22em] text-zinc-500">{ext.label}</span>
-      <span className="font-semibold text-zinc-100">
-        {currency}
-        {ext.price.toFixed(2)}
-      </span>
-      <span className={`font-semibold ${color}`}>{ext.pctLabel}</span>
-    </div>
-  )
-}
-
-// Resolve the extended-session overlay into a display-ready shape. Returns
-// null when the quote has no extended prints for the current session.
-function extendedOverlay(
-  quote: StockQuote
-): { label: string; price: number; pctLabel: string; tone: string } | null {
-  if (quote.marketState === 'post' && quote.postMarketPrice !== null) {
-    const pct = quote.postMarketChangePct
-    const pctLabel = pct !== null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '—'
-    const tone =
-      pct !== null && pct > 0
-        ? 'bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/40'
-        : pct !== null && pct < 0
-          ? 'bg-red-500/15 text-red-200 ring-1 ring-inset ring-red-500/40'
-          : 'bg-zinc-700/60 text-zinc-200 ring-1 ring-inset ring-zinc-600/60'
-    return { label: 'AH', price: quote.postMarketPrice, pctLabel, tone }
-  }
-  if (quote.marketState === 'pre' && quote.preMarketPrice !== null) {
-    const pct = quote.preMarketChangePct
-    const pctLabel = pct !== null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '—'
-    const tone =
-      pct !== null && pct > 0
-        ? 'bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/40'
-        : pct !== null && pct < 0
-          ? 'bg-red-500/15 text-red-200 ring-1 ring-inset ring-red-500/40'
-          : 'bg-zinc-700/60 text-zinc-200 ring-1 ring-inset ring-zinc-600/60'
-    return { label: 'PRE', price: quote.preMarketPrice, pctLabel, tone }
-  }
-  return null
 }
 
 const FeedSource = memo(function FeedSource({ article }: { article: Article }): JSX.Element {
@@ -3026,9 +2967,10 @@ function StockCard({
   quote: StockQuote | undefined
   onOpen: () => void
 }): JSX.Element {
-  const price = quote?.price ?? null
-  const change = quote?.change ?? null
-  const changePct = quote?.changePct ?? null
+  const rq = quote ? resolveDisplayQuote(quote) : null
+  const price = rq?.price ?? null
+  const change = rq?.change ?? null
+  const changePct = rq?.changePct ?? null
   const up = (change ?? 0) > 0
   const down = (change ?? 0) < 0
   const tone = up ? 'emerald' : down ? 'red' : 'zinc'
@@ -3048,8 +2990,15 @@ function StockCard({
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <div className="text-[18px] font-bold tracking-[0.06em] text-zinc-50 leading-none mb-1.5">
-            {ticker.symbol}
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <div className="text-[18px] font-bold tracking-[0.06em] text-zinc-50 leading-none">
+              {ticker.symbol}
+            </div>
+            {rq?.sessionBadge && (
+              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] px-1 py-0.5 rounded bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/40">
+                {rq.sessionBadge}
+              </span>
+            )}
           </div>
           <div className="text-[12px] text-zinc-400 truncate">{ticker.companyName}</div>
         </div>
@@ -3386,23 +3335,55 @@ function StockDetail({
             </div>
             <div className="flex items-center gap-3">
               <div className="text-right">
-                <div className="text-[26px] font-bold tabular-nums leading-none text-zinc-50">
-                  {quote?.price !== null && quote?.price !== undefined
-                    ? `${currency}${quote.price.toFixed(2)}`
-                    : '—'}
-                </div>
-                {quote?.changePct !== null && quote?.changePct !== undefined && (
-                  <div
-                    className={`text-[12px] font-semibold tabular-nums mt-1 ${
-                      (quote.change ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
-                    }`}
-                  >
-                    {(quote.change ?? 0) >= 0 ? '+' : ''}
-                    {quote.change?.toFixed(2)} ({(quote.changePct ?? 0) >= 0 ? '+' : ''}
-                    {quote.changePct.toFixed(2)}%) today
-                  </div>
-                )}
-                {quote && <ExtendedHoursLine quote={quote} currency={currency} />}
+                {(() => {
+                  if (!quote)
+                    return (
+                      <div className="text-[26px] font-bold tabular-nums leading-none text-zinc-50">—</div>
+                    )
+                  const rq = resolveDisplayQuote(quote)
+                  const deltaColor =
+                    (rq.change ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
+                  const sessionSuffix =
+                    rq.session === 'post'
+                      ? 'after hours'
+                      : rq.session === 'pre'
+                        ? 'pre-market'
+                        : rq.session === 'closed'
+                          ? 'at close'
+                          : 'today'
+                  return (
+                    <>
+                      <div className="flex items-baseline justify-end gap-2">
+                        {rq.sessionBadge && (
+                          <span className="text-[9px] font-semibold uppercase tracking-[0.2em] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/40">
+                            {rq.sessionBadge}
+                          </span>
+                        )}
+                        <span className="text-[26px] font-bold tabular-nums leading-none text-zinc-50">
+                          {rq.price !== null ? `${currency}${rq.price.toFixed(2)}` : '—'}
+                        </span>
+                      </div>
+                      {rq.changePct !== null && (
+                        <div className={`text-[12px] font-semibold tabular-nums mt-1 ${deltaColor}`}>
+                          {(rq.change ?? 0) >= 0 ? '+' : ''}
+                          {rq.change !== null ? rq.change.toFixed(2) : '—'} (
+                          {(rq.changePct ?? 0) >= 0 ? '+' : ''}
+                          {rq.changePct.toFixed(2)}%) {sessionSuffix}
+                        </div>
+                      )}
+                      {/* Show the regular-session close as a secondary line
+                          during extended hours so users can see both prices
+                          on the detail page. Hidden during regular hours
+                          since the primary price IS the regular price. */}
+                      {rq.sessionBadge && quote.price !== null && (
+                        <div className="text-[10px] tabular-nums text-zinc-500 mt-0.5">
+                          Reg close {currency}
+                          {quote.price.toFixed(2)}
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
               {ticker.isActive ? (
                 <span
@@ -3652,7 +3633,11 @@ function appendLiveQuote(
   quote: StockQuote | undefined
 ): HistoryPoint[] {
   if (history.length === 0) return []
-  const price = quote?.price
+  // Extend the chart with whichever session is live — post-market overlay
+  // during 4-8pm ET, pre-market during 4-9:30am ET, regular otherwise — so
+  // the chart's right edge matches the headline price instead of stopping
+  // at yesterday's close.
+  const price = quote ? resolveDisplayQuote(quote).price : null
   if (price === null || price === undefined) return history
   const last = history[history.length - 1]
   // For intraday ranges, Yahoo's last candle is usually the most recent 5/30m bar —
