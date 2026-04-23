@@ -49,6 +49,7 @@ import {
   getEarningsReleasesForSymbol
 } from '../database/earningsReleases'
 import { runGraphSweep } from '../services/graphCandidatesService'
+import { runTenKScanNow } from '../services/tenKConcentrationService'
 import {
   countCandidatesSince,
   listCandidates,
@@ -479,6 +480,10 @@ export function registerDbIpc(): void {
   )
   ipcMain.handle('graph:runSweep', async () => {
     const summary = await runGraphSweep()
+    return summary
+  })
+  ipcMain.handle('graph:runTenKScan', async () => {
+    const summary = await runTenKScanNow()
     return summary
   })
   ipcMain.handle(

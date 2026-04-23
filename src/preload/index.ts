@@ -1141,6 +1141,18 @@ const api = {
       invoke<{ accepted: number; rejected: number }>('graph:countSince', sinceMs),
     runSweep: (): Promise<GraphSweepSummary> =>
       invoke<GraphSweepSummary>('graph:runSweep'),
+    runTenKScan: (): Promise<{
+      processed: number
+      accepted: number
+      rejected: number
+      skipped: number
+    }> =>
+      invoke<{
+        processed: number
+        accepted: number
+        rejected: number
+        skipped: number
+      }>('graph:runTenKScan'),
     undoOverride: (
       fromSymbol: string,
       toSymbol: string,

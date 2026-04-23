@@ -28,7 +28,7 @@ import {
 } from '../database/graphCandidates'
 import {
   listEdgeOverrides,
-  upsertEdgeOverride
+  upsertEdgeOverrideWithConsensus
 } from '../database/graphOverrides'
 import { listTickers } from '../database/tickers'
 import { classifyGraphEdge, type GraphEdgeClassification } from './ollamaService'
@@ -388,7 +388,7 @@ export async function runGraphSweep(): Promise<{
       status: 'accepted',
       reviewNote: classification.rationale
     })
-    upsertEdgeOverride({
+    upsertEdgeOverrideWithConsensus({
       fromSymbol: resolved.from,
       toSymbol: resolved.to,
       relationship: resolved.relationship,

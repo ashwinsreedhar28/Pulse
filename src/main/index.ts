@@ -63,6 +63,10 @@ import {
   stopGraphCandidatesScheduler
 } from './services/graphCandidatesService'
 import {
+  startTenKConcentrationScheduler,
+  stopTenKConcentrationScheduler
+} from './services/tenKConcentrationService'
+import {
   startSportsReelScheduler,
   stopSportsReelScheduler
 } from './services/sportsReelScheduler'
@@ -590,6 +594,11 @@ app.whenReady().then(async () => {
   // inline Ollama auto-judge. Proposes edges, auto-accepts the high-confidence
   // ones into graph_edge_overrides, logs the rest to graph_candidates.
   startGraphCandidatesScheduler()
+  // 10-K customer concentration — weekly sweep extracts named customers
+  // from the filer's own annual report and auto-commits supplier→customer
+  // edges at high baseline confidence. Authoritative source, complements
+  // the news co-occurrence layer.
+  startTenKConcentrationScheduler()
   setAlertsWindowOpener(showMainWindow)
   if (prefs.favoriteTeamAlertsEnabled) startSportsAlerts()
   // Sports reel scheduler is just an ESPN scoreboard fetcher — it has no
@@ -666,6 +675,7 @@ app.on('will-quit', () => {
   stopSecFilingsScheduler()
   stopEarningsReleasesScheduler()
   stopGraphCandidatesScheduler()
+  stopTenKConcentrationScheduler()
   stopSportsReelScheduler()
   stopSportsAlerts()
   stopReelScheduler()

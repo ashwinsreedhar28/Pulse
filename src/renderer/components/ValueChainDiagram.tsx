@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { StockQuote, Ticker } from '../../preload'
+import type { GraphEdgeOverride, StockQuote, Ticker } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
 import { resolveDisplayQuote } from './quoteDisplay'
 
@@ -18,6 +18,13 @@ interface ChainEdge {
   from: string
   to: string
   note?: string
+  // 0..1 edge strength from overlay weights. Null for static-JSON edges
+  // (they're hand-curated, so we treat them as full-weight by default).
+  weight?: number | null
+  // Source tags ("news_cooccurrence", "sec_10k_concentration", or a
+  // comma-joined consensus list) — drives which tone modifier the diagram
+  // applies so 10-K-backed edges can render slightly more prominently.
+  source?: string | null
 }
 interface ChainGraph {
   stages: ChainStage[]
@@ -113,6 +120,12 @@ interface LaidOutEdge {
   toY: number
   note: string | null
   tone: EdgeTone
+  // 0..1 confidence when the edge came from an overlay; null for static
+  // graph edges (rendered at full strength).
+  weight: number | null
+  // Source chain ("news_cooccurrence,sec_10k_concentration" for multi-source
+  // consensus edges). Null for static edges.
+  source: string | null
 }
 
 // Pinned tooltips are anchored in SVG coordinates so they move with pan/zoom.
@@ -154,6 +167,74 @@ export function ValueChainDiagram({
   // drag nodes around to their liking. Kept keyed by symbol so the override
   // survives focus-set changes as long as that node is still on screen.
   const [overrides, setOverrides] = useState<Map<string, { x: number; y: number }>>(new Map())
+
+  // Dynamic edge overrides from the graph-growth pipeline. Fetched once on
+  // mount and refreshed whenever the main process broadcasts a graph:updated
+  // event (sweep commit or user undo). These merge into CHAIN.edges + the
+  // competitor map below so auto-approved edges participate in layout like
+  // any hand-curated edge does.
+  const [edgeOverrides, setEdgeOverrides] = useState<GraphEdgeOverride[]>([])
+  useEffect(() => {
+    let cancelled = false
+    window.api.graph
+      .listOverrides()
+      .then((rows) => {
+        if (!cancelled) setEdgeOverrides(rows)
+      })
+      .catch((err: unknown) => {
+        console.warn('[valueChainDiagram] overrides fetch failed', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  useEffect(() => {
+    return window.api.graph.onUpdated(() => {
+      window.api.graph
+        .listOverrides()
+        .then(setEdgeOverrides)
+        .catch(() => {
+          /* keep prior overrides */
+        })
+    })
+  }, [])
+
+  // Merged graph data. Starts with the static JSON and layers in accepted
+  // overlay edges for supplier/partner kinds; competitor overrides extend
+  // the competitor map. weight + source ride along so the renderer can
+  // scale edge thickness / opacity by confidence (D1).
+  const mergedEdges = useMemo<ChainEdge[]>(() => {
+    const out: ChainEdge[] = CHAIN.edges.map((e) => ({ ...e, weight: null, source: null }))
+    for (const o of edgeOverrides) {
+      if (o.relationship === 'supplier' || o.relationship === 'partner') {
+        out.push({
+          from: o.fromSymbol.toUpperCase(),
+          to: o.toSymbol.toUpperCase(),
+          note: o.note ?? undefined,
+          weight: o.weight,
+          source: o.source
+        })
+      }
+    }
+    return out
+  }, [edgeOverrides])
+
+  const mergedCompetitorMap = useMemo<Map<string, Set<string>>>(() => {
+    const m = new Map<string, Set<string>>()
+    for (const [k, v] of COMPETITOR_MAP) {
+      m.set(k, new Set(v))
+    }
+    for (const o of edgeOverrides) {
+      if (o.relationship !== 'competitor') continue
+      const a = o.fromSymbol.toUpperCase()
+      const b = o.toSymbol.toUpperCase()
+      if (!m.has(a)) m.set(a, new Set())
+      if (!m.has(b)) m.set(b, new Set())
+      m.get(a)!.add(b)
+      m.get(b)!.add(a)
+    }
+    return m
+  }, [edgeOverrides])
 
   const quoteBySymbol = useMemo(() => {
     const m = new Map<string, StockQuote>()
@@ -211,7 +292,7 @@ export function ValueChainDiagram({
     // simultaneously a rival of one focus and a counterparty of another.
     const competitorUnion = new Set<string>()
     for (const f of focusNodes) {
-      const rivals = COMPETITOR_MAP.get(f.symbol) ?? new Set()
+      const rivals = mergedCompetitorMap.get(f.symbol) ?? new Set()
       for (const r of rivals) if (!focusSet.has(r)) competitorUnion.add(r)
     }
 
@@ -219,14 +300,25 @@ export function ValueChainDiagram({
 
     // For each side-column node, remember which focus(es) it serves and the
     // note attached to each specific edge — this is what feeds per-focus arrow
-    // stagger below.
+    // stagger below. weight + source are captured so D1 (visual thickness)
+    // can render overlay edges at the confidence the pipeline assigned them.
     const supplierUnion = new Map<
       string,
-      { node: ChainNode; notesByFocus: Map<string, string | null> }
+      {
+        node: ChainNode
+        notesByFocus: Map<string, string | null>
+        weightByFocus: Map<string, number | null>
+        sourceByFocus: Map<string, string | null>
+      }
     >()
     const customerUnion = new Map<
       string,
-      { node: ChainNode; notesByFocus: Map<string, string | null> }
+      {
+        node: ChainNode
+        notesByFocus: Map<string, string | null>
+        weightByFocus: Map<string, number | null>
+        sourceByFocus: Map<string, string | null>
+      }
     >()
     // First-column-seen wins — a node that supplies one focus and buys from
     // another is placed as whichever role appears first in the edge list.
@@ -236,7 +328,7 @@ export function ValueChainDiagram({
     // center column rather than dropping into the side columns.
     const focusToFocus: { fromSym: string; toSym: string; note: string | null }[] = []
 
-    for (const e of CHAIN.edges) {
+    for (const e of mergedEdges) {
       const fromIsFocus = focusSet.has(e.from)
       const toIsFocus = focusSet.has(e.to)
       if (!fromIsFocus && !toIsFocus) continue
@@ -259,17 +351,31 @@ export function ValueChainDiagram({
       if (intended === 'supplier') {
         let entry = supplierUnion.get(otherSym)
         if (!entry) {
-          entry = { node: otherNode, notesByFocus: new Map() }
+          entry = {
+            node: otherNode,
+            notesByFocus: new Map(),
+            weightByFocus: new Map(),
+            sourceByFocus: new Map()
+          }
           supplierUnion.set(otherSym, entry)
         }
         entry.notesByFocus.set(focusSym, e.note ?? null)
+        entry.weightByFocus.set(focusSym, e.weight ?? null)
+        entry.sourceByFocus.set(focusSym, e.source ?? null)
       } else {
         let entry = customerUnion.get(otherSym)
         if (!entry) {
-          entry = { node: otherNode, notesByFocus: new Map() }
+          entry = {
+            node: otherNode,
+            notesByFocus: new Map(),
+            weightByFocus: new Map(),
+            sourceByFocus: new Map()
+          }
           customerUnion.set(otherSym, entry)
         }
         entry.notesByFocus.set(focusSym, e.note ?? null)
+        entry.weightByFocus.set(focusSym, e.weight ?? null)
+        entry.sourceByFocus.set(focusSym, e.source ?? null)
       }
     }
 
@@ -337,7 +443,7 @@ export function ValueChainDiagram({
     // focuses share a rival.
     const competitorsByFocus: { focusSymbol: string; competitors: ChainNode[] }[] = focusLaid.map(
       (f) => {
-        const rivals = COMPETITOR_MAP.get(f.symbol) ?? new Set<string>()
+        const rivals = mergedCompetitorMap.get(f.symbol) ?? new Set<string>()
         const list: ChainNode[] = []
         for (const r of rivals) {
           if (focusSet.has(r)) continue
@@ -391,11 +497,22 @@ export function ValueChainDiagram({
       const focusSym = focus.symbol
       // Suppliers that feed THIS focus specifically (may be a subset of the
       // full supplier column).
-      const supOfFocus: { laid: LaidOutNode; note: string | null }[] = []
+      const supOfFocus: {
+        laid: LaidOutNode
+        note: string | null
+        weight: number | null
+        source: string | null
+      }[] = []
       for (const entry of supplierUnion.values()) {
         if (entry.notesByFocus.has(focusSym)) {
           const laid = laidBySymbol.get(entry.node.symbol)
-          if (laid) supOfFocus.push({ laid, note: entry.notesByFocus.get(focusSym) ?? null })
+          if (laid)
+            supOfFocus.push({
+              laid,
+              note: entry.notesByFocus.get(focusSym) ?? null,
+              weight: entry.weightByFocus.get(focusSym) ?? null,
+              source: entry.sourceByFocus.get(focusSym) ?? null
+            })
         }
       }
       supOfFocus.sort((a, b) => a.laid.y - b.laid.y)
@@ -408,15 +525,28 @@ export function ValueChainDiagram({
           toX: focus.x - NODE_W / 2,
           toY: focus.y + supOffsets[i],
           note: item.note,
-          tone: 'supplier'
+          tone: 'supplier',
+          weight: item.weight,
+          source: item.source
         })
       })
 
-      const custOfFocus: { laid: LaidOutNode; note: string | null }[] = []
+      const custOfFocus: {
+        laid: LaidOutNode
+        note: string | null
+        weight: number | null
+        source: string | null
+      }[] = []
       for (const entry of customerUnion.values()) {
         if (entry.notesByFocus.has(focusSym)) {
           const laid = laidBySymbol.get(entry.node.symbol)
-          if (laid) custOfFocus.push({ laid, note: entry.notesByFocus.get(focusSym) ?? null })
+          if (laid)
+            custOfFocus.push({
+              laid,
+              note: entry.notesByFocus.get(focusSym) ?? null,
+              weight: entry.weightByFocus.get(focusSym) ?? null,
+              source: entry.sourceByFocus.get(focusSym) ?? null
+            })
         }
       }
       custOfFocus.sort((a, b) => a.laid.y - b.laid.y)
@@ -429,7 +559,9 @@ export function ValueChainDiagram({
           toX: item.laid.x - NODE_W / 2,
           toY: item.laid.y,
           note: item.note,
-          tone: 'customer'
+          tone: 'customer',
+          weight: item.weight,
+          source: item.source
         })
       })
     }
@@ -448,7 +580,9 @@ export function ValueChainDiagram({
         toX: to.x + NODE_W / 2,
         toY: to.y,
         note: ff.note,
-        tone: 'customer'
+        tone: 'customer',
+        weight: null,
+        source: null
       })
     }
 
@@ -466,7 +600,9 @@ export function ValueChainDiagram({
     stageLabelById,
     stageIdx,
     quoteBySymbol,
-    tickerBySymbol
+    tickerBySymbol,
+    mergedEdges,
+    mergedCompetitorMap
   ])
 
   const svgRef = useRef<SVGSVGElement>(null)
@@ -746,6 +882,29 @@ export function ValueChainDiagram({
     return `M ${e.fromX} ${e.fromY} C ${c1x} ${e.fromY}, ${c2x} ${e.toY}, ${e.toX} ${e.toY}`
   }
 
+  // D1 — scale stroke weight by edge confidence. Static JSON edges render at
+  // the full (baseline) thickness because they're hand-curated. Overlay edges
+  // ride a 0..1 weight from the classifier: 0.6 → 1.52px, 1.0 → 2.0px, so
+  // high-confidence auto-edges visually match the hand-curated ones while
+  // lower-confidence overlays read as fainter at a glance.
+  //
+  // Consensus edges (both news + 10-K agree) get a thickness + opacity bump
+  // so they stand out from single-source overlays without screaming.
+  const edgeStrokeWidth = (e: LaidOutEdge, isHovered: boolean): number => {
+    if (isHovered) return 2.8
+    if (e.weight === null) return 1.6
+    const base = 0.8 + e.weight * 1.2
+    const consensus = (e.source ?? '').includes(',')
+    return base + (consensus ? 0.4 : 0)
+  }
+  const edgeStrokeOpacity = (e: LaidOutEdge, isHovered: boolean): number => {
+    if (isHovered) return 1
+    if (e.weight === null) return 0.7
+    const base = 0.4 + e.weight * 0.45
+    const consensus = (e.source ?? '').includes(',')
+    return Math.min(1, base + (consensus ? 0.1 : 0))
+  }
+
   return (
     <div className="no-drag fixed inset-0 z-50 bg-surface-0 flex flex-col">
       {/* pl-24 keeps the title clear of the macOS traffic-light cluster in
@@ -923,9 +1082,9 @@ export function ValueChainDiagram({
                 <path
                   d={edgePath(e)}
                   stroke={tone.stroke}
-                  strokeWidth={isHovered ? 2.6 : 1.6}
+                  strokeWidth={edgeStrokeWidth(e, isHovered)}
                   strokeDasharray={tone.dashed ? '7 5' : undefined}
-                  strokeOpacity={isHovered ? 1 : 0.7}
+                  strokeOpacity={edgeStrokeOpacity(e, isHovered)}
                   fill="none"
                   markerEnd={e.tone === 'competitor' ? undefined : `url(#arrow-${e.tone})`}
                   pointerEvents="none"

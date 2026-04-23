@@ -872,6 +872,163 @@ export async function classifyGraphEdge(input: {
   }
 }
 
+// Extract customer-concentration disclosures from a 10-K's Item 1 (Business)
+// or Item 7 (MD&A) prose. Public filers routinely disclose "Customer X
+// accounted for 22% of revenue" when a single buyer passes 10% — this is
+// the authoritative source for supplier→customer edges. Unlike news co-
+// occurrence where the judge is inferring, here we're extracting stated
+// facts from the filer's own legal disclosure.
+export interface CustomerConcentrationEntry {
+  // Named customer as the 10-K refers to them ("Apple Inc.", "Amazon.com",
+  // sometimes unbranded like "Customer A" — we drop the unnamed ones later).
+  name: string
+  // Revenue share if explicitly stated (0.22 = 22%). Null when the filing
+  // says "largest customer" or "significant portion" without a number.
+  revenueSharePct: number | null
+  // Verbatim clause supporting the claim (<200 chars). Lets the audit log
+  // show why we think this edge exists, grounded in the filer's language.
+  quote: string
+}
+
+export interface CustomerConcentrationResult {
+  customers: CustomerConcentrationEntry[]
+  // Model's self-assessment: "no concentration disclosed" is a valid answer
+  // when the filer operates in a diversified customer base. We use this to
+  // distinguish "nothing to extract" from "extraction failed".
+  disclosureType: 'named_concentration' | 'anonymous_concentration' | 'diversified' | 'unclear'
+}
+
+export async function extractCustomerConcentration(input: {
+  symbol: string
+  companyName: string
+  bodyText: string
+}): Promise<CustomerConcentrationResult | null> {
+  if (!input.bodyText.trim()) return null
+  if (!(await checkOllamaHealth())) return null
+
+  const system =
+    `You extract customer-concentration disclosures from SEC 10-K filings. ` +
+    `Your output feeds a supply-chain graph, so precision matters: only ` +
+    `return customers the filing explicitly names. Do not infer from press ` +
+    `releases, product descriptions, or partner lists.\n\n` +
+    `Return strict JSON:\n` +
+    `{\n` +
+    `  "disclosureType": "named_concentration" | "anonymous_concentration" | "diversified" | "unclear",\n` +
+    `  "customers": [\n` +
+    `    {\n` +
+    `      "name": "...customer's name as stated in the filing...",\n` +
+    `      "revenueSharePct": 0.0-1.0 or null,\n` +
+    `      "quote": "...verbatim clause supporting this...max 200 chars..."\n` +
+    `    }\n` +
+    `  ]\n` +
+    `}\n\n` +
+    `disclosureType guide:\n` +
+    `- named_concentration: filing names one or more customers with or without percentages.\n` +
+    `- anonymous_concentration: filing says "one customer accounted for X%" without naming them. Return empty customers array.\n` +
+    `- diversified: filing states no single customer is material (often "no customer accounts for more than 10%"). Return empty customers array.\n` +
+    `- unclear: not enough info to determine. Return empty customers array.\n\n` +
+    `Rules (strict):\n` +
+    `- Only include customers the filing NAMES. "Customer A", "a major customer", ` +
+    `"our largest customer" without a name → do not include.\n` +
+    `- revenueSharePct must be a decimal (0.22 for 22%). Null if the filing ` +
+    `says "significant" / "major" without a percentage.\n` +
+    `- The customer must be the subject of a concentration disclosure, not ` +
+    `a partner listed in a marketing paragraph. Clues: "accounted for", ` +
+    `"represented X% of revenue", "largest customer", "net revenues from".\n` +
+    `- Do not invent customers. If the text doesn't actually contain a ` +
+    `concentration disclosure, return disclosureType "diversified" or ` +
+    `"unclear" with an empty customers array.\n` +
+    `- Max 6 customers. Keep quote under 200 chars.`
+
+  const user =
+    `Filer: ${input.companyName} (${input.symbol})\n\n` +
+    `10-K excerpt (Item 1 / Item 1A / Item 7):\n${input.bodyText.slice(0, 12000)}`
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    let res: Response
+    try {
+      res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user }
+          ],
+          stream: false,
+          format: 'json',
+          options: { num_predict: 800, temperature: 0.1 }
+        }),
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!res.ok) {
+      emitHealth(false)
+      return null
+    }
+    const body = (await res.json()) as { message?: { content?: string } }
+    const content = body.message?.content
+    if (!content) return null
+    const parsed = JSON.parse(content) as {
+      disclosureType?: unknown
+      customers?: unknown
+    }
+    emitHealth(true)
+    const validDisclosure = [
+      'named_concentration',
+      'anonymous_concentration',
+      'diversified',
+      'unclear'
+    ]
+    const disclosureType = (
+      typeof parsed.disclosureType === 'string' &&
+      validDisclosure.includes(parsed.disclosureType)
+        ? parsed.disclosureType
+        : 'unclear'
+    ) as CustomerConcentrationResult['disclosureType']
+
+    const customers = Array.isArray(parsed.customers)
+      ? parsed.customers
+          .map((x: unknown) => x as { name?: unknown; revenueSharePct?: unknown; quote?: unknown })
+          .filter((x) => typeof x.name === 'string' && (x.name as string).trim().length > 1)
+          .map((x) => {
+            const rawPct = x.revenueSharePct
+            let pct: number | null = null
+            if (typeof rawPct === 'number' && Number.isFinite(rawPct)) {
+              // Guard against the model returning 22 instead of 0.22; any
+              // value > 1 gets divided by 100.
+              pct = rawPct > 1 ? rawPct / 100 : rawPct
+              if (pct < 0 || pct > 1) pct = null
+            }
+            return {
+              name: (x.name as string).trim(),
+              revenueSharePct: pct,
+              quote:
+                typeof x.quote === 'string' ? (x.quote as string).trim().slice(0, 240) : ''
+            }
+          })
+          // Drop anonymous placeholders that slipped past the prompt rules.
+          .filter((c) => !/^customer\s+[a-z0-9]$/i.test(c.name))
+          .filter((c) => !/^(a |the )?(major|largest|significant)\s+customer$/i.test(c.name))
+          .slice(0, 6)
+      : []
+
+    return { disclosureType, customers }
+  } catch (err) {
+    console.warn(
+      '[ollama] extractCustomerConcentration failed:',
+      err instanceof Error ? err.message : err
+    )
+    emitHealth(false)
+    return null
+  }
+}
+
 // Heuristic: a "concrete figure" contains at least one digit and isn't
 // phrased as prose. Rejects "Not provided", "Highlighted as growth driver",
 // "N/A" — values that aren't useful in a numbers-grid but the model sometimes

@@ -24,6 +24,7 @@ import {
 import { listTickers } from '../database/tickers'
 import { processRecentEarnings } from './earningsReleasesService'
 import { fetchFilings, fetchTickerMap } from './secService'
+import { processRecentTenKs } from './tenKConcentrationService'
 
 // CIK map refreshes monthly — new listings are rare enough that a stale
 // mapping hurts only recent IPOs, which tend to show up on earnings
@@ -71,11 +72,13 @@ export async function refreshFilings(symbol: string): Promise<number | null> {
     const count = upsertFilings(sym, rows)
     broadcastUpdated(sym)
     // Kick the earnings-release summary pipeline for any newly-landed 8-K
-    // 2.02s. processRecentEarnings is a no-op if the release was already
-    // summarized — only new filings trigger a fresh Ollama call.
+    // 2.02s, and the 10-K customer-concentration extractor for any newly-
+    // landed 10-K. Both are no-ops if the filing was already processed —
+    // only truly new filings trigger fresh Ollama calls.
     const ticker = listTickers().find((t) => t.symbol.toUpperCase() === sym)
     if (ticker?.isActive) {
       void processRecentEarnings(sym, ticker.companyName ?? sym)
+      void processRecentTenKs(sym, ticker.companyName ?? sym)
     }
     return count
   } catch (err) {

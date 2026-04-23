@@ -20,6 +20,40 @@ import type {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+// Pretty labels + tones for each candidate source. The comma-joined form
+// ("news_cooccurrence,sec_10k_concentration") is the consensus case —
+// handled separately in sourceChip so both contributors get shown.
+const SOURCE_META: Record<string, { label: string; tone: string }> = {
+  news_cooccurrence: {
+    label: 'News',
+    tone: 'bg-sky-500/15 text-sky-200 ring-sky-500/40'
+  },
+  sec_10k_concentration: {
+    label: '10-K',
+    tone: 'bg-emerald-500/15 text-emerald-200 ring-emerald-500/40'
+  }
+}
+
+function sourceChip(source: string): Array<{ label: string; tone: string }> {
+  const parts = source
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const chips: Array<{ label: string; tone: string }> = parts.map((p) => {
+    const meta = SOURCE_META[p]
+    return meta
+      ? { label: meta.label, tone: meta.tone }
+      : { label: p, tone: 'bg-zinc-700/50 text-zinc-300 ring-zinc-600/50' }
+  })
+  if (parts.length > 1) {
+    chips.unshift({
+      label: 'Consensus',
+      tone: 'bg-amber-500/15 text-amber-200 ring-amber-500/40'
+    })
+  }
+  return chips
+}
+
 function relationshipTone(rel: string): string {
   switch (rel) {
     case 'supplier':
@@ -53,6 +87,13 @@ export function GraphUpdatesTab(): JSX.Element {
   })
   const [sweeping, setSweeping] = useState(false)
   const [lastSummary, setLastSummary] = useState<GraphSweepSummary | null>(null)
+  const [tenKScanning, setTenKScanning] = useState(false)
+  const [lastTenKSummary, setLastTenKSummary] = useState<{
+    processed: number
+    accepted: number
+    rejected: number
+    skipped: number
+  } | null>(null)
 
   const reload = useCallback(async (): Promise<void> => {
     const [overrideRows, auditRows, weekCounts] = await Promise.all([
@@ -83,6 +124,17 @@ export function GraphUpdatesTab(): JSX.Element {
       await reload()
     } finally {
       setSweeping(false)
+    }
+  }
+
+  const onRunTenKScan = async (): Promise<void> => {
+    setTenKScanning(true)
+    try {
+      const summary = await window.api.graph.runTenKScan()
+      setLastTenKSummary(summary)
+      await reload()
+    } finally {
+      setTenKScanning(false)
     }
   }
 
@@ -140,22 +192,44 @@ export function GraphUpdatesTab(): JSX.Element {
               <span className="text-zinc-500">active overlays</span>
             </span>
           </div>
-          <button
-            onClick={onRunSweep}
-            disabled={sweeping}
-            className={`text-[10.5px] font-semibold uppercase tracking-[0.18em] px-3 py-1.5 rounded-full ring-1 ring-inset transition-colors ${
-              sweeping
-                ? 'bg-zinc-800 text-zinc-500 ring-zinc-700 cursor-wait'
-                : 'bg-emerald-500/15 text-emerald-200 ring-emerald-500/40 hover:bg-emerald-500/25'
-            }`}
-          >
-            {sweeping ? 'Sweeping…' : 'Run sweep now'}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={onRunSweep}
+              disabled={sweeping}
+              title="Analyze ticker pairs that co-occur in recent articles and auto-commit high-confidence edges."
+              className={`text-[10.5px] font-semibold uppercase tracking-[0.18em] px-3 py-1.5 rounded-full ring-1 ring-inset transition-colors ${
+                sweeping
+                  ? 'bg-zinc-800 text-zinc-500 ring-zinc-700 cursor-wait'
+                  : 'bg-sky-500/15 text-sky-200 ring-sky-500/40 hover:bg-sky-500/25'
+              }`}
+            >
+              {sweeping ? 'Sweeping…' : 'News sweep'}
+            </button>
+            <button
+              onClick={onRunTenKScan}
+              disabled={tenKScanning}
+              title="Extract customer disclosures from every watchlist ticker's latest 10-K."
+              className={`text-[10.5px] font-semibold uppercase tracking-[0.18em] px-3 py-1.5 rounded-full ring-1 ring-inset transition-colors ${
+                tenKScanning
+                  ? 'bg-zinc-800 text-zinc-500 ring-zinc-700 cursor-wait'
+                  : 'bg-emerald-500/15 text-emerald-200 ring-emerald-500/40 hover:bg-emerald-500/25'
+              }`}
+            >
+              {tenKScanning ? 'Scanning…' : '10-K scan'}
+            </button>
+          </div>
         </div>
         {lastSummary && (
           <div className="mt-2 text-[11px] text-zinc-500">
-            Last sweep — {lastSummary.proposed} proposed · {lastSummary.accepted}{' '}
+            Last news sweep — {lastSummary.proposed} proposed · {lastSummary.accepted}{' '}
             accepted · {lastSummary.rejected} rejected · {lastSummary.skipped} skipped
+          </div>
+        )}
+        {lastTenKSummary && (
+          <div className="mt-1 text-[11px] text-zinc-500">
+            Last 10-K scan — {lastTenKSummary.processed} processed ·{' '}
+            {lastTenKSummary.accepted} accepted · {lastTenKSummary.rejected} rejected ·{' '}
+            {lastTenKSummary.skipped} skipped
           </div>
         )}
       </section>
@@ -192,9 +266,19 @@ export function GraphUpdatesTab(): JSX.Element {
                       {o.note}
                     </div>
                   )}
-                  <div className="text-[10px] text-zinc-600 mt-0.5 tabular-nums">
-                    {formatDate(o.acceptedAt)} · source: {o.source}
-                    {o.weight !== null && ` · confidence ${o.weight.toFixed(2)}`}
+                  <div className="flex items-center gap-1 flex-wrap mt-1">
+                    {sourceChip(o.source).map((chip, i) => (
+                      <span
+                        key={`${o.fromSymbol}-${o.toSymbol}-src-${i}`}
+                        className={`text-[9px] font-semibold uppercase tracking-[0.14em] px-1.5 py-0.5 rounded ring-1 ring-inset ${chip.tone}`}
+                      >
+                        {chip.label}
+                      </span>
+                    ))}
+                    <span className="text-[10px] text-zinc-600 tabular-nums ml-1">
+                      {formatDate(o.acceptedAt)}
+                      {o.weight !== null && ` · confidence ${o.weight.toFixed(2)}`}
+                    </span>
                   </div>
                 </div>
                 <button
@@ -258,9 +342,19 @@ function CandidateRow({ candidate }: { candidate: GraphCandidate }): JSX.Element
               <span className="text-zinc-500"> · {payload.relationship}</span>
             )}
           </div>
-          <div className="text-[10px] text-zinc-500 mt-0.5 tabular-nums">
-            {formatDate(candidate.createdAt)} · confidence{' '}
-            {candidate.confidence.toFixed(2)} · {candidate.source}
+          <div className="flex items-center gap-1 flex-wrap mt-1">
+            {sourceChip(candidate.source).map((chip, i) => (
+              <span
+                key={`${candidate.id}-src-${i}`}
+                className={`text-[9px] font-semibold uppercase tracking-[0.14em] px-1.5 py-0.5 rounded ring-1 ring-inset ${chip.tone}`}
+              >
+                {chip.label}
+              </span>
+            ))}
+            <span className="text-[10px] text-zinc-500 tabular-nums ml-1">
+              {formatDate(candidate.createdAt)} · confidence{' '}
+              {candidate.confidence.toFixed(2)}
+            </span>
           </div>
         </div>
         <span className="shrink-0 text-[10px] text-zinc-500">{open ? '▾' : '▸'}</span>
