@@ -165,19 +165,21 @@ function ColdState({
   sourceContext: string | null
   onGenerate: () => void
 }): JSX.Element {
+  // Both 'offline' and 'error' land here when the previous run didn't
+  // produce a usable graph. We don't know from the client side whether
+  // Ollama was actually unreachable or whether the model returned
+  // malformed output — logs in the dev console tell the full story.
   const label =
-    status === 'offline'
-      ? 'Ollama was offline last time. Retry?'
-      : status === 'error'
-        ? 'Generation failed previously. Try again?'
-        : 'Generate an AI-authored value chain for this ticker.'
+    status === 'offline' || status === 'error'
+      ? 'Previous attempt didn’t return a usable chain. Retry — it’ll regenerate with fresh context.'
+      : 'Generate an AI-authored value chain for this ticker.'
   const hint =
     status === 'pending'
       ? 'Generation in progress — hang tight.'
-      : 'The pipeline reads the company profile, latest 10-K Item 1, and recent news, then asks the local Ollama to structure an industry-appropriate subgraph.'
+      : 'Pulls the company profile, latest 10-K Item 1, and recent news, then asks the local Ollama to structure an industry-appropriate subgraph. First run takes 30–90 s (cold model load); subsequent generations are faster.'
   return (
     <div className="space-y-3">
-      <div className="text-[12.5px] text-zinc-300">{label}</div>
+      <div className="text-[12.5px] text-zinc-300 leading-snug">{label}</div>
       <div className="text-[11px] text-zinc-500 leading-snug max-w-2xl">{hint}</div>
       <button
         onClick={onGenerate}
@@ -191,7 +193,7 @@ function ColdState({
         {working ? 'Generating…' : 'Generate value chain'}
       </button>
       {sourceContext && (
-        <div className="text-[10px] text-zinc-600">Context: {sourceContext}</div>
+        <div className="text-[10px] text-zinc-600">Last context: {sourceContext}</div>
       )}
     </div>
   )

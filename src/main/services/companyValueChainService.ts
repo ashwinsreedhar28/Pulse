@@ -17,12 +17,13 @@ import {
 } from '../database/companyValueChains'
 import { getFilingsForSymbol, type SecFiling } from '../database/secFilings'
 import { resolveCompanyName } from './companyNameResolver'
-import { getCompanyProfile } from './companyProfileService'
+import { ensureCompanyProfile, getCompanyProfile } from './companyProfileService'
 import {
   generateCompanyValueChain as ollamaGenerate,
   type GeneratedValueChain
 } from './ollamaService'
 import { buildPrimaryDocUrl } from './secService'
+import { forceRefreshFilings } from './secFilingsService'
 
 const UA = 'Pulse Desktop (ashwin.sreedhar2003@gmail.com)'
 const FETCH_TIMEOUT_MS = 30_000
@@ -195,7 +196,31 @@ export async function generateCompanyChain(input: {
   })
   broadcastUpdated(sym)
 
-  // Gather grounding material in parallel.
+  // Fresh-searched tickers may not have any cached grounding yet: no profile
+  // generated (ensureCompanyProfile is fire-and-forget on passive creation),
+  // no SEC filings pulled (SEC scheduler hasn't fired for this symbol). We
+  // proactively bootstrap both in parallel so the prompt has real material
+  // to ground on instead of relying on mistral's priors alone.
+  console.log(`[companyChain] preparing grounding context for ${sym}`)
+  await Promise.all([
+    ensureCompanyProfile(sym, input.companyName).catch((err) => {
+      console.warn(
+        `[companyChain] ensureCompanyProfile failed for ${sym}:`,
+        err instanceof Error ? err.message : err
+      )
+      return null
+    }),
+    // Don't await filings hard — if SEC is rate-limited the profile is
+    // usually enough. Race a 12-second ceiling so the generate click
+    // doesn't stall on a slow EDGAR fetch.
+    Promise.race([
+      forceRefreshFilings(sym).catch(() => null),
+      new Promise((resolve) => setTimeout(resolve, 12_000))
+    ])
+  ])
+
+  // Now gather what landed during the warm-up (plus whatever was already in
+  // cache from prior sessions).
   const profile = getCompanyProfile(sym)
   const [tenKExcerpt, news] = await Promise.all([
     fetchTenKExcerpt(sym),

@@ -1193,8 +1193,14 @@ export async function generateCompanyValueChain(input: {
   tenKExcerpt?: string | null
   newsSnippets?: Array<{ title: string; summary: string | null }>
 }): Promise<GeneratedValueChain | null> {
-  if (!input.companyName.trim()) return null
-  if (!(await checkOllamaHealth())) return null
+  if (!input.companyName.trim()) {
+    console.warn('[ollama] generateCompanyValueChain: empty companyName')
+    return null
+  }
+  if (!(await checkOllamaHealth())) {
+    console.warn('[ollama] generateCompanyValueChain: health check failed')
+    return null
+  }
 
   const contextParts: string[] = []
   if (input.profileDescription) {
@@ -1269,9 +1275,18 @@ export async function generateCompanyValueChain(input: {
       ? `Grounding context:\n${groundingContext}`
       : 'No additional context available — rely on your general knowledge of this company.')
 
+  console.log(
+    `[ollama] generateCompanyValueChain: ${input.symbol} "${input.companyName}" ` +
+      `(context: ${groundingContext.length} chars, profile=${!!input.profileDescription}, ` +
+      `10K=${!!input.tenKExcerpt}, news=${input.newsSnippets?.length ?? 0})`
+  )
+
   try {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS * 2)
+    // 3-minute ceiling — mistral:7b on a cold GPU can take that long for
+    // a 2000-token structured output, especially on the first invocation
+    // of the session where model weights haven't been paged in.
+    const timer = setTimeout(() => controller.abort(), 180_000)
     let res: Response
     try {
       res = await fetch(`${OLLAMA_BASE}/api/chat`, {
@@ -1295,17 +1310,41 @@ export async function generateCompanyValueChain(input: {
       clearTimeout(timer)
     }
     if (!res.ok) {
+      console.warn(
+        `[ollama] generateCompanyValueChain: HTTP ${res.status} for ${input.symbol}`
+      )
       emitHealth(false)
       return null
     }
     const body = (await res.json()) as { message?: { content?: string } }
     const content = body.message?.content
-    if (!content) return null
-    const parsed = JSON.parse(content) as {
+    if (!content) {
+      console.warn(
+        `[ollama] generateCompanyValueChain: empty content in response for ${input.symbol}`
+      )
+      return null
+    }
+    let parsed: {
       focus?: unknown
       stages?: unknown
       nodes?: unknown
       edges?: unknown
+    }
+    try {
+      parsed = JSON.parse(content) as {
+        focus?: unknown
+        stages?: unknown
+        nodes?: unknown
+        edges?: unknown
+      }
+    } catch (parseErr) {
+      console.warn(
+        `[ollama] generateCompanyValueChain: JSON parse failed for ${input.symbol}:`,
+        parseErr instanceof Error ? parseErr.message : parseErr,
+        '\n  content preview:',
+        content.slice(0, 400)
+      )
+      return null
     }
     emitHealth(true)
 
@@ -1407,9 +1446,23 @@ export async function generateCompanyValueChain(input: {
         blurb: null,
         isTicker: true
       })
+      validNodeSymbols.add(focus)
     }
 
-    if (nodes.length === 0 || stages.length === 0) return null
+    if (stages.length === 0 || nodes.length === 0) {
+      console.warn(
+        `[ollama] generateCompanyValueChain: empty after validation for ${input.symbol} ` +
+          `(raw stages=${Array.isArray(parsed.stages) ? (parsed.stages as unknown[]).length : 'not-array'}, ` +
+          `raw nodes=${Array.isArray(parsed.nodes) ? (parsed.nodes as unknown[]).length : 'not-array'}, ` +
+          `raw edges=${Array.isArray(parsed.edges) ? (parsed.edges as unknown[]).length : 'not-array'}). ` +
+          `Content preview: ${content.slice(0, 300)}`
+      )
+      return null
+    }
+    console.log(
+      `[ollama] generateCompanyValueChain: ${input.symbol} → ${stages.length} stages, ` +
+        `${nodes.length} nodes, ${edges.length} edges`
+    )
     return { focus, stages, nodes, edges }
   } catch (err) {
     console.warn(
