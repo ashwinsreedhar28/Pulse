@@ -60,6 +60,10 @@ import {
   listEdgeOverrides
 } from '../database/graphOverrides'
 import {
+  deleteNodeOverride,
+  listNodeOverrides
+} from '../database/graphNodeOverrides'
+import {
   ensureCompanyProfile,
   getCompanyProfile,
   regenerateCompanyProfile
@@ -474,6 +478,17 @@ export function registerDbIpc(): void {
       listCandidates(opts)
   )
   ipcMain.handle('graph:listOverrides', () => listEdgeOverrides())
+  ipcMain.handle('graph:listNodeOverrides', () => listNodeOverrides())
+  ipcMain.handle(
+    'graph:undoNodeOverride',
+    (_e, symbol: string, candidateId?: number | null) => {
+      deleteNodeOverride(symbol)
+      if (candidateId) {
+        markCandidateRejected(candidateId, 'User removed node override via audit panel')
+      }
+      return { ok: true }
+    }
+  )
   ipcMain.handle(
     'graph:countSince',
     (_e, sinceMs: number) => countCandidatesSince(sinceMs)

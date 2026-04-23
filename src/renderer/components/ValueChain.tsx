@@ -4,6 +4,7 @@ import type {
   EarningsBadge,
   FinancialsSnapshot,
   GraphEdgeOverride,
+  GraphNodeOverride,
   OptionsSnapshot,
   SecFiling,
   StockQuote,
@@ -255,18 +256,24 @@ export function ValueChain({
     })
   }, [])
 
-  // Auto-committed graph-edge overlays from the candidates pipeline. Merged
-  // into CHAIN.edges / COMPETITOR_MAP at the relationship-building useMemos
-  // below so accepted edges participate in the same role inference as the
-  // static JSON edges. Refreshes on every graph:updated broadcast (fires
-  // when a sweep commits new edges or the user undoes one in Settings).
+  // Auto-committed graph-edge + node overlays from the candidates pipeline.
+  // Merged into CHAIN.edges / CHAIN.nodes / COMPETITOR_MAP at the
+  // relationship-building useMemos below so accepted edges + nodes
+  // participate in the same role inference as the static JSON entries.
+  // Refreshes on every graph:updated broadcast (fires when a sweep commits
+  // new edges/nodes or the user undoes one in Settings).
   const [edgeOverrides, setEdgeOverrides] = useState<GraphEdgeOverride[]>([])
+  const [nodeOverrides, setNodeOverrides] = useState<GraphNodeOverride[]>([])
   useEffect(() => {
     let cancelled = false
-    window.api.graph
-      .listOverrides()
-      .then((rows) => {
-        if (!cancelled) setEdgeOverrides(rows)
+    Promise.all([
+      window.api.graph.listOverrides(),
+      window.api.graph.listNodeOverrides()
+    ])
+      .then(([edges, nodes]) => {
+        if (cancelled) return
+        setEdgeOverrides(edges)
+        setNodeOverrides(nodes)
       })
       .catch((err: unknown) => {
         console.warn('[valueChain] overrides fetch failed', err)
@@ -277,9 +284,14 @@ export function ValueChain({
   }, [])
   useEffect(() => {
     return window.api.graph.onUpdated(() => {
-      window.api.graph
-        .listOverrides()
-        .then(setEdgeOverrides)
+      Promise.all([
+        window.api.graph.listOverrides(),
+        window.api.graph.listNodeOverrides()
+      ])
+        .then(([edges, nodes]) => {
+          setEdgeOverrides(edges)
+          setNodeOverrides(nodes)
+        })
         .catch(() => {
           /* keep prior overrides */
         })
@@ -363,16 +375,37 @@ export function ValueChain({
     return m
   }, [tickers])
 
+  // Static graph nodes + auto-discovered overlay nodes. Overlay symbols
+  // present in the static graph are ignored (static wins for baseline data);
+  // new symbols are promoted to ValueChainNode shape using the classifier's
+  // stage/sector/blurb. The renderer sees a single unified node list.
+  const mergedNodes = useMemo<ValueChainNode[]>(() => {
+    const staticSymbols = new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))
+    const out: ValueChainNode[] = [...CHAIN.nodes]
+    for (const o of nodeOverrides) {
+      const sym = o.symbol.toUpperCase()
+      if (staticSymbols.has(sym)) continue
+      out.push({
+        symbol: sym,
+        stage: o.stage,
+        sector: o.sector ?? 'other',
+        name: o.name ?? undefined,
+        blurb: o.blurb ?? undefined
+      })
+    }
+    return out
+  }, [nodeOverrides])
+
   // Filter the node set by the active sector tab. "all" passes everything;
   // any specific sector drops nodes outside it so the chain view stays focused.
   // Edges are filtered by membership in the visible node set.
   const visibleSymbols = useMemo(() => {
     const s = new Set<string>()
-    for (const node of CHAIN.nodes) {
+    for (const node of mergedNodes) {
       if (sectorId === 'all' || node.sector === sectorId) s.add(node.symbol)
     }
     return s
-  }, [sectorId])
+  }, [sectorId, mergedNodes])
 
   // Show every visible graph node, not just watchlist holdings — the point of
   // the chain is the ecosystem context, which is mostly suppliers/customers
@@ -382,14 +415,14 @@ export function ValueChain({
   const stageGroups = useMemo(() => {
     const bucket = new Map<string, ValueChainNode[]>()
     for (const stage of CHAIN.stages) bucket.set(stage.id, [])
-    for (const node of CHAIN.nodes) {
+    for (const node of mergedNodes) {
       if (!visibleSymbols.has(node.symbol)) continue
       bucket.get(node.stage)?.push(node)
     }
     return CHAIN.stages
       .map((s) => ({ stage: s, nodes: bucket.get(s.id) ?? [] }))
       .filter((g) => g.nodes.length > 0)
-  }, [visibleSymbols])
+  }, [visibleSymbols, mergedNodes])
 
   // Static graph edges + directional overlay edges (supplier/partner). The
   // overrides pipeline auto-classifies high-confidence ticker pairs into

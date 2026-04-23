@@ -23,6 +23,7 @@
 import { BrowserWindow } from 'electron'
 import { JSDOM, VirtualConsole } from 'jsdom'
 
+import graph from '../../data/supplyChainGraph.json'
 import { getDb } from '../database/connection'
 import {
   insertCandidate,
@@ -30,10 +31,15 @@ import {
   type EvidenceRef
 } from '../database/graphCandidates'
 import { upsertEdgeOverrideWithConsensus } from '../database/graphOverrides'
+import {
+  hasNodeOverride,
+  upsertNodeOverride
+} from '../database/graphNodeOverrides'
 import { getFilingsForSymbol, type SecFiling } from '../database/secFilings'
 import { listTickers } from '../database/tickers'
 import { resolveCompanyNames } from './companyNameResolver'
 import {
+  classifyNewNode,
   extractCustomerConcentration,
   type CustomerConcentrationEntry
 } from './ollamaService'
@@ -42,6 +48,109 @@ import { buildPrimaryDocUrl } from './secService'
 const UA = 'Pulse Desktop (ashwin.sreedhar2003@gmail.com)'
 const FETCH_TIMEOUT_MS = 30_000
 const SOURCE = 'sec_10k_concentration'
+
+// Static graph's node + stage sets — cached on module load since the JSON
+// is imported at compile time. Node-discovery checks against these to
+// decide "is this symbol new?".
+interface StaticNode {
+  symbol: string
+  stage: string
+  sector: string
+  name?: string
+}
+interface StaticStage {
+  id: string
+  label: string
+}
+interface StaticGraphShape {
+  nodes: StaticNode[]
+  stages: StaticStage[]
+}
+const STATIC_GRAPH = graph as StaticGraphShape
+const STATIC_NODE_SYMBOLS = new Set(
+  STATIC_GRAPH.nodes.map((n) => n.symbol.toUpperCase())
+)
+
+// Min confidence from classifyNewNode to auto-commit a node override. Below
+// this we log the discovery as a rejected candidate (audit log stays honest)
+// and skip the node + the edge that referenced it.
+const MIN_NODE_CLASSIFIER_CONFIDENCE = 0.55
+
+// Ensure a discovered customer symbol has a node override so the renderer
+// can place it. Returns true when the symbol is already placeable (either
+// in the static graph or already overridden), false when the classifier
+// rejected it — in which case the caller should NOT commit the edge either.
+async function ensureNodePlacement(input: {
+  symbol: string
+  companyName: string
+  supportingQuote: string
+  evidence: EvidenceRef[]
+}): Promise<boolean> {
+  const sym = input.symbol.toUpperCase()
+  if (STATIC_NODE_SYMBOLS.has(sym)) return true
+  if (hasNodeOverride(sym)) return true
+
+  const classification = await classifyNewNode({
+    symbol: sym,
+    companyName: input.companyName,
+    context: input.supportingQuote,
+    stages: STATIC_GRAPH.stages
+  })
+
+  if (
+    !classification ||
+    classification.stage === 'unclear' ||
+    classification.confidence < MIN_NODE_CLASSIFIER_CONFIDENCE
+  ) {
+    // Log the discovery as a rejected node candidate so the audit UI surfaces
+    // what we tried to add. No override written → the dependent edge won't
+    // commit either, keeping the graph tidy.
+    insertCandidate({
+      kind: 'node',
+      symbol: sym,
+      payload: {
+        stage: classification?.stage ?? 'unclear',
+        sector: classification?.sector ?? 'other',
+        name: input.companyName,
+        blurb: classification?.blurb ?? ''
+      },
+      evidence: input.evidence,
+      confidence: classification?.confidence ?? 0,
+      source: SOURCE,
+      status: 'rejected',
+      reviewNote: classification
+        ? `Node classifier below threshold (${classification.confidence.toFixed(2)}, stage "${classification.stage}")`
+        : 'Node classifier unavailable'
+    })
+    return false
+  }
+
+  upsertNodeOverride({
+    symbol: sym,
+    stage: classification.stage,
+    sector: classification.sector,
+    name: input.companyName,
+    blurb: classification.blurb,
+    source: SOURCE,
+    acceptedAt: Date.now()
+  })
+  insertCandidate({
+    kind: 'node',
+    symbol: sym,
+    payload: {
+      stage: classification.stage,
+      sector: classification.sector,
+      name: input.companyName,
+      blurb: classification.blurb
+    },
+    evidence: input.evidence,
+    confidence: classification.confidence,
+    source: SOURCE,
+    status: 'accepted',
+    reviewNote: `Node classifier accepted (${classification.confidence.toFixed(2)})`
+  })
+  return true
+}
 
 // Sweep cadence — 10-Ks are filed annually per symbol, so checking once a
 // week for new ones is plenty. Each symbol is also gated by the dedupe
@@ -349,6 +458,34 @@ export async function processTenK(input: {
         source: SOURCE,
         status: 'rejected',
         reviewNote: `Below threshold (resolver ${resolved.score.toFixed(2)}, share ${customer.revenueSharePct ?? 'unknown'})`
+      })
+      rejected++
+      continue
+    }
+
+    // Auto-discover the customer as a node when it's not yet in the graph.
+    // If the node classifier can't place it with enough confidence, drop
+    // the edge too — a dangling edge adds noise without helping anyone.
+    const placeable = await ensureNodePlacement({
+      symbol: toSymbol,
+      companyName: resolved.matchedName,
+      supportingQuote: customer.quote,
+      evidence: baseEvidence
+    })
+    if (!placeable) {
+      insertCandidate({
+        kind: 'edge',
+        fromSymbol,
+        toSymbol,
+        payload: {
+          relationship: 'supplier',
+          note: customerEdgeNote(customer)
+        } satisfies EdgePayload,
+        evidence: baseEvidence,
+        confidence,
+        source: SOURCE,
+        status: 'rejected',
+        reviewNote: 'Skipped — customer ticker could not be placed as a graph node'
       })
       rejected++
       continue

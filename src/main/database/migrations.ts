@@ -912,5 +912,39 @@ export const migrations: Migration[] = [
           ON graph_edge_overrides(fromSymbol);
       `)
     }
+  },
+  {
+    version: 33,
+    name: 'create graph_node_overrides for auto-discovered tickers',
+    // Companion to graph_edge_overrides. When a 10-K names a customer whose
+    // ticker isn't yet in supplyChainGraph.json (or when some other pipeline
+    // proposes a new node), the symbol lands here so the ValueChain renderer
+    // can surface it as a first-class tile alongside the hand-curated graph.
+    //
+    // Fields:
+    //   symbol: PK, uppercase ticker.
+    //   stage: maps to a ValueChainStage.id from supplyChainGraph.json.
+    //   sector: group tag (e.g. "semi", "cloud", "energy"). Also drives
+    //           sector-filter visibility in the UI.
+    //   name/blurb: display copy. Ollama picks these from the company's
+    //               SEC-filed legal name + a 1-sentence summary.
+    //   source: "sec_10k_concentration" for now; future sources (news
+    //           co-occurrence with a bigger ticker map, 13F holders) will
+    //           use their own identifiers.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS graph_node_overrides (
+          symbol TEXT PRIMARY KEY,
+          stage TEXT NOT NULL,
+          sector TEXT,
+          name TEXT,
+          blurb TEXT,
+          source TEXT NOT NULL,
+          acceptedAt INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_graph_node_overrides_stage
+          ON graph_node_overrides(stage);
+      `)
+    }
   }
 ]

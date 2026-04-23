@@ -67,6 +67,10 @@ import {
   stopTenKConcentrationScheduler
 } from './services/tenKConcentrationService'
 import {
+  startGraphNotesRefreshScheduler,
+  stopGraphNotesRefreshScheduler
+} from './services/graphNotesRefreshService'
+import {
   startSportsReelScheduler,
   stopSportsReelScheduler
 } from './services/sportsReelScheduler'
@@ -599,6 +603,10 @@ app.whenReady().then(async () => {
   // edges at high baseline confidence. Authoritative source, complements
   // the news co-occurrence layer.
   startTenKConcentrationScheduler()
+  // Rolling note-refresh — monthly sweep re-judges stale overlay edges
+  // against fresh article evidence so the visible notes don't drift
+  // further from current reality than a season or two.
+  startGraphNotesRefreshScheduler()
   setAlertsWindowOpener(showMainWindow)
   if (prefs.favoriteTeamAlertsEnabled) startSportsAlerts()
   // Sports reel scheduler is just an ESPN scoreboard fetcher — it has no
@@ -676,6 +684,7 @@ app.on('will-quit', () => {
   stopEarningsReleasesScheduler()
   stopGraphCandidatesScheduler()
   stopTenKConcentrationScheduler()
+  stopGraphNotesRefreshScheduler()
   stopSportsReelScheduler()
   stopSportsAlerts()
   stopReelScheduler()

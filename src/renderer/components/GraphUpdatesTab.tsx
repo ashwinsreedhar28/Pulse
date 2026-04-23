@@ -15,6 +15,7 @@ import type {
   GraphCandidateEdgePayload,
   GraphCandidateStatus,
   GraphEdgeOverride,
+  GraphNodeOverride,
   GraphSweepSummary
 } from '../../preload'
 
@@ -80,6 +81,7 @@ function formatDate(ms: number): string {
 
 export function GraphUpdatesTab(): JSX.Element {
   const [overrides, setOverrides] = useState<GraphEdgeOverride[]>([])
+  const [nodeOverrides, setNodeOverrides] = useState<GraphNodeOverride[]>([])
   const [candidates, setCandidates] = useState<GraphCandidate[]>([])
   const [counts, setCounts] = useState<{ accepted: number; rejected: number }>({
     accepted: 0,
@@ -96,12 +98,14 @@ export function GraphUpdatesTab(): JSX.Element {
   } | null>(null)
 
   const reload = useCallback(async (): Promise<void> => {
-    const [overrideRows, auditRows, weekCounts] = await Promise.all([
+    const [overrideRows, nodeRows, auditRows, weekCounts] = await Promise.all([
       window.api.graph.listOverrides(),
+      window.api.graph.listNodeOverrides(),
       window.api.graph.listCandidates({ limit: 40 }),
       window.api.graph.countSince(Date.now() - 7 * DAY_MS)
     ])
     setOverrides(overrideRows)
+    setNodeOverrides(nodeRows)
     setCandidates(auditRows)
     setCounts(weekCounts)
   }, [])
@@ -158,6 +162,14 @@ export function GraphUpdatesTab(): JSX.Element {
       relationship,
       candidate?.id ?? null
     )
+    await reload()
+  }
+
+  const onUndoNode = async (symbol: string): Promise<void> => {
+    const candidate = candidates.find(
+      (c) => c.kind === 'node' && c.status === 'accepted' && c.symbol === symbol
+    )
+    await window.api.graph.undoNodeOverride(symbol, candidate?.id ?? null)
     await reload()
   }
 
@@ -296,6 +308,65 @@ export function GraphUpdatesTab(): JSX.Element {
 
       <section>
         <h4 className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-2">
+          Auto-discovered nodes ({nodeOverrides.length})
+        </h4>
+        {nodeOverrides.length === 0 ? (
+          <p className="text-[12px] text-zinc-500">
+            No nodes discovered yet. When a 10-K names a customer whose ticker
+            isn&apos;t in the base graph, it&apos;ll appear here as a new tile.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {nodeOverrides.map((n) => (
+              <li
+                key={n.symbol}
+                className="flex items-start gap-3 rounded-lg border border-edge/60 bg-surface-0 px-3 py-2"
+              >
+                <span className="shrink-0 text-[11px] font-bold tracking-[0.06em] text-zinc-100 min-w-[56px]">
+                  {n.symbol}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] text-zinc-200">
+                    {n.name ?? n.symbol}
+                    <span className="text-zinc-500"> · {n.stage}</span>
+                    {n.sector && (
+                      <span className="text-zinc-500"> · {n.sector}</span>
+                    )}
+                  </div>
+                  {n.blurb && (
+                    <div className="text-[11px] text-zinc-400 leading-snug mt-0.5">
+                      {n.blurb}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 flex-wrap mt-1">
+                    {sourceChip(n.source).map((chip, i) => (
+                      <span
+                        key={`${n.symbol}-src-${i}`}
+                        className={`text-[9px] font-semibold uppercase tracking-[0.14em] px-1.5 py-0.5 rounded ring-1 ring-inset ${chip.tone}`}
+                      >
+                        {chip.label}
+                      </span>
+                    ))}
+                    <span className="text-[10px] text-zinc-600 tabular-nums ml-1">
+                      {formatDate(n.acceptedAt)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => onUndoNode(n.symbol)}
+                  className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-red-500/15 text-red-200 ring-1 ring-inset ring-red-500/40 hover:bg-red-500/25"
+                  title="Remove this node from the graph. Edges pointing at it will be hidden."
+                >
+                  Undo
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h4 className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-2">
           Recent audit log
         </h4>
         {candidates.length === 0 ? (
@@ -317,11 +388,18 @@ export function GraphUpdatesTab(): JSX.Element {
 function CandidateRow({ candidate }: { candidate: GraphCandidate }): JSX.Element {
   const [open, setOpen] = useState(false)
   const payload = candidate.payload as GraphCandidateEdgePayload
+  const nodePayload = candidate.payload as {
+    stage?: string
+    sector?: string
+    name?: string
+    blurb?: string
+  }
   const statusTone: Record<GraphCandidateStatus, string> = {
     accepted: 'bg-emerald-500/15 text-emerald-200 ring-emerald-500/40',
     rejected: 'bg-zinc-700/50 text-zinc-400 ring-zinc-600/50',
     pending: 'bg-amber-500/15 text-amber-200 ring-amber-500/40'
   }
+  const isNode = candidate.kind === 'node'
   return (
     <li className="rounded-lg border border-edge/40 bg-surface-0/60">
       <button
@@ -337,9 +415,23 @@ function CandidateRow({ candidate }: { candidate: GraphCandidate }): JSX.Element
         </span>
         <div className="flex-1 min-w-0">
           <div className="text-[11.5px] text-zinc-200 tabular-nums">
-            {candidate.fromSymbol ?? '—'} → {candidate.toSymbol ?? '—'}
-            {payload?.relationship && payload.relationship !== 'unclear' && (
-              <span className="text-zinc-500"> · {payload.relationship}</span>
+            {isNode ? (
+              <>
+                <span className="text-amber-300 text-[9.5px] uppercase tracking-[0.18em] mr-1">
+                  Node
+                </span>
+                {candidate.symbol ?? '—'}
+                {nodePayload?.stage && nodePayload.stage !== 'unclear' && (
+                  <span className="text-zinc-500"> · {nodePayload.stage}</span>
+                )}
+              </>
+            ) : (
+              <>
+                {candidate.fromSymbol ?? '—'} → {candidate.toSymbol ?? '—'}
+                {payload?.relationship && payload.relationship !== 'unclear' && (
+                  <span className="text-zinc-500"> · {payload.relationship}</span>
+                )}
+              </>
             )}
           </div>
           <div className="flex items-center gap-1 flex-wrap mt-1">
@@ -361,7 +453,20 @@ function CandidateRow({ candidate }: { candidate: GraphCandidate }): JSX.Element
       </button>
       {open && (
         <div className="px-3 pb-3 pt-1 space-y-2 text-[11px] leading-snug">
-          {payload?.note && (
+          {isNode && nodePayload?.blurb && (
+            <div>
+              <div className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                Proposed blurb
+              </div>
+              <div className="text-zinc-300">
+                {nodePayload.name ? (
+                  <span className="text-zinc-400">{nodePayload.name} · </span>
+                ) : null}
+                {nodePayload.blurb}
+              </div>
+            </div>
+          )}
+          {!isNode && payload?.note && (
             <div>
               <div className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
                 Proposed note

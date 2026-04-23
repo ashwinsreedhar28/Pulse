@@ -461,6 +461,19 @@ export interface GraphEdgeOverride {
   acceptedAt: number
 }
 
+// Auto-discovered node. Rendered as a first-class tile alongside the hand-
+// curated graph; Undo removes the override and the discovered edges that
+// pointed at it become dangling (filtered out at render time).
+export interface GraphNodeOverride {
+  symbol: string
+  stage: string
+  sector: string | null
+  name: string | null
+  blurb: string | null
+  source: string
+  acceptedAt: number
+}
+
 export interface GraphSweepSummary {
   proposed: number
   accepted: number
@@ -1137,6 +1150,13 @@ const api = {
     }): Promise<GraphCandidate[]> => invoke<GraphCandidate[]>('graph:listCandidates', opts),
     listOverrides: (): Promise<GraphEdgeOverride[]> =>
       invoke<GraphEdgeOverride[]>('graph:listOverrides'),
+    listNodeOverrides: (): Promise<GraphNodeOverride[]> =>
+      invoke<GraphNodeOverride[]>('graph:listNodeOverrides'),
+    undoNodeOverride: (
+      symbol: string,
+      candidateId?: number | null
+    ): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('graph:undoNodeOverride', symbol, candidateId ?? null),
     countSince: (sinceMs: number): Promise<{ accepted: number; rejected: number }> =>
       invoke<{ accepted: number; rejected: number }>('graph:countSince', sinceMs),
     runSweep: (): Promise<GraphSweepSummary> =>

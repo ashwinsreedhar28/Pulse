@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { GraphEdgeOverride, StockQuote, Ticker } from '../../preload'
+import type {
+  GraphEdgeOverride,
+  GraphNodeOverride,
+  StockQuote,
+  Ticker
+} from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
 import { resolveDisplayQuote } from './quoteDisplay'
 
@@ -168,18 +173,23 @@ export function ValueChainDiagram({
   // survives focus-set changes as long as that node is still on screen.
   const [overrides, setOverrides] = useState<Map<string, { x: number; y: number }>>(new Map())
 
-  // Dynamic edge overrides from the graph-growth pipeline. Fetched once on
-  // mount and refreshed whenever the main process broadcasts a graph:updated
-  // event (sweep commit or user undo). These merge into CHAIN.edges + the
-  // competitor map below so auto-approved edges participate in layout like
-  // any hand-curated edge does.
+  // Dynamic edge + node overlays from the graph-growth pipeline. Fetched
+  // once on mount and refreshed on every graph:updated broadcast. The
+  // edges merge into CHAIN.edges + the competitor map; the nodes merge
+  // into nodeBySymbol so auto-discovered tickers can participate in
+  // layout as first-class tiles.
   const [edgeOverrides, setEdgeOverrides] = useState<GraphEdgeOverride[]>([])
+  const [nodeOverrides, setNodeOverrides] = useState<GraphNodeOverride[]>([])
   useEffect(() => {
     let cancelled = false
-    window.api.graph
-      .listOverrides()
-      .then((rows) => {
-        if (!cancelled) setEdgeOverrides(rows)
+    Promise.all([
+      window.api.graph.listOverrides(),
+      window.api.graph.listNodeOverrides()
+    ])
+      .then(([edges, nodes]) => {
+        if (cancelled) return
+        setEdgeOverrides(edges)
+        setNodeOverrides(nodes)
       })
       .catch((err: unknown) => {
         console.warn('[valueChainDiagram] overrides fetch failed', err)
@@ -190,9 +200,14 @@ export function ValueChainDiagram({
   }, [])
   useEffect(() => {
     return window.api.graph.onUpdated(() => {
-      window.api.graph
-        .listOverrides()
-        .then(setEdgeOverrides)
+      Promise.all([
+        window.api.graph.listOverrides(),
+        window.api.graph.listNodeOverrides()
+      ])
+        .then(([edges, nodes]) => {
+          setEdgeOverrides(edges)
+          setNodeOverrides(nodes)
+        })
         .catch(() => {
           /* keep prior overrides */
         })
@@ -251,8 +266,21 @@ export function ValueChainDiagram({
   const nodeBySymbol = useMemo(() => {
     const m = new Map<string, ChainNode>()
     for (const n of CHAIN.nodes) m.set(n.symbol, n)
+    // Overlay auto-discovered nodes on top. Static entries win on collision
+    // so baseline curation isn't silently overwritten.
+    for (const o of nodeOverrides) {
+      const sym = o.symbol.toUpperCase()
+      if (m.has(sym)) continue
+      m.set(sym, {
+        symbol: sym,
+        stage: o.stage,
+        sector: o.sector ?? 'other',
+        name: o.name ?? undefined,
+        blurb: o.blurb ?? undefined
+      })
+    }
     return m
-  }, [])
+  }, [nodeOverrides])
 
   const stageLabelById = useMemo(() => {
     const m = new Map<string, string>()

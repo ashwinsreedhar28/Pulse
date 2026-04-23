@@ -1029,6 +1029,124 @@ export async function extractCustomerConcentration(input: {
   }
 }
 
+// Classify a newly-discovered ticker so it can be placed in the value-chain
+// graph alongside hand-curated nodes. Picks a stage from the supplied
+// catalog (hard-coded to match supplyChainGraph.json's stage ids at call
+// time so the model can only return known options) plus a sector bucket and
+// a one-sentence blurb. "unclear" stage is a valid answer when the context
+// is too thin — we reject the node candidate rather than guess.
+export interface NewNodeClassification {
+  stage: string // matches one of the supplied stage ids, or "unclear"
+  sector: string // "semi" | "hardware" | "cloud" | "energy" | "auto" | "other"
+  blurb: string // 1 sentence, under 140 chars
+  confidence: number // 0..1
+}
+
+export async function classifyNewNode(input: {
+  symbol: string
+  companyName: string
+  // Optional context: if the node was discovered via a 10-K that called it
+  // out as a customer, pass the supporting quote. Empty string is fine for
+  // sources without rich context.
+  context: string
+  // Valid stage ids from supplyChainGraph.json. The model is told to pick
+  // from this list or return "unclear".
+  stages: Array<{ id: string; label: string }>
+}): Promise<NewNodeClassification | null> {
+  if (!(await checkOllamaHealth())) return null
+  if (!input.companyName.trim()) return null
+
+  const stageList = input.stages.map((s) => `- ${s.id}: ${s.label}`).join('\n')
+
+  const system =
+    `You classify a public company into a supply-chain-graph stage so it ` +
+    `can be placed alongside hand-curated nodes. Strict JSON output:\n` +
+    `{\n` +
+    `  "stage": "one of the stage ids below or 'unclear'",\n` +
+    `  "sector": "semi" | "hardware" | "cloud" | "energy" | "auto" | "other",\n` +
+    `  "blurb": "one sentence, <140 chars, no marketing language",\n` +
+    `  "confidence": 0.0-1.0\n` +
+    `}\n\n` +
+    `Stage catalog:\n${stageList}\n\n` +
+    `Rules:\n` +
+    `- stage must be one of the listed ids (exact match) or the literal string "unclear".\n` +
+    `- Return "unclear" with confidence < 0.5 when the company's business ` +
+    `model doesn't cleanly fit any listed stage.\n` +
+    `- blurb: lead with what the company makes or does. No "leading", ` +
+    `"innovative", "premier" fluff. Example: "Designs memory controllers ` +
+    `and PCIe switches used in data-center SSDs and servers."\n` +
+    `- sector buckets: semi = chip designers/fabs/equipment; hardware = ` +
+    `OEMs/networking/system builders; cloud = hyperscalers + SaaS; energy = ` +
+    `power gen + grid + data-center infrastructure; auto = automakers and ` +
+    `automotive suppliers; other = anything that doesn't fit.`
+
+  const user =
+    `Symbol: ${input.symbol}\n` +
+    `Company: ${input.companyName}\n` +
+    (input.context ? `Context: ${input.context.slice(0, 800)}` : '')
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    let res: Response
+    try {
+      res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user }
+          ],
+          stream: false,
+          format: 'json',
+          options: { num_predict: 220, temperature: 0.1 }
+        }),
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!res.ok) {
+      emitHealth(false)
+      return null
+    }
+    const body = (await res.json()) as { message?: { content?: string } }
+    const content = body.message?.content
+    if (!content) return null
+    const parsed = JSON.parse(content) as {
+      stage?: unknown
+      sector?: unknown
+      blurb?: unknown
+      confidence?: unknown
+    }
+    emitHealth(true)
+    const validStages = new Set<string>([...input.stages.map((s) => s.id), 'unclear'])
+    const stage =
+      typeof parsed.stage === 'string' && validStages.has(parsed.stage)
+        ? (parsed.stage as string)
+        : 'unclear'
+    const validSectors = ['semi', 'hardware', 'cloud', 'energy', 'auto', 'other']
+    const sector =
+      typeof parsed.sector === 'string' && validSectors.includes(parsed.sector)
+        ? (parsed.sector as string)
+        : 'other'
+    const blurb =
+      typeof parsed.blurb === 'string' ? parsed.blurb.trim().slice(0, 200) : ''
+    const rawConf = typeof parsed.confidence === 'number' ? parsed.confidence : 0
+    const confidence = Math.max(0, Math.min(1, rawConf))
+    return { stage, sector, blurb, confidence }
+  } catch (err) {
+    console.warn(
+      '[ollama] classifyNewNode failed:',
+      err instanceof Error ? err.message : err
+    )
+    emitHealth(false)
+    return null
+  }
+}
+
 // Heuristic: a "concrete figure" contains at least one digit and isn't
 // phrased as prose. Rejects "Not provided", "Highlighted as growth driver",
 // "N/A" — values that aren't useful in a numbers-grid but the model sometimes
