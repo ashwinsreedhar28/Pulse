@@ -350,24 +350,121 @@ function EdgesPane({
   graph: CompanyValueChain
   nodeBySymbol: Map<string, CompanyValueChainNode>
 }): JSX.Element | null {
-  // Only surface edges that involve the focus. Edges between two non-focus
-  // nodes are noise in a single-ticker subgraph — the user can regenerate
-  // a chain centered on a different ticker if they want to see that.
+  if (graph.edges.length === 0) return null
+  // Split edges into focus-centric (most interesting) vs peer-to-peer (still
+  // useful context — e.g. two suppliers that also trade with each other).
+  // Focus-centric gets grouped by relationship for glanceable role buckets.
   const focusEdges = graph.edges.filter(
     (e) => e.from === graph.focus || e.to === graph.focus
   )
-  if (focusEdges.length === 0) return null
+  const peerEdges = graph.edges.filter(
+    (e) => e.from !== graph.focus && e.to !== graph.focus
+  )
+
+  // From focus's perspective, every focus-adjacent edge maps to one of four
+  // role buckets. Directional edges flip when focus is the 'to' side.
+  const suppliersOfFocus = focusEdges.filter(
+    (e) =>
+      (e.relationship === 'supplier' && e.to === graph.focus) ||
+      (e.relationship === 'customer' && e.from === graph.focus)
+  )
+  const customersOfFocus = focusEdges.filter(
+    (e) =>
+      (e.relationship === 'customer' && e.to === graph.focus) ||
+      (e.relationship === 'supplier' && e.from === graph.focus)
+  )
+  const competitors = focusEdges.filter((e) => e.relationship === 'competitor')
+  const partners = focusEdges.filter((e) => e.relationship === 'partner')
+
   return (
-    <div className="pt-2 border-t border-edge/30">
-      <div className="text-[9.5px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-1.5">
-        Relationships ({focusEdges.length})
+    <div className="pt-2 border-t border-edge/30 space-y-3">
+      {suppliersOfFocus.length > 0 && (
+        <RoleBucket
+          label="Suppliers"
+          tone="indigo"
+          edges={suppliersOfFocus}
+          focus={graph.focus}
+          nodeBySymbol={nodeBySymbol}
+        />
+      )}
+      {customersOfFocus.length > 0 && (
+        <RoleBucket
+          label="Customers"
+          tone="emerald"
+          edges={customersOfFocus}
+          focus={graph.focus}
+          nodeBySymbol={nodeBySymbol}
+        />
+      )}
+      {competitors.length > 0 && (
+        <RoleBucket
+          label="Competitors"
+          tone="orange"
+          edges={competitors}
+          focus={graph.focus}
+          nodeBySymbol={nodeBySymbol}
+        />
+      )}
+      {partners.length > 0 && (
+        <RoleBucket
+          label="Partners"
+          tone="sky"
+          edges={partners}
+          focus={graph.focus}
+          nodeBySymbol={nodeBySymbol}
+        />
+      )}
+      {peerEdges.length > 0 && (
+        <div>
+          <div className="text-[9.5px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-1.5">
+            Ecosystem links ({peerEdges.length})
+          </div>
+          <ul className="space-y-1">
+            {peerEdges.map((e, i) => (
+              <EdgeRow
+                key={`peer-${e.from}-${e.to}-${i}`}
+                edge={e}
+                focus={graph.focus}
+                nodeBySymbol={nodeBySymbol}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RoleBucket({
+  label,
+  tone,
+  edges,
+  focus,
+  nodeBySymbol
+}: {
+  label: string
+  tone: 'indigo' | 'emerald' | 'orange' | 'sky'
+  edges: CompanyValueChainEdge[]
+  focus: string
+  nodeBySymbol: Map<string, CompanyValueChainNode>
+}): JSX.Element {
+  const labelTone = {
+    indigo: 'text-indigo-300',
+    emerald: 'text-emerald-300',
+    orange: 'text-orange-300',
+    sky: 'text-sky-300'
+  }[tone]
+  return (
+    <div>
+      <div className={`text-[9.5px] font-semibold uppercase tracking-[0.22em] ${labelTone} mb-1.5`}>
+        {label} ({edges.length})
       </div>
       <ul className="space-y-1">
-        {focusEdges.map((e, i) => (
+        {edges.map((e, i) => (
           <EdgeRow
-            key={`${e.from}-${e.to}-${i}`}
+            key={`${label}-${e.from}-${e.to}-${i}`}
             edge={e}
-            focus={graph.focus}
+            focus={focus}
             nodeBySymbol={nodeBySymbol}
           />
         ))}

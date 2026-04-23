@@ -1353,7 +1353,12 @@ export async function generateCompanyValueChain(input: {
         ? parsed.focus.trim().toUpperCase()
         : input.symbol.toUpperCase()
 
-    const stages: GeneratedValueChainStage[] = Array.isArray(parsed.stages)
+    // Be forgiving: collect stages from the stages[] array AND harvest any
+    // stage IDs referenced by nodes[] that the model forgot to list. If
+    // stages[] is outright empty but nodes have stage claims, we synthesize
+    // a stages array from the node-referenced ones so partial output still
+    // renders something useful.
+    const declaredStages: GeneratedValueChainStage[] = Array.isArray(parsed.stages)
       ? parsed.stages
           .map((s: unknown) => s as { id?: unknown; label?: unknown })
           .filter(
@@ -1369,9 +1374,10 @@ export async function generateCompanyValueChain(input: {
           }))
           .slice(0, 8)
       : []
-    const validStageIds = new Set(stages.map((s) => s.id))
 
-    const nodes: GeneratedValueChainNode[] = Array.isArray(parsed.nodes)
+    // Every node's raw stage claim, kept even when it doesn't match a
+    // declared stage — we'll reconcile below.
+    const rawNodes = Array.isArray(parsed.nodes)
       ? parsed.nodes
           .map(
             (n: unknown) =>
@@ -1386,25 +1392,68 @@ export async function generateCompanyValueChain(input: {
           .filter(
             (n) =>
               typeof n.symbol === 'string' &&
-              typeof n.stage === 'string' &&
               typeof n.name === 'string' &&
               (n.symbol as string).trim().length > 0 &&
-              (n.name as string).trim().length > 0 &&
-              validStageIds.has((n.stage as string).trim())
+              (n.name as string).trim().length > 0
           )
           .map((n) => ({
             symbol: (n.symbol as string).trim().toUpperCase().replace(/\s+/g, '_'),
-            stage: (n.stage as string).trim(),
+            rawStage: typeof n.stage === 'string' ? (n.stage as string).trim() : '',
             name: (n.name as string).trim().slice(0, 120),
-            blurb: typeof n.blurb === 'string' ? (n.blurb as string).trim().slice(0, 200) : null,
+            blurb:
+              typeof n.blurb === 'string' ? (n.blurb as string).trim().slice(0, 200) : null,
             isTicker: n.isTicker === true
           }))
           .slice(0, 24)
       : []
+
+    // Union of declared stages + stage IDs referenced by at least one node.
+    // Stages-only-referenced get a synthesized label derived from the id.
+    const stageIds = new Set<string>(declaredStages.map((s) => s.id))
+    for (const n of rawNodes) {
+      if (n.rawStage && !stageIds.has(n.rawStage)) {
+        stageIds.add(n.rawStage)
+      }
+    }
+    const stages: GeneratedValueChainStage[] = Array.from(stageIds).slice(0, 10).map((id) => {
+      const declared = declaredStages.find((s) => s.id === id)
+      if (declared) return declared
+      // Synthesize label: "customer-channels" → "Customer Channels"
+      const label = id
+        .split(/[-_\s]+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
+      return { id, label: label || id }
+    })
+    const validStageIds = new Set(stages.map((s) => s.id))
+
+    // Fallback stage ID for nodes that have no claim or claim an unknown
+    // stage. Keeps them in the graph instead of silently dropping.
+    const FALLBACK_STAGE_ID = 'related'
+    const nodes: GeneratedValueChainNode[] = rawNodes.map((n) => {
+      let stage = n.rawStage
+      if (!stage || !validStageIds.has(stage)) {
+        stage = FALLBACK_STAGE_ID
+      }
+      return {
+        symbol: n.symbol,
+        stage,
+        name: n.name,
+        blurb: n.blurb,
+        isTicker: n.isTicker
+      }
+    })
+    // If any node ended up on the fallback, make sure the fallback stage
+    // exists in stages so the renderer can place it.
+    if (nodes.some((n) => n.stage === FALLBACK_STAGE_ID) && !validStageIds.has(FALLBACK_STAGE_ID)) {
+      stages.push({ id: FALLBACK_STAGE_ID, label: 'Related' })
+      validStageIds.add(FALLBACK_STAGE_ID)
+    }
     const validNodeSymbols = new Set(nodes.map((n) => n.symbol))
 
     const validRelationships = ['supplier', 'customer', 'competitor', 'partner']
-    const edges: GeneratedValueChainEdge[] = Array.isArray(parsed.edges)
+    const rawEdges = Array.isArray(parsed.edges)
       ? parsed.edges
           .map(
             (e: unknown) =>
@@ -1420,8 +1469,7 @@ export async function generateCompanyValueChain(input: {
               typeof e.from === 'string' &&
               typeof e.to === 'string' &&
               typeof e.relationship === 'string' &&
-              validRelationships.includes(e.relationship) &&
-              e.from !== e.to
+              validRelationships.includes(e.relationship)
           )
           .map((e) => ({
             from: (e.from as string).trim().toUpperCase().replace(/\s+/g, '_'),
@@ -1429,11 +1477,39 @@ export async function generateCompanyValueChain(input: {
             relationship: e.relationship as GeneratedValueChainEdge['relationship'],
             note: typeof e.note === 'string' ? (e.note as string).trim().slice(0, 180) : null
           }))
-          // Drop dangling edges pointing at symbols the model forgot to put
-          // in the nodes array.
-          .filter((e) => validNodeSymbols.has(e.from) && validNodeSymbols.has(e.to))
-          .slice(0, 40)
+          .filter((e) => e.from !== e.to)
       : []
+
+    // Salvage: if an edge points at a symbol the model didn't list in nodes[],
+    // synthesize a stub node so the relationship still renders. The model
+    // sometimes drops a few customer/supplier rows from nodes even though it
+    // mentioned them in edges — discarding those edges silently loses the
+    // most useful part of the output.
+    for (const e of rawEdges) {
+      for (const sym of [e.from, e.to]) {
+        if (!validNodeSymbols.has(sym)) {
+          nodes.push({
+            symbol: sym,
+            stage: FALLBACK_STAGE_ID,
+            name: sym
+              .split(/[_\s]+/)
+              .filter(Boolean)
+              .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+              .join(' '),
+            blurb: null,
+            isTicker: /^[A-Z]{1,5}(\.[A-Z]{1,3})?$/.test(sym)
+          })
+          validNodeSymbols.add(sym)
+          // Ensure the fallback stage exists if we're placing stubs on it.
+          if (!validStageIds.has(FALLBACK_STAGE_ID)) {
+            stages.push({ id: FALLBACK_STAGE_ID, label: 'Related' })
+            validStageIds.add(FALLBACK_STAGE_ID)
+          }
+        }
+      }
+    }
+
+    const edges: GeneratedValueChainEdge[] = rawEdges.slice(0, 40)
 
     // Guarantee the focus symbol is in nodes. If the model omitted it, splice
     // a reasonable default so the renderer always has something to anchor.
@@ -1449,15 +1525,22 @@ export async function generateCompanyValueChain(input: {
       validNodeSymbols.add(focus)
     }
 
-    if (stages.length === 0 || nodes.length === 0) {
+    // Only bail when literally nothing usable came back. A graph with just
+    // edges + synthesized nodes is still useful — the UI can render it as
+    // a role-grouped list even without a clean stage taxonomy.
+    if (nodes.length === 0 && edges.length === 0) {
       console.warn(
-        `[ollama] generateCompanyValueChain: empty after validation for ${input.symbol} ` +
+        `[ollama] generateCompanyValueChain: completely empty for ${input.symbol} ` +
           `(raw stages=${Array.isArray(parsed.stages) ? (parsed.stages as unknown[]).length : 'not-array'}, ` +
           `raw nodes=${Array.isArray(parsed.nodes) ? (parsed.nodes as unknown[]).length : 'not-array'}, ` +
           `raw edges=${Array.isArray(parsed.edges) ? (parsed.edges as unknown[]).length : 'not-array'}). ` +
           `Content preview: ${content.slice(0, 300)}`
       )
       return null
+    }
+    // Guarantee at least one stage even for edges-only salvage cases.
+    if (stages.length === 0) {
+      stages.push({ id: FALLBACK_STAGE_ID, label: 'Related' })
     }
     console.log(
       `[ollama] generateCompanyValueChain: ${input.symbol} → ${stages.length} stages, ` +
