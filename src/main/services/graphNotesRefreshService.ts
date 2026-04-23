@@ -268,16 +268,26 @@ let started = false
 export function startGraphNotesRefreshScheduler(): void {
   if (started) return
   started = true
-  // First refresh runs 15 minutes after boot so the other graph schedulers
-  // have had time to populate before we start grinding through their output.
+  // First refresh runs 60s after boot — gives the news + 10-K schedulers a
+  // chance to commit fresh overrides first. Note refresh only touches edges
+  // older than 60 days, so on a fresh install this is a no-op and on a
+  // long-lived DB it starts catching up immediately.
   setTimeout(() => {
-    void runNoteRefresh().catch((err) => {
-      console.warn(
-        '[graph-notes] refresh failed:',
-        err instanceof Error ? err.message : err
-      )
-    })
-  }, 15 * 60 * 1000)
+    console.log('[graph-notes] running initial note refresh')
+    void runNoteRefresh()
+      .then((summary) => {
+        console.log(
+          `[graph-notes] initial refresh complete — ${summary.refreshed} refreshed, ` +
+            `${summary.skipped} skipped, ${summary.disagreed} disagreements`
+        )
+      })
+      .catch((err) => {
+        console.warn(
+          '[graph-notes] refresh failed:',
+          err instanceof Error ? err.message : err
+        )
+      })
+  }, 60_000)
   timer = setInterval(() => {
     void runNoteRefresh().catch((err) => {
       console.warn(

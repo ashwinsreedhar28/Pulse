@@ -421,13 +421,24 @@ let started = false
 export function startGraphCandidatesScheduler(): void {
   if (started) return
   started = true
-  // First sweep runs 5 minutes after boot so the ticker matcher has had time
-  // to populate article_ticker_matches for the articles ingested on startup.
+  // First sweep runs 20s after boot. Short enough that the user sees results
+  // quickly on a warm DB (already-populated article_ticker_matches from
+  // prior sessions); if the table is sparse on a fresh install, runGraphSweep
+  // simply returns 0 across the board and the weekly interval picks up later.
   setTimeout(() => {
-    void runGraphSweep().catch((err) => {
-      console.warn('[graph] sweep failed:', err instanceof Error ? err.message : err)
-    })
-  }, 5 * 60 * 1000)
+    console.log('[graph] running initial news co-occurrence sweep')
+    void runGraphSweep()
+      .then((summary) => {
+        console.log(
+          `[graph] initial sweep complete — ${summary.proposed} proposed, ` +
+            `${summary.accepted} accepted, ${summary.rejected} rejected, ` +
+            `${summary.skipped} skipped`
+        )
+      })
+      .catch((err) => {
+        console.warn('[graph] sweep failed:', err instanceof Error ? err.message : err)
+      })
+  }, 20_000)
   timer = setInterval(() => {
     void runGraphSweep().catch((err) => {
       console.warn('[graph] sweep failed:', err instanceof Error ? err.message : err)

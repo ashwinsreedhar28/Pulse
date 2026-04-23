@@ -235,6 +235,13 @@ export function GraphUpdatesTab(): JSX.Element {
           <div className="mt-2 text-[11px] text-zinc-500">
             Last news sweep — {lastSummary.proposed} proposed · {lastSummary.accepted}{' '}
             accepted · {lastSummary.rejected} rejected · {lastSummary.skipped} skipped
+            {lastSummary.proposed === 0 && lastSummary.skipped === 0 && (
+              <span className="block text-zinc-600 italic mt-0.5">
+                No ticker pairs co-occurred in recent articles — either the feed
+                poller hasn&apos;t caught up yet or all co-occurring pairs were
+                judged within the 30-day cooldown.
+              </span>
+            )}
           </div>
         )}
         {lastTenKSummary && (
@@ -242,6 +249,13 @@ export function GraphUpdatesTab(): JSX.Element {
             Last 10-K scan — {lastTenKSummary.processed} processed ·{' '}
             {lastTenKSummary.accepted} accepted · {lastTenKSummary.rejected} rejected ·{' '}
             {lastTenKSummary.skipped} skipped
+            {lastTenKSummary.processed === 0 && (
+              <span className="block text-zinc-600 italic mt-0.5">
+                {lastTenKSummary.skipped > 0
+                  ? 'Every watchlist 10-K is already processed or has no annual filing on record yet.'
+                  : 'No watchlist tickers with 10-K filings ingested yet — the SEC filings scheduler needs a minute after boot.'}
+              </span>
+            )}
           </div>
         )}
       </section>

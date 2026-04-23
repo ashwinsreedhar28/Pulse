@@ -586,14 +586,21 @@ let started = false
 export function startTenKConcentrationScheduler(): void {
   if (started) return
   started = true
-  // Defer the initial sweep until 10 minutes after boot so the SEC filings
-  // scheduler has had a chance to populate 10-Ks for any newly-added
-  // tickers before we try to process them.
+  // Defer 40s after boot — enough for the SEC filings scheduler (which
+  // kicks at 90s) to have started populating, but short enough that users
+  // see the pipeline come alive on app start instead of waiting minutes.
+  // On a warm DB (prior boot already pulled 10-Ks) this runs immediately-
+  // useful; on a cold install it'll find nothing and gracefully no-op.
   setTimeout(() => {
-    void sweep().catch((err) => {
-      console.warn('[10-K] sweep failed:', err instanceof Error ? err.message : err)
-    })
-  }, 10 * 60 * 1000)
+    console.log('[10-K] running initial concentration sweep')
+    void sweep()
+      .then(() => {
+        console.log('[10-K] initial sweep complete')
+      })
+      .catch((err) => {
+        console.warn('[10-K] sweep failed:', err instanceof Error ? err.message : err)
+      })
+  }, 40_000)
   timer = setInterval(() => {
     void sweep().catch((err) => {
       console.warn('[10-K] sweep failed:', err instanceof Error ? err.message : err)
