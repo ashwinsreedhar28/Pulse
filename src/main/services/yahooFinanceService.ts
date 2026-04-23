@@ -5,6 +5,7 @@
 const YAHOO_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart/'
 const YAHOO_QUOTE_SUMMARY = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary/'
 const YAHOO_OPTIONS_BASE = 'https://query1.finance.yahoo.com/v7/finance/options/'
+const YAHOO_SEARCH_BASE = 'https://query1.finance.yahoo.com/v1/finance/search'
 const YAHOO_CRUMB_URL = 'https://query2.finance.yahoo.com/v1/test/getcrumb'
 const YAHOO_CONSENT_URL = 'https://fc.yahoo.com/'
 const UA =
@@ -1328,4 +1329,88 @@ export async function getExtendedQuotes(symbols: string[]): Promise<ExtendedQuot
   // concurrent call pattern is the same one getHistory uses for ranges.
   const settled = await Promise.all(unique.map((s) => fetchExtendedOne(s)))
   return settled.filter((q): q is ExtendedQuote => q !== null)
+}
+
+// ---- Ticker search --------------------------------------------------------
+// Yahoo's public /v1/finance/search endpoint doubles as a ticker autocomplete.
+// Results include symbol, display name, exchange, and sector/industry when
+// Yahoo has them — all we need for a "Bloomberg-style" dropdown that covers
+// any US-listed name, not just the 65 tickers in supplyChainGraph.json.
+
+export interface TickerSearchResult {
+  symbol: string
+  name: string
+  exchange: string | null
+  exchangeDisplay: string | null
+  quoteType: string | null // 'EQUITY' | 'ETF' | 'INDEX' | 'MUTUALFUND' | 'FUTURE' | 'CRYPTOCURRENCY'
+  sector: string | null
+  industry: string | null
+}
+
+interface YahooSearchResponse {
+  quotes?: Array<{
+    symbol?: string
+    shortname?: string
+    longname?: string
+    exchange?: string
+    exchDisp?: string
+    quoteType?: string
+    sector?: string
+    industry?: string
+  }>
+}
+
+// Tiny LRU-ish cache keyed by normalized query so the UI's debounced input
+// doesn't re-hit Yahoo on every keystroke.
+const SEARCH_TTL_MS = 60_000
+const searchCache = new Map<string, { value: TickerSearchResult[]; fetchedAt: number }>()
+
+export async function searchTickers(
+  query: string,
+  limit = 8
+): Promise<TickerSearchResult[]> {
+  const q = query.trim()
+  if (q.length < 1) return []
+  const key = `${q.toLowerCase()}|${limit}`
+  const cached = searchCache.get(key)
+  if (cached && Date.now() - cached.fetchedAt < SEARCH_TTL_MS) return cached.value
+
+  const url = `${YAHOO_SEARCH_BASE}?q=${encodeURIComponent(q)}&quotesCount=${limit}&newsCount=0`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+      signal: controller.signal
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const json = (await res.json()) as YahooSearchResponse
+    const out: TickerSearchResult[] = []
+    for (const q of json.quotes ?? []) {
+      if (!q.symbol) continue
+      // Filter to things that make sense in Pulse — drop futures / crypto /
+      // money-market tickers that would clog the dropdown.
+      const type = q.quoteType ?? ''
+      if (type && !['EQUITY', 'ETF', 'INDEX', 'MUTUALFUND'].includes(type)) continue
+      out.push({
+        symbol: q.symbol.toUpperCase(),
+        name: q.longname ?? q.shortname ?? q.symbol,
+        exchange: q.exchange ?? null,
+        exchangeDisplay: q.exchDisp ?? null,
+        quoteType: q.quoteType ?? null,
+        sector: q.sector ?? null,
+        industry: q.industry ?? null
+      })
+    }
+    searchCache.set(key, { value: out, fetchedAt: Date.now() })
+    return out
+  } catch (err) {
+    console.warn(
+      '[yahoo] ticker search failed:',
+      err instanceof Error ? err.message : err
+    )
+    return cached?.value ?? []
+  } finally {
+    clearTimeout(timer)
+  }
 }

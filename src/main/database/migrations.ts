@@ -946,5 +946,31 @@ export const migrations: Migration[] = [
           ON graph_node_overrides(stage);
       `)
     }
+  },
+  {
+    version: 34,
+    name: 'create company_value_chains for ticker-scoped subgraphs',
+    // One row per symbol carrying a full Ollama-generated value-chain
+    // subgraph: industry-appropriate stages, nodes (resolved to tickers
+    // when possible, otherwise unverified company names), and edges. Lives
+    // alongside the main graph but doesn't mix with it — the subgraph is
+    // shown on that ticker's detail page only, so stage taxonomies stay
+    // industry-local.
+    //
+    // status: 'pending' while generation is in flight; 'ready' when the
+    // graphJson is populated; 'offline' when Ollama was down (user can
+    // retry); 'error' on malformed output. Retry just re-runs the service.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS company_value_chains (
+          symbol TEXT PRIMARY KEY,
+          status TEXT NOT NULL,
+          graphJson TEXT,
+          sourceContext TEXT,
+          generatedAt INTEGER,
+          updatedAt INTEGER NOT NULL
+        );
+      `)
+    }
   }
 ]

@@ -14,6 +14,7 @@ import {
   getFundamentals,
   getHistory,
   getOptionsSnapshot,
+  searchTickers,
   type HistoryRange
 } from '../services/yahooFinanceService'
 import {
@@ -205,6 +206,17 @@ export function registerDbIpc(): void {
 
   // tickers
   ipcMain.handle('db:tickers:list', () => tickersDb.listTickers())
+  ipcMain.handle(
+    'db:tickers:ensurePassive',
+    (_e, input: tickersDb.CreateTickerInput) => {
+      const t = tickersDb.ensurePassiveTicker(input)
+      // Warm the company profile so the detail page isn't cold. Fire-and-
+      // forget; the detail page falls back to Yahoo fundamentals if the
+      // Ollama-generated profile isn't ready yet.
+      void ensureCompanyProfile(t.symbol, t.companyName ?? t.symbol)
+      return t
+    }
+  )
   ipcMain.handle('db:tickers:create', (_e, input: tickersDb.CreateTickerInput) => {
     // A passive graph row may already exist for this symbol (migration v24
     // seeds ~75 value-chain tickers with isActive=0). In that case, promote
@@ -466,6 +478,30 @@ export function registerDbIpc(): void {
   ipcMain.handle('stocks:getOptionsSnapshot', (_e, symbol: string) =>
     getOptionsSnapshot(symbol)
   )
+
+  // Ticker autocomplete — any US-listed name, not just the curated graph.
+  // Powers the Explore-tickers search on the Stocks page.
+  ipcMain.handle('stocks:searchTickers', (_e, query: string, limit?: number) =>
+    searchTickers(query, limit ?? 8)
+  )
+
+  // Per-ticker Ollama-generated value chain. Lives on the stock detail page;
+  // explicitly triggered by the "Generate value chain" button so Ollama
+  // doesn't run for every ticker the user merely browses past.
+  ipcMain.handle(
+    'stocks:generateCompanyChain',
+    async (_e, symbol: string, companyName: string, force?: boolean) => {
+      const { generateCompanyChain, readCompanyChain } = await import(
+        '../services/companyValueChainService'
+      )
+      await generateCompanyChain({ symbol, companyName, force })
+      return readCompanyChain(symbol)
+    }
+  )
+  ipcMain.handle('stocks:getCompanyChain', async (_e, symbol: string) => {
+    const { readCompanyChain } = await import('../services/companyValueChainService')
+    return readCompanyChain(symbol)
+  })
 
   // Value-chain growth pipeline. Renderer surfaces the audit log + overlay
   // list in Settings, lets users trigger a sweep manually, and hit Undo on

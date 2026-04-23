@@ -1147,6 +1147,280 @@ export async function classifyNewNode(input: {
   }
 }
 
+// Build a company-specific value-chain subgraph. Takes the filer's name +
+// profile + optional 10-K excerpt + optional news snippets; returns a
+// structured graph with industry-appropriate stages, named nodes (real
+// companies the model knows, ideally with tickers), and edges between them.
+// Used by the "Generate value chain" button on the stock detail page to
+// support industries the hand-curated supplyChainGraph.json doesn't cover
+// (consumer staples, pharma, utilities, auto parts, etc.).
+export interface GeneratedValueChainNode {
+  // Ticker symbol when the model knows one; otherwise a stable uppercase
+  // label derived from the company name ("COCA_COLA_BOTTLERS").
+  symbol: string
+  stage: string // matches one of the stages returned below
+  name: string
+  blurb: string | null
+  // true when the model's claiming a real exchange-listed ticker; false for
+  // "this company exists but I'm not sure of its ticker / is private".
+  isTicker: boolean
+}
+
+export interface GeneratedValueChainEdge {
+  from: string
+  to: string
+  relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
+  note: string | null
+}
+
+export interface GeneratedValueChainStage {
+  id: string
+  label: string
+}
+
+export interface GeneratedValueChain {
+  focus: string
+  stages: GeneratedValueChainStage[]
+  nodes: GeneratedValueChainNode[]
+  edges: GeneratedValueChainEdge[]
+}
+
+export async function generateCompanyValueChain(input: {
+  symbol: string
+  companyName: string
+  // Optional grounding material — whatever the caller has.
+  profileDescription?: string | null
+  tenKExcerpt?: string | null
+  newsSnippets?: Array<{ title: string; summary: string | null }>
+}): Promise<GeneratedValueChain | null> {
+  if (!input.companyName.trim()) return null
+  if (!(await checkOllamaHealth())) return null
+
+  const contextParts: string[] = []
+  if (input.profileDescription) {
+    contextParts.push(`Company profile:\n${input.profileDescription.slice(0, 1200)}`)
+  }
+  if (input.tenKExcerpt) {
+    contextParts.push(
+      `10-K excerpt (Item 1 / Business):\n${input.tenKExcerpt.slice(0, 4000)}`
+    )
+  }
+  if (input.newsSnippets && input.newsSnippets.length > 0) {
+    const bullets = input.newsSnippets
+      .slice(0, 6)
+      .map((s, i) => {
+        const sum = s.summary ? ` — ${s.summary.slice(0, 200)}` : ''
+        return `${i + 1}. "${s.title}"${sum}`
+      })
+      .join('\n')
+    contextParts.push(`Recent news:\n${bullets}`)
+  }
+  const groundingContext = contextParts.join('\n\n')
+
+  const system =
+    `You construct a focused supply-chain subgraph for a single public company. ` +
+    `The output feeds a value-chain visualization: nodes are real companies ` +
+    `positioned in industry-appropriate stages, edges describe supplier / ` +
+    `customer / competitor / partner relationships. Precision matters — a ` +
+    `made-up bottler poisons the graph. Ground every node in something you ` +
+    `actually know about the industry; if you're unsure, leave it out.\n\n` +
+    `Return strict JSON:\n` +
+    `{\n` +
+    `  "focus": "FOCUS_SYMBOL",\n` +
+    `  "stages": [{"id": "kebab-case", "label": "Human Readable"}, ...],\n` +
+    `  "nodes": [\n` +
+    `    {\n` +
+    `      "symbol": "TICKER or UPPERCASE_LABEL",\n` +
+    `      "stage": "matches one of the stage ids above",\n` +
+    `      "name": "Company Inc.",\n` +
+    `      "blurb": "one sentence, <140 chars, no marketing",\n` +
+    `      "isTicker": true | false\n` +
+    `    }\n` +
+    `  ],\n` +
+    `  "edges": [\n` +
+    `    {\n` +
+    `      "from": "node symbol",\n` +
+    `      "to": "node symbol",\n` +
+    `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
+    `      "note": "one short sentence, <120 chars"\n` +
+    `    }\n` +
+    `  ]\n` +
+    `}\n\n` +
+    `Rules (strict):\n` +
+    `- 3 to 7 stages, ordered from upstream (raw inputs / R&D) to downstream ` +
+    `(end markets / consumers). Stage ids must be kebab-case identifiers.\n` +
+    `- 6 to 20 nodes total, including the focus. The focus node's stage should ` +
+    `match what the company actually is (producer, platform, retailer, etc.).\n` +
+    `- 6 to 30 edges. Every edge endpoint must reference a node symbol that ` +
+    `exists in the nodes array. No dangling edges.\n` +
+    `- isTicker=true only for companies you're certain trade publicly on a ` +
+    `major exchange. When uncertain, set false and use a stable UPPERCASE_LABEL ` +
+    `as the symbol (e.g. "SUEZ_WATER" for a private entity).\n` +
+    `- Do not invent relationships you don't actually know about. Prefer ` +
+    `well-documented connections from the company's own filings and press.\n` +
+    `- blurbs and notes must stay short (<140 / <120 chars), factual, no ` +
+    `marketing language.\n` +
+    `- If the company's value chain is genuinely unclear from the context, ` +
+    `return {"focus": "SYMBOL", "stages": [], "nodes": [], "edges": []}.`
+
+  const user =
+    `Focus company: ${input.companyName} (${input.symbol})\n\n` +
+    (groundingContext
+      ? `Grounding context:\n${groundingContext}`
+      : 'No additional context available — rely on your general knowledge of this company.')
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS * 2)
+    let res: Response
+    try {
+      res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user }
+          ],
+          stream: false,
+          format: 'json',
+          // Large output: stages + 6-20 nodes + 6-30 edges can run to ~1500
+          // tokens. Temperature stays low for structural consistency.
+          options: { num_predict: 2000, temperature: 0.2 }
+        }),
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!res.ok) {
+      emitHealth(false)
+      return null
+    }
+    const body = (await res.json()) as { message?: { content?: string } }
+    const content = body.message?.content
+    if (!content) return null
+    const parsed = JSON.parse(content) as {
+      focus?: unknown
+      stages?: unknown
+      nodes?: unknown
+      edges?: unknown
+    }
+    emitHealth(true)
+
+    const focus =
+      typeof parsed.focus === 'string' && parsed.focus.trim().length > 0
+        ? parsed.focus.trim().toUpperCase()
+        : input.symbol.toUpperCase()
+
+    const stages: GeneratedValueChainStage[] = Array.isArray(parsed.stages)
+      ? parsed.stages
+          .map((s: unknown) => s as { id?: unknown; label?: unknown })
+          .filter(
+            (s) =>
+              typeof s.id === 'string' &&
+              typeof s.label === 'string' &&
+              (s.id as string).trim().length > 0 &&
+              (s.label as string).trim().length > 0
+          )
+          .map((s) => ({
+            id: (s.id as string).trim(),
+            label: (s.label as string).trim().slice(0, 60)
+          }))
+          .slice(0, 8)
+      : []
+    const validStageIds = new Set(stages.map((s) => s.id))
+
+    const nodes: GeneratedValueChainNode[] = Array.isArray(parsed.nodes)
+      ? parsed.nodes
+          .map(
+            (n: unknown) =>
+              n as {
+                symbol?: unknown
+                stage?: unknown
+                name?: unknown
+                blurb?: unknown
+                isTicker?: unknown
+              }
+          )
+          .filter(
+            (n) =>
+              typeof n.symbol === 'string' &&
+              typeof n.stage === 'string' &&
+              typeof n.name === 'string' &&
+              (n.symbol as string).trim().length > 0 &&
+              (n.name as string).trim().length > 0 &&
+              validStageIds.has((n.stage as string).trim())
+          )
+          .map((n) => ({
+            symbol: (n.symbol as string).trim().toUpperCase().replace(/\s+/g, '_'),
+            stage: (n.stage as string).trim(),
+            name: (n.name as string).trim().slice(0, 120),
+            blurb: typeof n.blurb === 'string' ? (n.blurb as string).trim().slice(0, 200) : null,
+            isTicker: n.isTicker === true
+          }))
+          .slice(0, 24)
+      : []
+    const validNodeSymbols = new Set(nodes.map((n) => n.symbol))
+
+    const validRelationships = ['supplier', 'customer', 'competitor', 'partner']
+    const edges: GeneratedValueChainEdge[] = Array.isArray(parsed.edges)
+      ? parsed.edges
+          .map(
+            (e: unknown) =>
+              e as {
+                from?: unknown
+                to?: unknown
+                relationship?: unknown
+                note?: unknown
+              }
+          )
+          .filter(
+            (e) =>
+              typeof e.from === 'string' &&
+              typeof e.to === 'string' &&
+              typeof e.relationship === 'string' &&
+              validRelationships.includes(e.relationship) &&
+              e.from !== e.to
+          )
+          .map((e) => ({
+            from: (e.from as string).trim().toUpperCase().replace(/\s+/g, '_'),
+            to: (e.to as string).trim().toUpperCase().replace(/\s+/g, '_'),
+            relationship: e.relationship as GeneratedValueChainEdge['relationship'],
+            note: typeof e.note === 'string' ? (e.note as string).trim().slice(0, 180) : null
+          }))
+          // Drop dangling edges pointing at symbols the model forgot to put
+          // in the nodes array.
+          .filter((e) => validNodeSymbols.has(e.from) && validNodeSymbols.has(e.to))
+          .slice(0, 40)
+      : []
+
+    // Guarantee the focus symbol is in nodes. If the model omitted it, splice
+    // a reasonable default so the renderer always has something to anchor.
+    if (!validNodeSymbols.has(focus)) {
+      const firstStage = stages[0]?.id ?? 'core'
+      nodes.unshift({
+        symbol: focus,
+        stage: firstStage,
+        name: input.companyName,
+        blurb: null,
+        isTicker: true
+      })
+    }
+
+    if (nodes.length === 0 || stages.length === 0) return null
+    return { focus, stages, nodes, edges }
+  } catch (err) {
+    console.warn(
+      '[ollama] generateCompanyValueChain failed:',
+      err instanceof Error ? err.message : err
+    )
+    emitHealth(false)
+    return null
+  }
+}
+
 // Heuristic: a "concrete figure" contains at least one digit and isn't
 // phrased as prose. Rejects "Not provided", "Highlighted as growth driver",
 // "N/A" — values that aren't useful in a numbers-grid but the model sometimes

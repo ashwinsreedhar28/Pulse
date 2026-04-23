@@ -481,6 +481,65 @@ export interface GraphSweepSummary {
   skipped: number
 }
 
+// Ollama-generated value chain scoped to a single ticker. Rendered on the
+// stock detail page when the user clicks "Generate value chain". Unlike
+// the main supplyChainGraph.json overlay, this subgraph carries its own
+// industry-appropriate stage taxonomy so non-tech tickers (consumer
+// staples, pharma, utilities) get a sensible value-chain visualization.
+export type CompanyValueChainStatus = 'pending' | 'ready' | 'offline' | 'error'
+
+export interface CompanyValueChainStage {
+  id: string
+  label: string
+}
+
+export interface CompanyValueChainNode {
+  symbol: string
+  stage: string
+  name: string
+  blurb: string | null
+  // 'ticker' = resolver verified this symbol against our ticker map;
+  // 'unverified' = model named a company the resolver couldn't match, so
+  // the UI flags it as inferred.
+  kind: 'ticker' | 'unverified'
+}
+
+export interface CompanyValueChainEdge {
+  from: string
+  to: string
+  relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
+  note: string | null
+}
+
+export interface CompanyValueChain {
+  focus: string
+  stages: CompanyValueChainStage[]
+  nodes: CompanyValueChainNode[]
+  edges: CompanyValueChainEdge[]
+}
+
+export interface CompanyValueChainRow {
+  symbol: string
+  status: CompanyValueChainStatus
+  graph: CompanyValueChain | null
+  sourceContext: string | null
+  generatedAt: number | null
+  updatedAt: number
+}
+
+// Yahoo ticker search result. Drives the autocomplete dropdown on the
+// Stocks-page Explore card. Sector + industry come through when Yahoo has
+// them — null for less-indexed names (some ADRs, recent IPOs).
+export interface TickerSearchResult {
+  symbol: string
+  name: string
+  exchange: string | null
+  exchangeDisplay: string | null
+  quoteType: string | null
+  sector: string | null
+  industry: string | null
+}
+
 // Nearest-expiry options snapshot. IV is a decimal (0.42 = 42%). Put/call
 // ratio > 1 means more puts outstanding (defensive tilt).
 export interface OptionsSnapshot {
@@ -966,6 +1025,8 @@ const api = {
   tickers: {
     list: () => invoke<Ticker[]>('db:tickers:list'),
     create: (input: CreateTickerInput) => invoke<Ticker>('db:tickers:create', input),
+    ensurePassive: (input: CreateTickerInput) =>
+      invoke<Ticker>('db:tickers:ensurePassive', input),
     delete: (id: number) => invoke<void>('db:tickers:delete', id),
     activate: (id: number) => invoke<Ticker | null>('db:tickers:activate', id),
     summarize: (id: number) =>
@@ -1089,6 +1150,24 @@ const api = {
       invoke<AnalystEstimates | null>('stocks:refreshEstimates', symbol),
     getOptionsSnapshot: (symbol: string) =>
       invoke<OptionsSnapshot | null>('stocks:getOptionsSnapshot', symbol),
+    searchTickers: (query: string, limit?: number) =>
+      invoke<TickerSearchResult[]>('stocks:searchTickers', query, limit),
+    generateCompanyChain: (symbol: string, companyName: string, force?: boolean) =>
+      invoke<CompanyValueChainRow | null>(
+        'stocks:generateCompanyChain',
+        symbol,
+        companyName,
+        force
+      ),
+    getCompanyChain: (symbol: string) =>
+      invoke<CompanyValueChainRow | null>('stocks:getCompanyChain', symbol),
+    onCompanyChainUpdated: (cb: (symbol: string) => void): (() => void) => {
+      const listener = (_e: unknown, symbol: string): void => cb(symbol)
+      ipcRenderer.on('companyChain:updated', listener)
+      return (): void => {
+        ipcRenderer.off('companyChain:updated', listener)
+      }
+    },
     onUpdated: (cb: (quotes: StockQuote[]) => void): (() => void) => {
       const listener = (_e: unknown, quotes: StockQuote[]): void => cb(quotes)
       ipcRenderer.on('stocks:updated', listener)

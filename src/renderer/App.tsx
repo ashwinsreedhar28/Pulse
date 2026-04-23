@@ -15,6 +15,8 @@ import { EarningsReleaseSection } from './components/EarningsReleaseSection'
 import { CollapsibleSection } from './components/CollapsibleSection'
 import { WhyThisMatters } from './components/WhyThisMatters'
 import { resolveDisplayQuote } from './components/quoteDisplay'
+import { TickerSearchBox } from './components/TickerSearchBox'
+import { CompanyValueChainSection } from './components/CompanyValueChainSection'
 import {
   ScoreFlourish,
   sportForLeagueId,
@@ -2897,6 +2899,34 @@ function StocksPage({
           onOpenURL={onOpenURL}
           onOpenIpoBrief={onOpenIpoBrief}
         />
+        <div className="px-6 pt-4">
+          <CollapsibleSection title="Explore tickers" meta="Yahoo search · any US symbol" defaultOpen={false}>
+            <TickerSearchBox
+              onOpenDetail={async (r) => {
+                const t = await window.api.tickers.ensurePassive({
+                  symbol: r.symbol,
+                  companyName: r.name,
+                  sector: r.sector ?? null,
+                  industry: r.industry ?? null
+                })
+                const updated = await window.api.tickers.list()
+                setTickers(updated)
+                setSelectedTickerId(t.id)
+              }}
+              onAddToWatchlist={async (r) => {
+                const t = await window.api.tickers.create({
+                  symbol: r.symbol,
+                  companyName: r.name,
+                  sector: r.sector ?? null,
+                  industry: r.industry ?? null
+                })
+                const updated = await window.api.tickers.list()
+                setTickers(updated)
+                setSelectedTickerId(t.id)
+              }}
+            />
+          </CollapsibleSection>
+        </div>
         {view === 'chain' ? (
           <ValueChain
             tickers={tickers}
@@ -2953,6 +2983,7 @@ function StocksPage({
               const updated = await window.api.tickers.list()
               setTickers(updated)
             }}
+            onOpenTicker={(id) => setSelectedTickerId(id)}
           />
         )
       })()}
@@ -3156,7 +3187,8 @@ function StockDetail({
   quote,
   onClose,
   onOpenArticle,
-  onActivate
+  onActivate,
+  onOpenTicker
 }: {
   ticker: Ticker
   tickers: Ticker[]
@@ -3164,6 +3196,10 @@ function StockDetail({
   onClose: () => void
   onOpenArticle: (id: number) => void
   onActivate: () => void
+  // Navigate to another ticker's detail page. Used by the generated value
+  // chain when users click a resolved node. Parent owns the state (the
+  // ticker-id selector on StocksPage), so this just re-fires that handler.
+  onOpenTicker: (tickerId: number) => void
 }): JSX.Element {
   const [history, setHistory] = useState<HistoryPoint[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
@@ -3487,6 +3523,30 @@ function StockDetail({
           )}
 
           <StockValueChainCard symbol={ticker.symbol} tickers={tickers} />
+
+          <CompanyValueChainSection
+            symbol={ticker.symbol}
+            companyName={ticker.companyName ?? ticker.symbol}
+            onOpenTicker={async (sym) => {
+              // Ensure a passive ticker row exists for the clicked node,
+              // then navigate to its detail page. Falls back to companyName
+              // = symbol when we can't find a richer label in the generated
+              // chain's nodes (the SecFilingsSection / ValueChain bridge
+              // that came from).
+              const existing = tickers.find(
+                (t) => t.symbol.toUpperCase() === sym.toUpperCase()
+              )
+              if (existing) {
+                onOpenTicker(existing.id)
+                return
+              }
+              const t = await window.api.tickers.ensurePassive({
+                symbol: sym,
+                companyName: sym
+              })
+              onOpenTicker(t.id)
+            }}
+          />
 
           <EarningsReleaseSection symbol={ticker.symbol} />
 
