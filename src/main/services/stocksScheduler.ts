@@ -63,13 +63,14 @@ async function tick(): Promise<void> {
     // Stooq gives us the regular-session OHLC in a single batched CSV.
     // Yahoo's chart endpoint provides the extended-session overlay —
     // pre-market and after-hours prints that Stooq doesn't publish. We
-    // only overlay watchlist symbols during extended-hours windows
-    // (pre-market 4-9:30am ET, after-hours 4-8pm ET); the scheduler's
-    // cadence already brackets these correctly, but gate here too so
-    // we don't burn Yahoo requests during regular hours or overnight.
+    // apply the overlay to every ticker (including passive graph nodes
+    // shown in the marquee's sector groups) so the rolling bar doesn't
+    // mix stale 4pm closes alongside live AH prices. Gated to the
+    // extended-hours windows (pre-market 4-10am ET, after-hours 4-8pm ET)
+    // so we don't burn Yahoo requests during regular hours or overnight.
     const quotesPromise = getQuotes(symbols)
     const overlayPromise = shouldOverlayExtended()
-      ? getExtendedQuotes(tickers.filter((t) => t.isActive).map((t) => t.symbol)).catch(() => [])
+      ? getExtendedQuotes(symbols).catch(() => [])
       : Promise.resolve([])
     const [quotes, overlay] = await Promise.all([quotesPromise, overlayPromise])
 
