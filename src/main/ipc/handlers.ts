@@ -12,6 +12,15 @@ import { runDailyDrip, runWeeklyCurated, runPortfolioGaps } from '../services/di
 import { getLastQuotes, refreshStocksNow } from '../services/stocksScheduler'
 import { getFundamentals, getHistory, type HistoryRange } from '../services/yahooFinanceService'
 import {
+  computeSnapshot,
+  computeSnapshotsForSymbols,
+  forceRefreshFinancials
+} from '../services/financialsService'
+import {
+  getEarningsBadge,
+  getEarningsBadgesForSymbols
+} from '../services/earningsService'
+import {
   ensureCompanyProfile,
   getCompanyProfile,
   regenerateCompanyProfile
@@ -43,6 +52,11 @@ import {
 import { classifyAllArticlesForTicker, pollAllFeeds } from '../services/feedPoller'
 import { invalidateMatcherCache } from '../services/tickerRelevance'
 import { deleteMatchesForSymbol } from '../database/articleTickerMatches'
+import {
+  getOrComputeRelevance,
+  type RelevanceRequestInput
+} from '../services/personalRelevance'
+import { invalidateAllRelevance } from '../database/articleRelevance'
 import { provisionFeedsForTicker } from '../services/tickerFeedsService'
 import {
   getTickerSummary,
@@ -173,6 +187,10 @@ export function registerDbIpc(): void {
     // Fire-and-forget profile warm-up so opening the new ticker's detail page
     // doesn't hit the cold path.
     void ensureCompanyProfile(t.symbol, t.companyName ?? t.symbol)
+    // Personal-relevance cache keys off the watchlist, so any mutation
+    // there must blow it away — otherwise cached "Why this matters" rows
+    // miss the newly added ticker.
+    invalidateAllRelevance()
     return t
   })
   ipcMain.handle('db:tickers:delete', (_e, id: number) => {
@@ -182,6 +200,7 @@ export function registerDbIpc(): void {
       invalidateMatcherCache()
       deleteMatchesForSymbol(t.symbol)
     }
+    invalidateAllRelevance()
   })
   // Promote a passive graph ticker into the watchlist. Mirrors the warm-up
   // behavior of `db:tickers:create` (provision per-ticker RSS, classify
@@ -196,18 +215,25 @@ export function registerDbIpc(): void {
     void classifyAllArticlesForTicker(t).finally(() => refreshTickerSummary(t.id))
     void pollAllFeeds({ force: true })
     void ensureCompanyProfile(t.symbol, t.companyName ?? t.symbol)
+    invalidateAllRelevance()
     return t
   })
 
   // geo interests
   ipcMain.handle('db:geo:list', () => geoDb.listGeoInterests())
-  ipcMain.handle('db:geo:create', (_e, input: geoDb.CreateGeoInterestInput) =>
-    geoDb.createGeoInterest(input)
-  )
-  ipcMain.handle('db:geo:updateKeywords', (_e, id: number, keywords: string[]) =>
+  ipcMain.handle('db:geo:create', (_e, input: geoDb.CreateGeoInterestInput) => {
+    const g = geoDb.createGeoInterest(input)
+    invalidateAllRelevance()
+    return g
+  })
+  ipcMain.handle('db:geo:updateKeywords', (_e, id: number, keywords: string[]) => {
     geoDb.updateGeoKeywords(id, keywords)
-  )
-  ipcMain.handle('db:geo:delete', (_e, id: number) => geoDb.deleteGeoInterest(id))
+    invalidateAllRelevance()
+  })
+  ipcMain.handle('db:geo:delete', (_e, id: number) => {
+    geoDb.deleteGeoInterest(id)
+    invalidateAllRelevance()
+  })
 
   // discovery
   ipcMain.handle('db:discovery:list', () => discoveryDb.listSuggestions())
@@ -231,6 +257,14 @@ export function registerDbIpc(): void {
   ipcMain.handle('reader:extract', (_e, url: string) => extractReadable(url))
   ipcMain.handle('reader:smartLookup', (_e, term: string, context?: string) =>
     lookupTerm(term, context)
+  )
+
+  // "Why this matters to you" — per-article personal relevance. Returns the
+  // cached row (matches + prose) when present, otherwise computes matches
+  // synchronously and enqueues the Ollama summary. The renderer subscribes to
+  // `relevance:updated` to swap prose in once the background task lands.
+  ipcMain.handle('relevance:get', (_e, input: RelevanceRequestInput) =>
+    getOrComputeRelevance(input)
   )
 
   // feed finder (Hyperintelligence)
@@ -275,6 +309,25 @@ export function registerDbIpc(): void {
   ipcMain.handle(
     'stocks:regenerateCompanyProfile',
     (_e, symbol: string, companyName: string) => regenerateCompanyProfile(symbol, companyName)
+  )
+  // Cashflow overlay: value-chain view pulls snapshots in bulk (one call for
+  // every visible tile); the per-symbol endpoint backs the stock detail page
+  // and any drilldown.
+  ipcMain.handle('stocks:getFinancials', (_e, symbol: string) => computeSnapshot(symbol))
+  ipcMain.handle('stocks:getFinancialsBatch', (_e, symbols: string[]) =>
+    computeSnapshotsForSymbols(symbols)
+  )
+  ipcMain.handle('stocks:refreshFinancials', (_e, symbol: string) =>
+    forceRefreshFinancials(symbol)
+  )
+  // Earnings-pulse badges (next scheduled earnings + most-recent reported
+  // quarter-end). Batch variant feeds the value-chain overlay; per-symbol
+  // endpoint is for focused fetches / tooling.
+  ipcMain.handle('stocks:getEarnings', (_e, symbol: string) =>
+    getEarningsBadge(symbol)
+  )
+  ipcMain.handle('stocks:getEarningsBatch', (_e, symbols: string[]) =>
+    getEarningsBadgesForSymbols(symbols)
   )
 
   // sports
@@ -360,12 +413,14 @@ export function registerDbIpc(): void {
     (_e, input: favoriteTeamsDb.AddFavoriteTeamInput) => {
       const fav = favoriteTeamsDb.addFavoriteTeam(input)
       resetSportsAlertState()
+      invalidateAllRelevance()
       return fav
     }
   )
   ipcMain.handle('db:favoriteTeams:delete', (_e, id: number) => {
     favoriteTeamsDb.deleteFavoriteTeam(id)
     resetSportsAlertState()
+    invalidateAllRelevance()
   })
   ipcMain.handle('db:favoriteTeams:setAlerts', (_e, id: number, enabled: boolean) =>
     favoriteTeamsDb.setFavoriteTeamAlerts(id, enabled)
@@ -375,12 +430,16 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:favoriteAthletes:list', () => favoriteAthletesDb.listFavoriteAthletes())
   ipcMain.handle(
     'db:favoriteAthletes:add',
-    (_e, input: favoriteAthletesDb.AddFavoriteAthleteInput) =>
-      favoriteAthletesDb.addFavoriteAthlete(input)
+    (_e, input: favoriteAthletesDb.AddFavoriteAthleteInput) => {
+      const fav = favoriteAthletesDb.addFavoriteAthlete(input)
+      invalidateAllRelevance()
+      return fav
+    }
   )
-  ipcMain.handle('db:favoriteAthletes:delete', (_e, id: number) =>
+  ipcMain.handle('db:favoriteAthletes:delete', (_e, id: number) => {
     favoriteAthletesDb.deleteFavoriteAthlete(id)
-  )
+    invalidateAllRelevance()
+  })
 
   // reels
   ipcMain.handle('db:reels:list', (_e, limit?: number) => reelsDb.listReels(limit ?? 50))

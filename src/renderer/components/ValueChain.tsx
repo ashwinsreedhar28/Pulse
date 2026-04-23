@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { StockQuote, Ticker } from '../../preload'
+import type { EarningsBadge, FinancialsSnapshot, StockQuote, Ticker } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
 import { ValueChainDiagram } from './ValueChainDiagram'
 import {
@@ -8,6 +8,16 @@ import {
   type Category,
   type Counterparty
 } from './StockValueChainCard'
+import {
+  fcfMarginTone,
+  formatMoneyCompact,
+  formatPctDelta,
+  formatPctValue
+} from './financialsFormat'
+import { countdownLabel, pulseClass, pulsePhase } from './earningsPulse'
+import { FcfSparkline } from './FcfSparkline'
+import { EarningsBeatMiss } from './EarningsBeatMiss'
+import { PeerCompareModal } from './PeerCompareModal'
 
 interface ValueChainSector {
   id: string
@@ -84,6 +94,7 @@ export function ValueChain({
   const [lockedSymbol, setLockedSymbol] = useState<string | null>(null)
   const [sectorId, setSectorId] = useState<string>('all')
   const [diagramSymbol, setDiagramSymbol] = useState<string | null>(null)
+  const [peerCompareSymbol, setPeerCompareSymbol] = useState<string | null>(null)
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Single/double-click discrimination. The first click starts a timer; a
   // second click inside the window cancels the timer and runs the
@@ -119,6 +130,76 @@ export function ValueChain({
     for (const q of quotes) m.set(q.symbol.toUpperCase(), q)
     return m
   }, [quotes])
+
+  // Cashflow snapshots keyed by upper-case symbol. Fetched in bulk on mount
+  // so every tile has its KPIs ready; the scheduler broadcasts per-symbol
+  // updates via `financials:updated` which we patch into the same map. Empty
+  // snapshot entries are fine — the formatter falls through to em-dashes.
+  const [financialsMap, setFinancialsMap] = useState<Map<string, FinancialsSnapshot>>(
+    () => new Map()
+  )
+  useEffect(() => {
+    let cancelled = false
+    const symbols = [...new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))]
+    window.api.stocks
+      .getFinancialsBatch(symbols)
+      .then((snapshots) => {
+        if (cancelled) return
+        const m = new Map<string, FinancialsSnapshot>()
+        for (const s of snapshots) m.set(s.symbol.toUpperCase(), s)
+        setFinancialsMap(m)
+      })
+      .catch((err: unknown) => {
+        console.warn('[valueChain] financials batch fetch failed', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  useEffect(() => {
+    return window.api.stocks.onFinancialsUpdated((symbol) => {
+      const sym = symbol.toUpperCase()
+      window.api.stocks
+        .getFinancials(sym)
+        .then((snapshot) => {
+          setFinancialsMap((prev) => {
+            const next = new Map(prev)
+            next.set(sym, snapshot)
+            return next
+          })
+        })
+        .catch(() => {
+          /* swallow — no update just means stale data stays */
+        })
+    })
+  }, [])
+
+  // Earnings badges (next scheduled date + most-recent reported quarter end).
+  // Parallel to financialsMap — one batch fetch on mount drives the tile
+  // pulse animations + the focus-panel countdown. Yahoo's 24h TTL inside
+  // getEarnings makes this cheap even for all ~65 graph nodes, and the
+  // calendar strip warms the cache ahead of us on app boot.
+  const [earningsMap, setEarningsMap] = useState<Map<string, EarningsBadge>>(
+    () => new Map()
+  )
+  useEffect(() => {
+    let cancelled = false
+    const symbols = [...new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))]
+    window.api.stocks
+      .getEarningsBatch(symbols)
+      .then((badges) => {
+        if (cancelled) return
+        const m = new Map<string, EarningsBadge>()
+        for (const b of badges) m.set(b.symbol.toUpperCase(), b)
+        setEarningsMap(m)
+      })
+      .catch((err: unknown) => {
+        console.warn('[valueChain] earnings batch fetch failed', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const tickerBySymbol = useMemo(() => {
     const m = new Map<string, Ticker>()
@@ -336,7 +417,7 @@ export function ValueChain({
       {/* Fixed height so the panel never resizes when switching between
           tickers with different numbers of edges. Inner grid scrolls if a
           heavily-connected node's lists exceed the visible box. */}
-      <aside className="sticky top-0 z-20 -mx-6 px-6 pt-1 pb-3 mb-4 bg-surface-0/95 backdrop-blur border-b border-edge/40">
+      <aside className="sticky top-0 z-20 -mx-6 px-6 pt-1 pb-3 mb-4 bg-surface-0 border-b border-edge/40">
         <div
           className="rounded-xl border border-edge bg-gradient-to-br from-surface-1 to-surface-0 h-[240px] overflow-hidden flex flex-col relative"
           style={focusSymbol && presentCategories.length > 0 ? { boxShadow: focusBoxShadow } : undefined}
@@ -371,6 +452,7 @@ export function ValueChain({
                   >
                     {focusHeldLabel}
                   </span>
+                  <FocusEarningsPill earnings={earningsMap.get(focusSymbol!)} />
                   <span className="ml-auto text-[10px] uppercase tracking-[0.2em] text-zinc-500 shrink-0">
                     {focusEdgesOut.length + focusEdgesIn.length} links
                   </span>
@@ -388,6 +470,15 @@ export function ValueChain({
                       >
                         View diagram
                       </button>
+                      {focusCompetitors.length > 0 && (
+                        <button
+                          onClick={() => setPeerCompareSymbol(focusSymbol!)}
+                          className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-200 ring-1 ring-inset ring-orange-500/40 hover:bg-orange-500/25"
+                          title={`Compare ${focusSymbol} against ${focusCompetitors.length} competitor${focusCompetitors.length === 1 ? '' : 's'}`}
+                        >
+                          Compare peers
+                        </button>
+                      )}
                       {focusTicker.isActive ? (
                         <span
                           className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/40"
@@ -411,6 +502,10 @@ export function ValueChain({
                     <span className="text-zinc-600">No description available.</span>
                   )}
                 </p>
+                <FocusCashflowStrip
+                  financials={financialsMap.get(focusSymbol!)}
+                  earnings={earningsMap.get(focusSymbol!)}
+                />
               </header>
               <div
                 className={`relative flex-1 grid grid-cols-1 gap-4 px-4 py-3 overflow-y-auto ${
@@ -474,6 +569,8 @@ export function ValueChain({
               {nodes.map((n) => {
                 const t = tickerBySymbol.get(n.symbol.toUpperCase())
                 const q = quoteBySymbol.get(n.symbol.toUpperCase())
+                const fin = financialsMap.get(n.symbol.toUpperCase())
+                const earnings = earningsMap.get(n.symbol.toUpperCase())
                 const hasTickerRow = !!t
                 const inWatchlist = !!t && t.isActive
                 const role = related?.get(n.symbol) ?? null
@@ -486,6 +583,8 @@ export function ValueChain({
                     symbol={n.symbol}
                     companyName={t?.companyName ?? n.symbol}
                     quote={q}
+                    financials={fin}
+                    earnings={earnings}
                     hasTickerRow={hasTickerRow}
                     inWatchlist={inWatchlist}
                     focus={isFocus}
@@ -511,6 +610,23 @@ export function ValueChain({
           onClose={() => setDiagramSymbol(null)}
           onOpenTicker={(id) => {
             setDiagramSymbol(null)
+            onOpenTicker(id)
+          }}
+          onActivateTicker={onActivateTicker}
+        />
+      )}
+
+      {peerCompareSymbol && (
+        <PeerCompareModal
+          focusSymbol={peerCompareSymbol}
+          peers={[...(COMPETITOR_MAP.get(peerCompareSymbol) ?? [])].sort()}
+          tickerBySymbol={tickerBySymbol}
+          quoteBySymbol={quoteBySymbol}
+          financialsBySymbol={financialsMap}
+          earningsBySymbol={earningsMap}
+          onClose={() => setPeerCompareSymbol(null)}
+          onOpenTicker={(id) => {
+            setPeerCompareSymbol(null)
             onOpenTicker(id)
           }}
           onActivateTicker={onActivateTicker}
@@ -547,6 +663,8 @@ function ValueChainTile({
   symbol,
   companyName,
   quote,
+  financials,
+  earnings,
   hasTickerRow,
   inWatchlist,
   focus,
@@ -560,6 +678,8 @@ function ValueChainTile({
   symbol: string
   companyName: string
   quote: StockQuote | undefined
+  financials: FinancialsSnapshot | undefined
+  earnings: EarningsBadge | undefined
   hasTickerRow: boolean
   inWatchlist: boolean
   focus: boolean
@@ -607,7 +727,16 @@ function ValueChainTile({
   } else {
     tone = 'border-dashed border-edge/50 bg-surface-0 hover:border-edge/70'
   }
-  const opacity = dim ? 'opacity-25' : ''
+  // opacity-25 on top of ghost-tile styling (dark bg + faint border) made the
+  // tiles effectively invisible, so whole stage rows read as empty when the
+  // user focused a ticker unrelated to that stage. 40% keeps the "not in
+  // current subgraph" cue without swallowing the tile.
+  const opacity = dim ? 'opacity-40' : ''
+  // Earnings pulse overlay — amber halo outside the tile when earnings are
+  // within the watch window, sky-blue afterglow for ~2-6 weeks after a
+  // recent quarter end. Suppressed on dimmed tiles to avoid noise when the
+  // user is focused on a specific subgraph.
+  const pulse = dim ? null : pulseClass(pulsePhase(earnings))
 
   return (
     <button
@@ -616,7 +745,7 @@ function ValueChainTile({
       onFocus={onHover}
       onBlur={onLeave}
       onClick={onClick}
-      className={`${base} ${tone} ${opacity} cursor-pointer`}
+      className={`${base} ${tone} ${opacity} ${pulse ?? ''} cursor-pointer`}
       title={companyName}
     >
       <div className="flex items-center justify-between gap-2">
@@ -645,7 +774,153 @@ function ValueChainTile({
           </span>
         )}
       </div>
+      <TileCashflowRow financials={financials} />
     </button>
+  )
+}
+
+// Earnings countdown / afterglow pill in the focus-panel header. Colors
+// match the tile pulse classes so the two visual signals read as a pair:
+// amber when the date is coming up (matches the tile's amber halo), sky
+// when the quarter just closed (matches the afterglow). Returns null when
+// there's nothing newsworthy to show.
+function FocusEarningsPill({
+  earnings
+}: {
+  earnings: EarningsBadge | undefined
+}): JSX.Element | null {
+  const label = countdownLabel(earnings)
+  if (!label) return null
+  const phase = pulsePhase(earnings)
+  const tone =
+    phase === 'imminent'
+      ? 'bg-amber-400/20 text-amber-200 ring-1 ring-inset ring-amber-400/50'
+      : phase === 'warning'
+        ? 'bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/35'
+        : phase === 'ambient'
+          ? 'bg-amber-600/10 text-amber-300/80 ring-1 ring-inset ring-amber-600/25'
+          : phase === 'reported'
+            ? 'bg-sky-500/10 text-sky-300 ring-1 ring-inset ring-sky-500/30'
+            : 'bg-zinc-800/60 text-zinc-400'
+  return (
+    <span className={`text-[9px] uppercase tracking-[0.22em] px-2 py-0.5 rounded-full ${tone}`}>
+      {label}
+    </span>
+  )
+}
+
+// Full KPI strip rendered in the focus panel header when a tile is
+// hovered/locked. This is the denser cousin of TileCashflowRow — it surfaces
+// every metric (TTM revenue / FCF / margin + QoQ and YoY deltas) in a single
+// horizontal row so users scanning a sector can compare focus-to-focus by
+// hovering across tiles. Renders nothing when the backing snapshot is
+// missing or has no usable fields.
+function FocusCashflowStrip({
+  financials,
+  earnings
+}: {
+  financials: FinancialsSnapshot | undefined
+  earnings: EarningsBadge | undefined
+}): JSX.Element | null {
+  const hasFinancials = !!financials
+  const hasHistory = !!earnings && earnings.history.length > 0
+  if (!hasFinancials && !hasHistory) return null
+  const revenue = formatMoneyCompact(financials?.ttm.revenue ?? null)
+  const fcf = formatMoneyCompact(financials?.ttm.freeCashFlow ?? null)
+  const margin = formatPctValue(financials?.ttm.fcfMargin ?? null)
+  const qoq = formatPctDelta(financials?.qoq.revenue ?? null)
+  const yoy = formatPctDelta(financials?.yoy.revenue ?? null)
+  const marginTone = fcfMarginTone(financials?.ttm.fcfMargin ?? null)
+  const qoqTone = deltaTone(financials?.qoq.revenue ?? null)
+  const yoyTone = deltaTone(financials?.yoy.revenue ?? null)
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10.5px] tabular-nums">
+      {hasFinancials && (
+        <>
+          <KPI label="Revenue TTM" value={revenue} valueClass="text-zinc-200" />
+          <KPI label="FCF TTM" value={fcf} valueClass="text-zinc-200" />
+          <KPI
+            label="FCF margin"
+            value={margin}
+            valueClass={marginTone.color}
+            dotClass={marginTone.dot}
+          />
+          <KPI label="Rev QoQ" value={qoq} valueClass={qoqTone} />
+          <KPI label="Rev YoY" value={yoy} valueClass={yoyTone} />
+        </>
+      )}
+      <div className="ml-auto flex items-center gap-3">
+        {hasHistory && <EarningsBeatMiss history={earnings!.history} variant="strip" />}
+        {hasFinancials && (
+          <div className="flex items-center gap-1.5" title="Quarterly FCF (oldest → newest)">
+            <span className="text-[9px] uppercase tracking-[0.18em] text-zinc-500">FCF 8Q</span>
+            <FcfSparkline financials={financials} variant="strip" />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function deltaTone(ratio: number | null): string {
+  if (ratio === null) return 'text-zinc-500'
+  if (ratio > 0) return 'text-emerald-300'
+  if (ratio < 0) return 'text-red-300'
+  return 'text-zinc-300'
+}
+
+function KPI({
+  label,
+  value,
+  valueClass,
+  dotClass
+}: {
+  label: string
+  value: string | null
+  valueClass: string
+  dotClass?: string
+}): JSX.Element {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[9px] uppercase tracking-[0.18em] text-zinc-500">{label}</span>
+      {dotClass && <span className={`h-1 w-1 rounded-full ${dotClass}`} />}
+      <span className={`font-semibold ${valueClass}`}>{value ?? '—'}</span>
+    </div>
+  )
+}
+
+// Compact single-line cashflow strip under the price row. Rendered inside
+// every tile that has financials data so the value-chain grid reads as a
+// money-flow map at a glance: TTM revenue on the left, FCF margin tone on
+// the right. Private / no-data nodes simply get nothing (no empty strip).
+function TileCashflowRow({
+  financials
+}: {
+  financials: FinancialsSnapshot | undefined
+}): JSX.Element | null {
+  if (!financials) return null
+  const revenue = formatMoneyCompact(financials.ttm.revenue)
+  const marginPct = formatPctValue(financials.ttm.fcfMargin)
+  const tone = fcfMarginTone(financials.ttm.fcfMargin)
+  if (!revenue && !marginPct && financials.quarters.length === 0) return null
+  return (
+    <>
+      <div className="mt-1 flex items-center justify-between gap-2 text-[9.5px] tabular-nums">
+        <span className="text-zinc-500 truncate max-w-[120px]" title="TTM revenue">
+          {revenue ?? '—'}
+        </span>
+        <span
+          className={`inline-flex items-center gap-1 shrink-0 ${tone.color}`}
+          title={`FCF margin · ${tone.label}`}
+        >
+          <span className={`h-1 w-1 rounded-full ${tone.dot}`} />
+          {marginPct ?? '—'}
+        </span>
+      </div>
+      <div className="mt-0.5 flex justify-end" title="Quarterly FCF (oldest → newest)">
+        <FcfSparkline financials={financials} variant="tile" />
+      </div>
+    </>
   )
 }
 

@@ -43,6 +43,10 @@ import {
   stopStocksScheduler
 } from './services/stocksScheduler'
 import {
+  startFinancialsScheduler,
+  stopFinancialsScheduler
+} from './services/financialsService'
+import {
   startSportsReelScheduler,
   stopSportsReelScheduler
 } from './services/sportsReelScheduler'
@@ -550,10 +554,19 @@ app.whenReady().then(async () => {
   app.setLoginItemSettings({ openAtLogin: prefs.launchAtLogin })
   startDiscoverySchedule()
   startStocksScheduler()
+  // Quarterly cashflow/income sweeps run on a separate cadence (hours, not
+  // minutes) because statements only change on earnings. See financialsService
+  // for the staleness gate + per-tick batching.
+  startFinancialsScheduler()
   setAlertsWindowOpener(showMainWindow)
   if (prefs.favoriteTeamAlertsEnabled) startSportsAlerts()
+  // Sports reel scheduler is just an ESPN scoreboard fetcher — it has no
+  // dependency on the media pipeline (Kokoro/Piper/videoGen). Starting it
+  // unconditionally so the top sports ticker populates even with the media
+  // pipeline toggle off. `startReelScheduler()` is the actual reels pipeline
+  // and stays behind the gate.
+  startSportsReelScheduler()
   if (prefs.mediaPipelineEnabled) {
-    startSportsReelScheduler()
     startReelScheduler()
   }
   startMaintenanceSchedule()
@@ -616,6 +629,7 @@ app.on('will-quit', () => {
   stopDigestTimer()
   stopDiscoverySchedule()
   stopStocksScheduler()
+  stopFinancialsScheduler()
   stopSportsReelScheduler()
   stopSportsAlerts()
   stopReelScheduler()

@@ -281,6 +281,159 @@ export async function getFundamentals(symbol: string): Promise<Fundamentals | nu
   return value
 }
 
+// Quarterly cashflow + income statements. Pulled from the same quoteSummary
+// endpoint as fundamentals, using the cashflowStatementHistoryQuarterly and
+// incomeStatementHistoryQuarterly modules. Yahoo returns up to 4 quarters
+// per module; we align them on endDate and hand back whatever overlaps.
+//
+// Source of truth for the value-chain "cash flow" overlay — a separate
+// refresh cadence (daily-ish) lives in financialsService since these numbers
+// only change on earnings.
+export interface QuarterlyFinancialPoint {
+  endDate: number // unix ms
+  revenue: number | null
+  netIncome: number | null
+  grossProfit: number | null
+  operatingCashFlow: number | null
+  capex: number | null // raw (negative in Yahoo's convention)
+  freeCashFlow: number | null // direct from Yahoo when provided
+  currency: string | null
+}
+
+// Yahoo's cashflow row has accreted field names over the years: the legacy
+// v10 names (totalCashFromOperatingActivities, capitalExpenditures) still
+// appear for some tickers, but many modern responses return only
+// operatingCashFlow / capitalExpenditure (singular), often alongside a
+// pre-computed freeCashFlow. We read all three and fall back in that order.
+interface QuarterlyStatementsResponse {
+  quoteSummary: {
+    result:
+      | Array<{
+          cashflowStatementHistoryQuarterly?: {
+            cashflowStatements?: Array<{
+              endDate?: RawField
+              netIncome?: RawField
+              totalCashFromOperatingActivities?: RawField
+              operatingCashFlow?: RawField
+              capitalExpenditures?: RawField
+              capitalExpenditure?: RawField
+              freeCashFlow?: RawField
+            }>
+          }
+          incomeStatementHistoryQuarterly?: {
+            incomeStatementHistory?: Array<{
+              endDate?: RawField
+              totalRevenue?: RawField
+              grossProfit?: RawField
+              netIncome?: RawField
+            }>
+          }
+          price?: { currency?: string }
+        }>
+      | null
+    error: { code?: string; description?: string } | null
+  }
+}
+
+export async function getQuarterlyFinancials(
+  symbol: string
+): Promise<QuarterlyFinancialPoint[]> {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return []
+  const modules = 'cashflowStatementHistoryQuarterly,incomeStatementHistoryQuarterly,price'
+
+  const fetchOnce = async (): Promise<QuarterlyStatementsResponse> => {
+    const ok = await ensureYahooCreds()
+    if (!ok || !yahooCrumb || !yahooCookie) throw new Error('no-creds')
+    const url = `${YAHOO_QUOTE_SUMMARY}${encodeURIComponent(sym)}?modules=${modules}&crumb=${encodeURIComponent(yahooCrumb)}`
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': UA, Cookie: yahooCookie, Accept: 'application/json' },
+        signal: controller.signal
+      })
+      if (res.status === 401) {
+        yahooCookie = null
+        yahooCrumb = null
+        throw new Error('HTTP 401')
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return (await res.json()) as QuarterlyStatementsResponse
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  let json: QuarterlyStatementsResponse
+  try {
+    json = await fetchOnce()
+  } catch (err) {
+    if (err instanceof Error && err.message === 'HTTP 401') {
+      try {
+        await ensureYahooCreds(true)
+        json = await fetchOnce()
+      } catch (err2) {
+        console.warn(
+          '[yahoo] quarterly financials fetch failed:',
+          err2 instanceof Error ? err2.message : err2
+        )
+        return []
+      }
+    } else {
+      console.warn(
+        '[yahoo] quarterly financials fetch failed:',
+        err instanceof Error ? err.message : err
+      )
+      return []
+    }
+  }
+
+  const result = json.quoteSummary.result?.[0]
+  if (!result) return []
+  const cfEntries = result.cashflowStatementHistoryQuarterly?.cashflowStatements ?? []
+  const isEntries = result.incomeStatementHistoryQuarterly?.incomeStatementHistory ?? []
+  const currency = result.price?.currency ?? null
+
+  // Index income statements by endDate so we can join to cashflow rows on
+  // the same quarter boundary. Yahoo sometimes returns an extra cashflow
+  // quarter that has no matching income row (or vice versa) — we keep the
+  // union and leave the missing side null.
+  const incomeByDate = new Map<number, (typeof isEntries)[number]>()
+  for (const e of isEntries) {
+    const d = e.endDate?.raw
+    if (typeof d === 'number' && Number.isFinite(d)) incomeByDate.set(d, e)
+  }
+  const cashByDate = new Map<number, (typeof cfEntries)[number]>()
+  for (const e of cfEntries) {
+    const d = e.endDate?.raw
+    if (typeof d === 'number' && Number.isFinite(d)) cashByDate.set(d, e)
+  }
+
+  const allDates = new Set<number>([...cashByDate.keys(), ...incomeByDate.keys()])
+  const out: QuarterlyFinancialPoint[] = []
+  for (const dRaw of allDates) {
+    const income = incomeByDate.get(dRaw)
+    const cash = cashByDate.get(dRaw)
+    out.push({
+      endDate: dRaw * 1000,
+      revenue: raw(income?.totalRevenue),
+      netIncome: raw(income?.netIncome) ?? raw(cash?.netIncome),
+      grossProfit: raw(income?.grossProfit),
+      // Yahoo returns either the legacy totalCashFromOperatingActivities or
+      // the newer operatingCashFlow depending on the ticker/response — accept
+      // whichever shows up.
+      operatingCashFlow:
+        raw(cash?.operatingCashFlow) ?? raw(cash?.totalCashFromOperatingActivities),
+      capex: raw(cash?.capitalExpenditures) ?? raw(cash?.capitalExpenditure),
+      freeCashFlow: raw(cash?.freeCashFlow),
+      currency
+    })
+  }
+  out.sort((a, b) => b.endDate - a.endDate)
+  return out
+}
+
 export interface EarningsCalendar {
   symbol: string
   // Unix ms of the earliest upcoming earnings date Yahoo lists for this symbol,
@@ -301,6 +454,22 @@ interface EarningsCacheEntry {
 }
 
 const earningsCache = new Map<string, EarningsCacheEntry>()
+
+// A 404 from quoteSummary means the symbol isn't (or is no longer) a public
+// ticker — delisting, acquisition, placeholder for a private competitor in
+// the graph, etc. We cache a null-shaped EarningsCalendar under the standard
+// TTL so the ValueChain overlay doesn't re-hit Yahoo for every mount.
+function tombstoneEarnings(symbol: string): EarningsCalendar {
+  const value: EarningsCalendar = {
+    symbol,
+    nextDate: null,
+    isEstimate: false,
+    exDividendDate: null,
+    fetchedAt: Date.now()
+  }
+  earningsCache.set(symbol, { value })
+  return value
+}
 
 interface CalendarEventsResponse {
   quoteSummary: {
@@ -355,16 +524,26 @@ export async function getEarnings(symbol: string): Promise<EarningsCalendar | nu
   try {
     json = await fetchOnce()
   } catch (err) {
-    if (err instanceof Error && err.message === 'HTTP 401') {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg === 'HTTP 401') {
       try {
         await ensureYahooCreds(true)
         json = await fetchOnce()
       } catch (err2) {
-        console.warn('[yahoo] earnings fetch failed:', err2 instanceof Error ? err2.message : err2)
+        const msg2 = err2 instanceof Error ? err2.message : String(err2)
+        if (msg2 === 'HTTP 404') {
+          return tombstoneEarnings(sym)
+        }
+        console.warn('[yahoo] earnings fetch failed:', msg2)
         return cached?.value ?? null
       }
+    } else if (msg === 'HTTP 404') {
+      // Delisted / merged / private — Yahoo has no row for this symbol.
+      // Tombstone it so ValueChain doesn't re-hammer quoteSummary on every
+      // mount; JNPR post-HPE acquisition is the canonical example here.
+      return tombstoneEarnings(sym)
     } else {
-      console.warn('[yahoo] earnings fetch failed:', err instanceof Error ? err.message : err)
+      console.warn('[yahoo] earnings fetch failed:', msg)
       return cached?.value ?? null
     }
   }
@@ -397,5 +576,143 @@ export async function getEarnings(symbol: string): Promise<EarningsCalendar | nu
     fetchedAt: Date.now()
   }
   earningsCache.set(sym, { value })
+  return value
+}
+
+// Quarterly earnings beat/miss history — Yahoo's earningsHistory module
+// returns the last ~4 reported quarters with actual vs estimate EPS and a
+// precomputed surprise percentage. We keep raw actual/estimate too so the
+// renderer can re-derive the delta or surface the absolute EPS if it wants
+// to, and expose `quarter` (unix ms of the period end) for ordering +
+// join-by-date with the local financials table.
+export interface EarningsQuarterResult {
+  quarter: number // unix ms of quarter-end
+  period: string // Yahoo's "-1q", "-2q", ... tag — preserved for debugging
+  epsActual: number | null
+  epsEstimate: number | null
+  // Yahoo's surprise % comes as a decimal ratio (0.05 = +5%), which matches
+  // our other ratio fields (fcfMargin, qoq, yoy). Null when Yahoo didn't
+  // include a surprise for the quarter (often the oldest entry).
+  surprisePct: number | null
+}
+
+export interface EarningsHistory {
+  symbol: string
+  quarters: EarningsQuarterResult[] // most-recent first
+  fetchedAt: number
+}
+
+interface EarningsHistoryCacheEntry {
+  value: EarningsHistory
+}
+
+const earningsHistoryCache = new Map<string, EarningsHistoryCacheEntry>()
+
+interface EarningsHistoryResponse {
+  quoteSummary: {
+    result:
+      | Array<{
+          earningsHistory?: {
+            history?: Array<{
+              epsActual?: RawField
+              epsEstimate?: RawField
+              epsDifference?: RawField
+              surprisePercent?: RawField
+              quarter?: RawField
+              period?: string
+            }>
+          }
+        }>
+      | null
+    error: { code?: string; description?: string } | null
+  }
+}
+
+function tombstoneEarningsHistory(symbol: string): EarningsHistory {
+  const value: EarningsHistory = {
+    symbol,
+    quarters: [],
+    fetchedAt: Date.now()
+  }
+  earningsHistoryCache.set(symbol, { value })
+  return value
+}
+
+export async function getEarningsHistory(symbol: string): Promise<EarningsHistory | null> {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return null
+  const cached = earningsHistoryCache.get(sym)
+  if (cached && Date.now() - cached.value.fetchedAt < EARNINGS_TTL_MS) {
+    return cached.value
+  }
+
+  const modules = 'earningsHistory'
+  const fetchOnce = async (): Promise<EarningsHistoryResponse> => {
+    const ok = await ensureYahooCreds()
+    if (!ok || !yahooCrumb || !yahooCookie) throw new Error('no-creds')
+    const url = `${YAHOO_QUOTE_SUMMARY}${encodeURIComponent(sym)}?modules=${modules}&crumb=${encodeURIComponent(yahooCrumb)}`
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': UA, Cookie: yahooCookie, Accept: 'application/json' },
+        signal: controller.signal
+      })
+      if (res.status === 401) {
+        yahooCookie = null
+        yahooCrumb = null
+        throw new Error('HTTP 401')
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return (await res.json()) as EarningsHistoryResponse
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  let json: EarningsHistoryResponse
+  try {
+    json = await fetchOnce()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg === 'HTTP 401') {
+      try {
+        await ensureYahooCreds(true)
+        json = await fetchOnce()
+      } catch (err2) {
+        const msg2 = err2 instanceof Error ? err2.message : String(err2)
+        if (msg2 === 'HTTP 404') return tombstoneEarningsHistory(sym)
+        console.warn('[yahoo] earnings history fetch failed:', msg2)
+        return cached?.value ?? null
+      }
+    } else if (msg === 'HTTP 404') {
+      return tombstoneEarningsHistory(sym)
+    } else {
+      console.warn('[yahoo] earnings history fetch failed:', msg)
+      return cached?.value ?? null
+    }
+  }
+
+  const rows = json.quoteSummary.result?.[0]?.earningsHistory?.history ?? []
+  const quarters: EarningsQuarterResult[] = []
+  for (const row of rows) {
+    const qRaw = row.quarter?.raw
+    if (typeof qRaw !== 'number' || !Number.isFinite(qRaw)) continue
+    quarters.push({
+      quarter: qRaw * 1000,
+      period: row.period ?? '',
+      epsActual: raw(row.epsActual),
+      epsEstimate: raw(row.epsEstimate),
+      surprisePct: raw(row.surprisePercent)
+    })
+  }
+  quarters.sort((a, b) => b.quarter - a.quarter)
+
+  const value: EarningsHistory = {
+    symbol: sym,
+    quarters,
+    fetchedAt: Date.now()
+  }
+  earningsHistoryCache.set(sym, { value })
   return value
 }

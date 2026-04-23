@@ -1,0 +1,170 @@
+// Per-quarter cashflow + income slice per ticker. Rows are upserted on
+// `(symbol, periodEnd)` so restatements from Yahoo overwrite instead of
+// accumulating. The financialsService computes TTM / QoQ / YoY on top of
+// the last N quarters read back from here.
+
+import { getDb } from './connection'
+
+export interface TickerFinancialRow {
+  symbol: string
+  periodEnd: number // unix ms — quarter end date
+  periodType: 'Q'
+  revenue: number | null
+  operatingCashFlow: number | null
+  capex: number | null // absolute value (Yahoo reports negative)
+  freeCashFlow: number | null // OCF - |capex|
+  netIncome: number | null
+  grossProfit: number | null
+  currency: string | null
+  fetchedAt: number
+}
+
+interface RawRow {
+  symbol: string
+  periodEnd: number
+  periodType: string
+  revenue: number | null
+  operatingCashFlow: number | null
+  capex: number | null
+  freeCashFlow: number | null
+  netIncome: number | null
+  grossProfit: number | null
+  currency: string | null
+  fetchedAt: number
+}
+
+function hydrate(row: RawRow): TickerFinancialRow {
+  return {
+    symbol: row.symbol,
+    periodEnd: row.periodEnd,
+    periodType: (row.periodType as 'Q') ?? 'Q',
+    revenue: row.revenue,
+    operatingCashFlow: row.operatingCashFlow,
+    capex: row.capex,
+    freeCashFlow: row.freeCashFlow,
+    netIncome: row.netIncome,
+    grossProfit: row.grossProfit,
+    currency: row.currency,
+    fetchedAt: row.fetchedAt
+  }
+}
+
+export interface UpsertFinancialInput {
+  symbol: string
+  periodEnd: number
+  revenue: number | null
+  operatingCashFlow: number | null
+  capex: number | null
+  // Direct Yahoo-provided FCF when the modern cashflow schema returns it. We
+  // prefer this over OCF - |capex| because Yahoo sometimes populates only the
+  // pre-computed field and leaves the derivation inputs null.
+  freeCashFlow?: number | null
+  netIncome: number | null
+  grossProfit: number | null
+  currency: string | null
+}
+
+export function upsertQuarters(rows: UpsertFinancialInput[]): number {
+  if (rows.length === 0) return 0
+  const now = Date.now()
+  const stmt = getDb().prepare(
+    `INSERT INTO ticker_financials
+       (symbol, periodEnd, periodType, revenue, operatingCashFlow, capex,
+        freeCashFlow, netIncome, grossProfit, currency, fetchedAt)
+     VALUES
+       (@symbol, @periodEnd, 'Q', @revenue, @operatingCashFlow, @capex,
+        @freeCashFlow, @netIncome, @grossProfit, @currency, @fetchedAt)
+     ON CONFLICT(symbol, periodEnd) DO UPDATE SET
+       revenue = excluded.revenue,
+       operatingCashFlow = excluded.operatingCashFlow,
+       capex = excluded.capex,
+       freeCashFlow = excluded.freeCashFlow,
+       netIncome = excluded.netIncome,
+       grossProfit = excluded.grossProfit,
+       currency = excluded.currency,
+       fetchedAt = excluded.fetchedAt`
+  )
+  const tx = getDb().transaction((inputs: UpsertFinancialInput[]) => {
+    let count = 0
+    for (const r of inputs) {
+      const derived =
+        r.operatingCashFlow !== null && r.capex !== null
+          ? r.operatingCashFlow - Math.abs(r.capex)
+          : null
+      const fcf = r.freeCashFlow ?? derived
+      stmt.run({
+        symbol: r.symbol.toUpperCase(),
+        periodEnd: r.periodEnd,
+        revenue: r.revenue,
+        operatingCashFlow: r.operatingCashFlow,
+        capex: r.capex !== null ? Math.abs(r.capex) : null,
+        freeCashFlow: fcf,
+        netIncome: r.netIncome,
+        grossProfit: r.grossProfit,
+        currency: r.currency,
+        fetchedAt: now
+      })
+      count++
+    }
+    return count
+  })
+  return tx(rows)
+}
+
+export function getQuarters(symbol: string, limit = 8): TickerFinancialRow[] {
+  const rows = getDb()
+    .prepare<[string, number], RawRow>(
+      `SELECT symbol, periodEnd, periodType, revenue, operatingCashFlow,
+              capex, freeCashFlow, netIncome, grossProfit, currency, fetchedAt
+         FROM ticker_financials
+        WHERE symbol = ?
+        ORDER BY periodEnd DESC
+        LIMIT ?`
+    )
+    .all(symbol.toUpperCase(), limit)
+  return rows.map(hydrate)
+}
+
+// Most-recent fetchedAt across every quarter we stored for a symbol.
+// Scheduler uses this to decide whether the symbol is due for a refresh.
+export function getLastFetchedAt(symbol: string): number | null {
+  const row = getDb()
+    .prepare<[string], { fetchedAt: number | null }>(
+      `SELECT MAX(fetchedAt) AS fetchedAt
+         FROM ticker_financials
+        WHERE symbol = ?`
+    )
+    .get(symbol.toUpperCase())
+  return row?.fetchedAt ?? null
+}
+
+// Snapshot of { symbol -> last fetchedAt } so the scheduler can pick stale
+// symbols without one query per ticker. Missing symbols simply don't appear.
+export function getAllLastFetched(): Map<string, number> {
+  const rows = getDb()
+    .prepare<[], { symbol: string; fetchedAt: number }>(
+      `SELECT symbol, MAX(fetchedAt) AS fetchedAt
+         FROM ticker_financials
+        GROUP BY symbol`
+    )
+    .all()
+  const m = new Map<string, number>()
+  for (const r of rows) m.set(r.symbol, r.fetchedAt)
+  return m
+}
+
+// { symbol -> most-recent periodEnd (quarter end ms) }. Drives the value-chain
+// "just reported" detection: a periodEnd that landed within the last ~6 weeks
+// means the company has posted earnings for that quarter.
+export function getAllLastPeriodEnds(): Map<string, number> {
+  const rows = getDb()
+    .prepare<[], { symbol: string; periodEnd: number }>(
+      `SELECT symbol, MAX(periodEnd) AS periodEnd
+         FROM ticker_financials
+        GROUP BY symbol`
+    )
+    .all()
+  const m = new Map<string, number>()
+  for (const r of rows) m.set(r.symbol, r.periodEnd)
+  return m
+}

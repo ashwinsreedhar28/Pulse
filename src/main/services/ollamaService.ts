@@ -602,6 +602,101 @@ export async function suggestFeeds(
   }
 }
 
+export interface PersonalBriefInput {
+  title: string
+  body: string
+  // Matched entities from the user's Pulse (watchlist tickers, teams, geos,
+  // supply-chain neighbors). Caller provides both the label we want the model
+  // to reference and a short qualifier so the line sounds personal rather
+  // than generic.
+  matches: Array<{ label: string; detail: string }>
+}
+
+// One-sentence "why this matters to you" for the reader block. Grounded in
+// the article body + the caller-supplied match list; the model is explicitly
+// told not to invent entities outside that list. Returns null when the
+// article has no personal angle worth prose-ifying (the chips UI still shows
+// the match list — prose is the progressive enhancement, not the load-bearing
+// surface).
+export async function generatePersonalBrief(
+  input: PersonalBriefInput
+): Promise<string | null> {
+  if (!(await checkOllamaHealth())) return null
+  if (input.matches.length === 0) return null
+
+  const entityList = input.matches
+    .map((m, i) => `${i + 1}. ${m.label} — ${m.detail}`)
+    .join('\n')
+
+  const system =
+    `You write a one-sentence "why this matters to you" briefing for a news reader.\n\n` +
+    `The reader personally tracks a set of entities (stocks in a watchlist, ` +
+    `their supply-chain neighbors, favorite sports teams/athletes, tracked ` +
+    `locations). Your job is to explain in ONE short sentence, grounded in the ` +
+    `article, why this article is relevant to THIS reader.\n\n` +
+    `Rules (strict):\n` +
+    `- Exactly ONE sentence, maximum 28 words.\n` +
+    `- Ground every claim in the article's content. Do not invent facts, numbers, or causal chains.\n` +
+    `- Reference 1 or at most 2 of the supplied matched entities by the exact label provided. Do not introduce entities that are not in the list.\n` +
+    `- Frame it as personal: use "your watchlist X" or "your tracked Y" phrasing when natural. Do not address the reader directly with "you should".\n` +
+    `- No preamble ("This article..."), no meta-commentary, no hedging ("may", "might", "could").\n` +
+    `- If none of the matched entities is materially connected to the article's actual content, return an empty string.\n\n` +
+    `Respond JSON only: {"line":"..."}`
+
+  const user =
+    `Article title: ${input.title}\n` +
+    `Article excerpt: ${input.body.slice(0, 2200)}\n\n` +
+    `Matched entities the reader tracks:\n${entityList}`
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    let res: Response
+    try {
+      res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user }
+          ],
+          stream: false,
+          format: 'json',
+          // Tight cap — the payload is a single sentence. Low temperature
+          // because we want the model to stay literal to the article, not
+          // get creative.
+          options: { num_predict: 160, temperature: 0.2 }
+        }),
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!res.ok) {
+      emitHealth(false)
+      return null
+    }
+    const body = (await res.json()) as { message?: { content?: string } }
+    const content = body.message?.content
+    if (!content) return null
+    const parsed = JSON.parse(content) as { line?: unknown }
+    const line = typeof parsed.line === 'string' ? parsed.line.trim() : ''
+    emitHealth(true)
+    if (line.length === 0) return null
+    // Strip quotes the model occasionally wraps around the sentence.
+    return line.replace(/^["“]+|["”]+$/g, '').trim() || null
+  } catch (err) {
+    console.warn(
+      '[ollama] generatePersonalBrief failed:',
+      err instanceof Error ? err.message : err
+    )
+    emitHealth(false)
+    return null
+  }
+}
+
 export interface TickerSummaryInput {
   symbol: string
   companyName: string

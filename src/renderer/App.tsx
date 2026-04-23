@@ -9,6 +9,7 @@ import { CalendarStrip } from './components/CalendarStrip'
 import { ExternalReader } from './components/ExternalReader'
 import { ValueChain } from './components/ValueChain'
 import { StockValueChainCard } from './components/StockValueChainCard'
+import { WhyThisMatters } from './components/WhyThisMatters'
 import {
   ScoreFlourish,
   sportForLeagueId,
@@ -2361,6 +2362,20 @@ function ReaderView({
   loading: boolean
   onRetry: () => void
 }): JSX.Element {
+  // Plain-text body for the relevance matcher. Stripping inside the renderer
+  // (where we already parse the HTML for display) is cheaper than shipping
+  // the raw HTML through IPC and stripping it main-side again. We cap at
+  // 4000 chars — the matcher only needs enough context to catch an entity
+  // mention, and the Ollama prompt truncates to 2400 anyway.
+  const readerBodyText = useMemo<string | null>(() => {
+    const html = reader?.contentHTML
+    if (!html) return null
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const text = (doc.body?.textContent ?? '').replace(/\s+/g, ' ').trim()
+    if (!text) return null
+    return text.slice(0, 4000)
+  }, [reader?.contentHTML])
+
   if (loading && !reader) {
     return (
       <div className="flex-1 min-h-0 flex items-center justify-center text-sm text-zinc-500">
@@ -2400,6 +2415,12 @@ function ReaderView({
           {reader.title ?? article.title}
         </h1>
         {reader.byline && <div className="text-sm text-zinc-400 mb-8">{reader.byline}</div>}
+        <WhyThisMatters
+          articleId={article.id}
+          title={article.title}
+          summary={article.summary}
+          body={readerBodyText}
+        />
         <div
           className="reader-content text-[15.5px] leading-[1.75] text-zinc-200"
           dangerouslySetInnerHTML={{ __html: reader.contentHTML ?? '' }}

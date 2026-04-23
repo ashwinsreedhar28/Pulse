@@ -326,6 +326,52 @@ export interface CompanyProfile {
   generatedAt: number
 }
 
+// Quarterly cashflow + income snapshot for the value-chain overlay. `ttm`
+// rolls the last 4 quarters; `qoq` / `yoy` are point-in-time deltas against
+// the most-recent quarter. All money values are raw dollars (not billions).
+export interface FinancialQuarter {
+  periodEnd: number
+  revenue: number | null
+  operatingCashFlow: number | null
+  capex: number | null
+  freeCashFlow: number | null
+  netIncome: number | null
+  grossProfit: number | null
+}
+
+export interface FinancialsSnapshot {
+  symbol: string
+  currency: string | null
+  quarters: FinancialQuarter[]
+  ttm: {
+    revenue: number | null
+    freeCashFlow: number | null
+    operatingCashFlow: number | null
+    netIncome: number | null
+    fcfMargin: number | null
+    ocfMargin: number | null
+  }
+  qoq: { revenue: number | null; freeCashFlow: number | null }
+  yoy: { revenue: number | null; freeCashFlow: number | null }
+  fetchedAt: number | null
+}
+
+export interface EarningsHistoryQuarter {
+  quarter: number
+  epsActual: number | null
+  epsEstimate: number | null
+  surprisePct: number | null
+}
+
+export interface EarningsBadge {
+  symbol: string
+  nextDate: number | null
+  isEstimate: boolean
+  lastReportEnd: number | null
+  history: EarningsHistoryQuarter[]
+  fetchedAt: number | null
+}
+
 export interface SportsLeague {
   id: string
   name: string
@@ -433,6 +479,47 @@ export interface SmartLookup {
   sourceURL: string | null
   thumbnailURL: string | null
   createdAt: number
+}
+
+// "Why this matters to you" — reader sidebar that grounds an article against
+// the user's watchlist, value-chain graph, favorite teams/athletes, and
+// tracked geos. Matches compute synchronously; the prose summary is generated
+// by Ollama in the background and pushed via `relevance:updated`.
+export type PersonalMatchKind =
+  | 'ticker-direct'
+  | 'ticker-indirect'
+  | 'team'
+  | 'athlete'
+  | 'geo'
+
+export type RelevanceStatus =
+  | 'no_matches'
+  | 'ready'
+  | 'offline'
+  | 'pending'
+  | 'error'
+
+export interface PersonalMatch {
+  kind: PersonalMatchKind
+  label: string
+  detail: string
+  symbol?: string
+  relatedSymbol?: string
+  relation?: 'supplier' | 'customer' | 'competitor'
+}
+
+export interface RelevanceRequestInput {
+  articleId: number
+  title: string
+  summary: string | null
+  body?: string | null
+}
+
+export interface RelevanceResponse {
+  articleId: number
+  matches: PersonalMatch[]
+  summary: string | null
+  status: RelevanceStatus
 }
 
 export interface FeedFinderCandidate {
@@ -773,6 +860,17 @@ const api = {
     smartLookup: (term: string, context?: string) =>
       invoke<SmartLookup | null>('reader:smartLookup', term, context)
   },
+  relevance: {
+    get: (input: RelevanceRequestInput) =>
+      invoke<RelevanceResponse>('relevance:get', input),
+    onUpdated: (cb: (payload: RelevanceResponse) => void): (() => void) => {
+      const listener = (_e: unknown, payload: RelevanceResponse): void => cb(payload)
+      ipcRenderer.on('relevance:updated', listener)
+      return (): void => {
+        ipcRenderer.off('relevance:updated', listener)
+      }
+    }
+  },
   ipo: {
     getBrief: (input: { symbol: string; companyName: string }) =>
       invoke<ReaderResult>('ipo:getBrief', input)
@@ -807,11 +905,28 @@ const api = {
       invoke<CompanyProfile | null>('stocks:ensureCompanyProfile', symbol, companyName),
     regenerateCompanyProfile: (symbol: string, companyName: string) =>
       invoke<CompanyProfile | null>('stocks:regenerateCompanyProfile', symbol, companyName),
+    getFinancials: (symbol: string) =>
+      invoke<FinancialsSnapshot>('stocks:getFinancials', symbol),
+    getFinancialsBatch: (symbols: string[]) =>
+      invoke<FinancialsSnapshot[]>('stocks:getFinancialsBatch', symbols),
+    refreshFinancials: (symbol: string) =>
+      invoke<FinancialsSnapshot>('stocks:refreshFinancials', symbol),
+    getEarnings: (symbol: string) =>
+      invoke<EarningsBadge>('stocks:getEarnings', symbol),
+    getEarningsBatch: (symbols: string[]) =>
+      invoke<EarningsBadge[]>('stocks:getEarningsBatch', symbols),
     onUpdated: (cb: (quotes: StockQuote[]) => void): (() => void) => {
       const listener = (_e: unknown, quotes: StockQuote[]): void => cb(quotes)
       ipcRenderer.on('stocks:updated', listener)
       return (): void => {
         ipcRenderer.off('stocks:updated', listener)
+      }
+    },
+    onFinancialsUpdated: (cb: (symbol: string) => void): (() => void) => {
+      const listener = (_e: unknown, symbol: string): void => cb(symbol)
+      ipcRenderer.on('financials:updated', listener)
+      return (): void => {
+        ipcRenderer.off('financials:updated', listener)
       }
     }
   },

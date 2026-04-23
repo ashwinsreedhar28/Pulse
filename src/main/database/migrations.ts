@@ -687,5 +687,74 @@ export const migrations: Migration[] = [
          VALUES ('XNDU', 'Xanadu', 'Quantum Computing', 'Photonic Quantum', 0, ?)`
       ).run(Date.now())
     }
+  },
+  {
+    version: 27,
+    name: 'create article_relevance table for "Why this matters to you"',
+    // Caches the personal-relevance briefing shown above the reader article
+    // body. Each row pairs an article with the user's matched entities
+    // (watchlist tickers, supply-chain neighbors, favorite teams/athletes,
+    // tracked geos) and an Ollama-written one-sentence prose hook.
+    //
+    // Status field distinguishes the three terminal states so the renderer
+    // can decide what to show:
+    //   no_matches — article has no personal angle; row exists so we don't
+    //                re-scan on reopen.
+    //   ready      — summary present (Ollama succeeded).
+    //   offline    — matches present, summary null (Ollama unreachable at
+    //                compute time; a later reopen while Ollama is up will
+    //                retry).
+    //   pending    — matching done, summary request in flight (transient).
+    //   error      — matching ran but the summary attempt produced an
+    //                unexpected failure (non-network). Chips still shown.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS article_relevance (
+          articleId INTEGER PRIMARY KEY REFERENCES articles(id) ON DELETE CASCADE,
+          matchesJson TEXT NOT NULL,
+          summary TEXT,
+          status TEXT NOT NULL,
+          computedAt INTEGER NOT NULL,
+          summaryGeneratedAt INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_article_relevance_status
+          ON article_relevance(status);
+      `)
+    }
+  },
+  {
+    version: 28,
+    name: 'create ticker_financials for quarterly cashflow + income',
+    // Per-quarter income + cashflow slice for every ticker (watchlist or
+    // passive graph node). Powers the value-chain "cash flow" overlay: each
+    // node surfaces TTM revenue, FCF margin, and QoQ deltas so the graph
+    // reads as a money-flow map instead of a static org chart.
+    //
+    // One row per (symbol, periodEnd) — the composite PK guarantees we
+    // overwrite on re-fetch instead of accumulating duplicates when Yahoo
+    // restates a prior quarter. Keep quarters sparse: we never need more
+    // than 8 back for TTM/YoY math.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ticker_financials (
+          symbol TEXT NOT NULL,
+          periodEnd INTEGER NOT NULL,
+          periodType TEXT NOT NULL DEFAULT 'Q',
+          revenue REAL,
+          operatingCashFlow REAL,
+          capex REAL,
+          freeCashFlow REAL,
+          netIncome REAL,
+          grossProfit REAL,
+          currency TEXT,
+          fetchedAt INTEGER NOT NULL,
+          PRIMARY KEY (symbol, periodEnd)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ticker_financials_symbol
+          ON ticker_financials(symbol);
+        CREATE INDEX IF NOT EXISTS idx_ticker_financials_fetchedAt
+          ON ticker_financials(fetchedAt);
+      `)
+    }
   }
 ]

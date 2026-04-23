@@ -854,9 +854,16 @@ function extractGameDetail(
 
   const stats: GameDetailStat[] = []
   const teams = summary.boxscore?.teams ?? []
-  const homeTeam = teams.find((t) => t.team?.homeAway === 'home') ?? teams[0]
-  const awayTeam = teams.find((t) => t.team?.homeAway === 'away') ?? teams[1]
-  if (homeTeam && awayTeam) {
+  // ESPN emits `homeAway` at the top level of a boxscore-team for some leagues
+  // (NFL/MLB) and on the nested `team` object for others (NBA/NHL). Checking
+  // only one location silently misses half the leagues and falls back to
+  // teams[0]/teams[1], whose order isn't guaranteed — which swapped the home
+  // and away columns on the game detail page for the mis-ordered leagues.
+  const sideOf = (t: (typeof teams)[number]): string | undefined =>
+    t.homeAway ?? t.team?.homeAway
+  const homeTeam = teams.find((t) => sideOf(t) === 'home') ?? teams[0]
+  const awayTeam = teams.find((t) => sideOf(t) === 'away') ?? teams[1]
+  if (homeTeam && awayTeam && homeTeam !== awayTeam) {
     const homeStats = homeTeam.statistics ?? []
     const awayStats = awayTeam.statistics ?? []
     const labels = new Set<string>()
