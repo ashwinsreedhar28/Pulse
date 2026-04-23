@@ -51,6 +51,10 @@ import {
   stopEstimatesScheduler
 } from './services/analystEstimatesService'
 import {
+  startSecFilingsScheduler,
+  stopSecFilingsScheduler
+} from './services/secFilingsService'
+import {
   startSportsReelScheduler,
   stopSportsReelScheduler
 } from './services/sportsReelScheduler'
@@ -566,6 +570,10 @@ app.whenReady().then(async () => {
   // on its own slow cadence — weekly per-symbol refresh; nothing user-visible
   // changes more often than that.
   startEstimatesScheduler()
+  // SEC EDGAR filings feed — 8-K / 10-Q / Form 4 / etc. per watchlist ticker.
+  // CIK map refreshes monthly, filings per-symbol daily. Separate scheduler
+  // because SEC has a different rate-limit regime than Yahoo.
+  startSecFilingsScheduler()
   setAlertsWindowOpener(showMainWindow)
   if (prefs.favoriteTeamAlertsEnabled) startSportsAlerts()
   // Sports reel scheduler is just an ESPN scoreboard fetcher — it has no
@@ -639,6 +647,7 @@ app.on('will-quit', () => {
   stopStocksScheduler()
   stopFinancialsScheduler()
   stopEstimatesScheduler()
+  stopSecFilingsScheduler()
   stopSportsReelScheduler()
   stopSportsAlerts()
   stopReelScheduler()

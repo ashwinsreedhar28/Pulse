@@ -25,6 +25,16 @@ import {
   getEstimatesSnapshot,
   getEstimatesSnapshotsForSymbols
 } from '../services/analystEstimatesService'
+import { forceRefreshFilings } from '../services/secFilingsService'
+import {
+  getFilingsForSymbol,
+  getRecentFilingsForSymbols
+} from '../database/secFilings'
+import {
+  buildFilingUrl,
+  buildPrimaryDocUrl,
+  INTERESTING_FORMS
+} from '../services/secService'
 import {
   ensureCompanyProfile,
   getCompanyProfile,
@@ -192,6 +202,11 @@ export function registerDbIpc(): void {
     // Fire-and-forget profile warm-up so opening the new ticker's detail page
     // doesn't hit the cold path.
     void ensureCompanyProfile(t.symbol, t.companyName ?? t.symbol)
+    // Filings + analyst estimates warm-up — both are per-watchlist and have
+    // multi-hour staleness gates, so we kick an immediate refresh here so
+    // the detail page has data to render on first open.
+    void forceRefreshFilings(t.symbol)
+    void forceRefreshEstimates(t.symbol)
     // Personal-relevance cache keys off the watchlist, so any mutation
     // there must blow it away — otherwise cached "Why this matters" rows
     // miss the newly added ticker.
@@ -220,6 +235,8 @@ export function registerDbIpc(): void {
     void classifyAllArticlesForTicker(t).finally(() => refreshTickerSummary(t.id))
     void pollAllFeeds({ force: true })
     void ensureCompanyProfile(t.symbol, t.companyName ?? t.symbol)
+    void forceRefreshFilings(t.symbol)
+    void forceRefreshEstimates(t.symbol)
     invalidateAllRelevance()
     return t
   })
@@ -346,6 +363,44 @@ export function registerDbIpc(): void {
   ipcMain.handle('stocks:refreshEstimates', (_e, symbol: string) =>
     forceRefreshEstimates(symbol)
   )
+  // SEC EDGAR filings. Per-symbol list (ticker detail page), batch-recent
+  // (value-chain "new 8-K" badges), and a force-refresh hook for promotion
+  // flows that can't wait for the daily sweep.
+  ipcMain.handle(
+    'sec:getFilings',
+    (_e, symbol: string, limit?: number, onlyInteresting?: boolean) =>
+      getFilingsForSymbol(
+        symbol,
+        limit ?? 20,
+        onlyInteresting ? INTERESTING_FORMS : undefined
+      ).map((f) => ({
+        ...f,
+        filingUrl: buildFilingUrl(f.cik, f.accessionNumber),
+        primaryDocUrl: buildPrimaryDocUrl(f.cik, f.accessionNumber, f.primaryDocument)
+      }))
+  )
+  ipcMain.handle(
+    'sec:getRecentFilings',
+    (_e, symbols: string[], sinceMs: number, onlyInteresting?: boolean) => {
+      const map = getRecentFilingsForSymbols(
+        symbols,
+        sinceMs,
+        onlyInteresting ? INTERESTING_FORMS : undefined
+      )
+      // Serialize to a plain object for IPC; Maps survive structured clone
+      // but an object is easier to consume on the renderer side.
+      const out: Record<string, unknown[]> = {}
+      for (const [sym, filings] of map) {
+        out[sym] = filings.map((f) => ({
+          ...f,
+          filingUrl: buildFilingUrl(f.cik, f.accessionNumber),
+          primaryDocUrl: buildPrimaryDocUrl(f.cik, f.accessionNumber, f.primaryDocument)
+        }))
+      }
+      return out
+    }
+  )
+  ipcMain.handle('sec:refreshFilings', (_e, symbol: string) => forceRefreshFilings(symbol))
 
   // sports
   ipcMain.handle('sports:listLeagues', () => listLeagues())

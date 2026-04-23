@@ -776,5 +776,47 @@ export const migrations: Migration[] = [
           ON ticker_estimates(fetchedAt);
       `)
     }
+  },
+  {
+    version: 30,
+    name: 'create sec_filings + sec_cik_map for EDGAR filings feed',
+    // sec_cik_map: one row per ticker→CIK pair. SEC publishes the full
+    // universe at www.sec.gov/files/company_tickers.json; we snapshot it
+    // monthly so the filings fetcher can translate "AAPL" → CIK 0000320193
+    // without hitting the network per request.
+    //
+    // sec_filings: one row per (symbol, accessionNumber). Accession numbers
+    // are globally unique within EDGAR so the PK doubles as a dedupe key on
+    // re-fetch. Composite index on (symbol, filedAt DESC) powers the
+    // "latest filings for this ticker" query that backs the ticker detail
+    // page and the value-chain tile's recency badge.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sec_cik_map (
+          symbol TEXT PRIMARY KEY,
+          cik TEXT NOT NULL,
+          companyName TEXT,
+          fetchedAt INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS sec_filings (
+          symbol TEXT NOT NULL,
+          accessionNumber TEXT NOT NULL,
+          cik TEXT NOT NULL,
+          formType TEXT NOT NULL,
+          filedAt INTEGER NOT NULL,
+          reportDate INTEGER,
+          primaryDocument TEXT,
+          primaryDocDescription TEXT,
+          items TEXT,
+          fetchedAt INTEGER NOT NULL,
+          PRIMARY KEY (symbol, accessionNumber)
+        );
+        CREATE INDEX IF NOT EXISTS idx_sec_filings_symbol_filedAt
+          ON sec_filings(symbol, filedAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_sec_filings_formType
+          ON sec_filings(formType);
+      `)
+    }
   }
 ]

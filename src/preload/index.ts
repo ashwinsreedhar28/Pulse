@@ -406,6 +406,24 @@ export interface AnalystEstimates {
   fetchedAt: number
 }
 
+// SEC EDGAR filing record. Dates are unix ms. filingUrl is the accession
+// index page; primaryDocUrl is the main document (10-K, 8-K body, etc.).
+export interface SecFiling {
+  symbol: string
+  accessionNumber: string
+  cik: string
+  formType: string
+  filedAt: number
+  reportDate: number | null
+  primaryDocument: string | null
+  primaryDocDescription: string | null
+  // Comma-separated list of 8-K item codes (e.g. "2.02,9.01" for earnings
+  // release + exhibits). Null for non-8-K forms.
+  items: string | null
+  filingUrl: string
+  primaryDocUrl: string
+}
+
 export interface SportsLeague {
   id: string
   name: string
@@ -974,6 +992,25 @@ const api = {
       ipcRenderer.on('estimates:updated', listener)
       return (): void => {
         ipcRenderer.off('estimates:updated', listener)
+      }
+    }
+  },
+  sec: {
+    getFilings: (symbol: string, limit?: number, onlyInteresting?: boolean) =>
+      invoke<SecFiling[]>('sec:getFilings', symbol, limit, onlyInteresting),
+    getRecentFilings: (symbols: string[], sinceMs: number, onlyInteresting?: boolean) =>
+      invoke<Record<string, SecFiling[]>>(
+        'sec:getRecentFilings',
+        symbols,
+        sinceMs,
+        onlyInteresting
+      ),
+    refreshFilings: (symbol: string) => invoke<number | null>('sec:refreshFilings', symbol),
+    onUpdated: (cb: (symbol: string) => void): (() => void) => {
+      const listener = (_e: unknown, symbol: string): void => cb(symbol)
+      ipcRenderer.on('secFilings:updated', listener)
+      return (): void => {
+        ipcRenderer.off('secFilings:updated', listener)
       }
     }
   },

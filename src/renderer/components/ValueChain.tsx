@@ -3,6 +3,7 @@ import type {
   AnalystEstimates,
   EarningsBadge,
   FinancialsSnapshot,
+  SecFiling,
   StockQuote,
   Ticker
 } from '../../preload'
@@ -247,6 +248,53 @@ export function ValueChain({
         })
         .catch(() => {
           /* swallow — stale data stays */
+        })
+    })
+  }, [])
+
+  // Recent SEC filings (last 72h) — powers the 📄 badge on value-chain tiles
+  // to flag "something just got filed here". Only tickers with interesting
+  // forms in the window come back, so non-watchlist graph nodes won't appear
+  // here until they have cached filings.
+  const [recentFilingsMap, setRecentFilingsMap] = useState<Map<string, SecFiling[]>>(
+    () => new Map()
+  )
+  useEffect(() => {
+    let cancelled = false
+    const symbols = [...new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))]
+    const since = Date.now() - 72 * 60 * 60 * 1000
+    window.api.sec
+      .getRecentFilings(symbols, since, true)
+      .then((obj) => {
+        if (cancelled) return
+        const m = new Map<string, SecFiling[]>()
+        for (const sym of Object.keys(obj)) m.set(sym.toUpperCase(), obj[sym])
+        setRecentFilingsMap(m)
+      })
+      .catch((err: unknown) => {
+        console.warn('[valueChain] recent filings batch fetch failed', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  useEffect(() => {
+    return window.api.sec.onUpdated((symbol) => {
+      const sym = symbol.toUpperCase()
+      const since = Date.now() - 72 * 60 * 60 * 1000
+      window.api.sec
+        .getFilings(sym, 10, true)
+        .then((filings) => {
+          const recent = filings.filter((f) => f.filedAt >= since)
+          setRecentFilingsMap((prev) => {
+            const next = new Map(prev)
+            if (recent.length === 0) next.delete(sym)
+            else next.set(sym, recent)
+            return next
+          })
+        })
+        .catch(() => {
+          /* swallow — stale badge state is harmless */
         })
     })
   }, [])
@@ -625,6 +673,7 @@ export function ValueChain({
                 const q = quoteBySymbol.get(n.symbol.toUpperCase())
                 const fin = financialsMap.get(n.symbol.toUpperCase())
                 const earnings = earningsMap.get(n.symbol.toUpperCase())
+                const recentFilings = recentFilingsMap.get(n.symbol.toUpperCase())
                 const hasTickerRow = !!t
                 const inWatchlist = !!t && t.isActive
                 const role = related?.get(n.symbol) ?? null
@@ -639,6 +688,7 @@ export function ValueChain({
                     quote={q}
                     financials={fin}
                     earnings={earnings}
+                    recentFilings={recentFilings}
                     hasTickerRow={hasTickerRow}
                     inWatchlist={inWatchlist}
                     focus={isFocus}
@@ -720,6 +770,7 @@ function ValueChainTile({
   quote,
   financials,
   earnings,
+  recentFilings,
   hasTickerRow,
   inWatchlist,
   focus,
@@ -735,6 +786,7 @@ function ValueChainTile({
   quote: StockQuote | undefined
   financials: FinancialsSnapshot | undefined
   earnings: EarningsBadge | undefined
+  recentFilings: SecFiling[] | undefined
   hasTickerRow: boolean
   inWatchlist: boolean
   focus: boolean
@@ -804,7 +856,12 @@ function ValueChainTile({
       title={companyName}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className={`text-[13px] font-bold tracking-[0.04em] ${symbolColor}`}>{symbol}</span>
+        <div className="flex items-center gap-1 min-w-0">
+          <span className={`text-[13px] font-bold tracking-[0.04em] ${symbolColor}`}>{symbol}</span>
+          {recentFilings && recentFilings.length > 0 && (
+            <FilingBadge filings={recentFilings} />
+          )}
+        </div>
         {hasTickerRow ? (
           <span className={`text-[10px] font-semibold tabular-nums ${color}`}>
             {changePct !== null
@@ -914,6 +971,37 @@ function FocusCashflowStrip({
         )}
       </div>
     </div>
+  )
+}
+
+// Recent-filing badge that sits next to the ticker symbol on the tile. The
+// count chip reads "2 filings in the last 72h"; the glyph is a tiny document
+// icon so the badge scans as "something landed here" without taking up
+// horizontal space. Title hover exposes the form types so users can tell an
+// 8-K/earnings release from a routine Form 4 at a glance.
+function FilingBadge({ filings }: { filings: SecFiling[] }): JSX.Element {
+  const title = filings
+    .slice(0, 6)
+    .map((f) => {
+      const d = new Date(f.filedAt).toISOString().slice(0, 10)
+      return `${d} · ${f.formType}${f.items ? ` (${f.items})` : ''}`
+    })
+    .join('\n')
+  const label = filings.length > 1 ? `${filings.length}` : null
+  // 8-K is the spicy one — anything else (Form 4 insider txns, proxy, etc.)
+  // gets a quieter zinc treatment.
+  const has8K = filings.some((f) => f.formType.startsWith('8-K'))
+  const tone = has8K
+    ? 'bg-sky-500/15 text-sky-200 ring-1 ring-inset ring-sky-500/40'
+    : 'bg-zinc-700/60 text-zinc-300 ring-1 ring-inset ring-zinc-600/60'
+  return (
+    <span
+      className={`shrink-0 inline-flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] px-1 py-0.5 rounded ${tone}`}
+      title={`Filed in last 72h\n${title}`}
+    >
+      <span aria-hidden>§</span>
+      {label}
+    </span>
   )
 }
 

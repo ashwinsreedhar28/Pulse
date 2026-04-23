@@ -9,6 +9,7 @@ import { CalendarStrip } from './components/CalendarStrip'
 import { ExternalReader } from './components/ExternalReader'
 import { ValueChain } from './components/ValueChain'
 import { StockValueChainCard } from './components/StockValueChainCard'
+import { SecFilingsSection } from './components/SecFilingsSection'
 import { WhyThisMatters } from './components/WhyThisMatters'
 import {
   ScoreFlourish,
@@ -3435,6 +3436,8 @@ function StockDetail({
           )}
 
           <StockValueChainCard symbol={ticker.symbol} tickers={tickers} />
+
+          <SecFilingsSection symbol={ticker.symbol} />
 
           {!ticker.isActive ? (
             <section className="mt-6 rounded-2xl border border-dashed border-edge/70 bg-surface-1 p-5">
