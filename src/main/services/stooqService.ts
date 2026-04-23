@@ -22,6 +22,20 @@ export interface StockQuote {
   changePct: number | null
   volume: number | null
   time: string | null
+  // Extended-session overlay from Yahoo's chart endpoint. Stooq doesn't
+  // publish pre/post prints, so these fields hold the "right-now" price
+  // during 4am–9:30am and 4pm–8pm ET windows. Deltas are vs the regular-
+  // session close (Stooq `price`) so the UI can render "AH +0.42 (+0.8%)".
+  postMarketPrice: number | null
+  postMarketChange: number | null
+  postMarketChangePct: number | null
+  preMarketPrice: number | null
+  preMarketChange: number | null
+  preMarketChangePct: number | null
+  // Current trading session per Yahoo's clock: 'pre', 'regular', 'post',
+  // 'closed'. Null when the Yahoo overlay failed for this symbol — the UI
+  // falls back to showing just the Stooq regular-session price.
+  marketState: 'pre' | 'regular' | 'post' | 'closed' | null
 }
 
 interface CacheEntry {
@@ -98,7 +112,14 @@ function nullQuote(symbol: string): StockQuote {
     change: null,
     changePct: null,
     volume: null,
-    time: null
+    time: null,
+    postMarketPrice: null,
+    postMarketChange: null,
+    postMarketChangePct: null,
+    preMarketPrice: null,
+    preMarketChange: null,
+    preMarketChangePct: null,
+    marketState: null
   }
 }
 
@@ -129,7 +150,16 @@ function parseCsv(body: string, requested: string[]): StockQuote[] {
       change,
       changePct,
       volume,
-      time: date && date !== 'N/D' ? `${date} ${time}` : null
+      time: date && date !== 'N/D' ? `${date} ${time}` : null,
+      // Extended-session fields populated later by the scheduler when it
+      // merges the Yahoo chart overlay. Stooq-only path leaves them null.
+      postMarketPrice: null,
+      postMarketChange: null,
+      postMarketChangePct: null,
+      preMarketPrice: null,
+      preMarketChange: null,
+      preMarketChangePct: null,
+      marketState: null
     })
   }
   return requested.map((s) => bySymbol.get(s) ?? nullQuote(s))

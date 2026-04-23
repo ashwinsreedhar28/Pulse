@@ -1145,11 +1145,19 @@ function StockTickerItem({
   const arrow = up ? '▲' : down ? '▼' : '·'
   const pct = quote.changePct !== null ? `${quote.changePct >= 0 ? '+' : ''}${quote.changePct.toFixed(2)}%` : '—'
   const price = quote.price !== null ? quote.price.toFixed(2) : '—'
+  // Pick the extended-session overlay that matches the current Yahoo
+  // marketState. Post-market dominates the 4-8pm window; pre-market shows
+  // in the 4-9:30am window. Skip the badge entirely during regular hours.
+  const ext = extendedOverlay(quote)
   return (
     <button
       type="button"
       onClick={onOpen}
-      title={`Open ${quote.symbol}`}
+      title={
+        ext
+          ? `${quote.symbol} · ${ext.label} ${ext.price.toFixed(2)} (${ext.pctLabel})`
+          : `Open ${quote.symbol}`
+      }
       className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors min-w-[172px]"
     >
       <span className="font-semibold tracking-[0.14em] text-zinc-100">{quote.symbol}</span>
@@ -1157,8 +1165,73 @@ function StockTickerItem({
       <span className={`tabular-nums font-semibold ${color}`}>
         {arrow} {pct}
       </span>
+      {ext && (
+        <span
+          className={`tabular-nums text-[10px] font-semibold px-1 py-0.5 rounded ${ext.tone}`}
+        >
+          {ext.label} {ext.pctLabel}
+        </span>
+      )}
     </button>
   )
+}
+
+// Row rendered under the main price on the ticker-detail header. Shows the
+// extended-session price + delta from the regular close with a tone that
+// matches the AH/PRE marquee badges. Renders nothing during regular hours
+// or for symbols that have no extended prints on file.
+function ExtendedHoursLine({
+  quote,
+  currency
+}: {
+  quote: StockQuote
+  currency: string
+}): JSX.Element | null {
+  const ext = extendedOverlay(quote)
+  if (!ext) return null
+  const up = ext.pctLabel.startsWith('+') && !ext.pctLabel.startsWith('+0.00')
+  const down = ext.pctLabel.startsWith('-')
+  const color = up ? 'text-emerald-300' : down ? 'text-red-300' : 'text-zinc-300'
+  return (
+    <div className="mt-1 flex items-center justify-end gap-2 text-[11px] tabular-nums text-zinc-400">
+      <span className="text-[9px] uppercase tracking-[0.22em] text-zinc-500">{ext.label}</span>
+      <span className="font-semibold text-zinc-100">
+        {currency}
+        {ext.price.toFixed(2)}
+      </span>
+      <span className={`font-semibold ${color}`}>{ext.pctLabel}</span>
+    </div>
+  )
+}
+
+// Resolve the extended-session overlay into a display-ready shape. Returns
+// null when the quote has no extended prints for the current session.
+function extendedOverlay(
+  quote: StockQuote
+): { label: string; price: number; pctLabel: string; tone: string } | null {
+  if (quote.marketState === 'post' && quote.postMarketPrice !== null) {
+    const pct = quote.postMarketChangePct
+    const pctLabel = pct !== null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '—'
+    const tone =
+      pct !== null && pct > 0
+        ? 'bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/40'
+        : pct !== null && pct < 0
+          ? 'bg-red-500/15 text-red-200 ring-1 ring-inset ring-red-500/40'
+          : 'bg-zinc-700/60 text-zinc-200 ring-1 ring-inset ring-zinc-600/60'
+    return { label: 'AH', price: quote.postMarketPrice, pctLabel, tone }
+  }
+  if (quote.marketState === 'pre' && quote.preMarketPrice !== null) {
+    const pct = quote.preMarketChangePct
+    const pctLabel = pct !== null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '—'
+    const tone =
+      pct !== null && pct > 0
+        ? 'bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/40'
+        : pct !== null && pct < 0
+          ? 'bg-red-500/15 text-red-200 ring-1 ring-inset ring-red-500/40'
+          : 'bg-zinc-700/60 text-zinc-200 ring-1 ring-inset ring-zinc-600/60'
+    return { label: 'PRE', price: quote.preMarketPrice, pctLabel, tone }
+  }
+  return null
 }
 
 const FeedSource = memo(function FeedSource({ article }: { article: Article }): JSX.Element {
@@ -3329,6 +3402,7 @@ function StockDetail({
                     {quote.changePct.toFixed(2)}%) today
                   </div>
                 )}
+                {quote && <ExtendedHoursLine quote={quote} currency={currency} />}
               </div>
               {ticker.isActive ? (
                 <span

@@ -1158,3 +1158,147 @@ export async function getOptionsSnapshot(symbol: string): Promise<OptionsSnapsho
   optionsCache.set(sym, { value })
   return value
 }
+
+// ---- Extended-hours quotes ------------------------------------------------
+// Stooq's CSV endpoint locks at the 4pm ET close and doesn't publish pre- or
+// post-market prints, so the Stocks marquee looks frozen from 4pm–9:30am
+// next day. Yahoo's v8 chart endpoint with `includePrePost=true` returns the
+// extended-session ticks alongside the regular session — same path we use
+// for history, so no crumb/auth friction.
+//
+// We expose a small batched helper that fans out parallel chart fetches and
+// extracts just what the live ticker UI needs: regular session close,
+// post/pre price + time, and the current market state.
+
+export type MarketState = 'pre' | 'regular' | 'post' | 'closed'
+
+export interface ExtendedQuote {
+  symbol: string
+  regularPrice: number | null
+  regularTime: number | null // unix ms of the last regular-session close
+  postPrice: number | null
+  postTime: number | null
+  prePrice: number | null
+  preTime: number | null
+  marketState: MarketState | null
+  fetchedAt: number
+}
+
+interface ExtendedChartResponse {
+  chart: {
+    result:
+      | Array<{
+          meta?: {
+            regularMarketPrice?: number
+            regularMarketTime?: number
+            chartPreviousClose?: number
+            currentTradingPeriod?: {
+              pre?: { start?: number; end?: number }
+              regular?: { start?: number; end?: number }
+              post?: { start?: number; end?: number }
+            }
+          }
+          timestamp?: number[]
+          indicators?: { quote?: Array<{ close?: Array<number | null> }> }
+        }>
+      | null
+    error: { code?: string; description?: string } | null
+  }
+}
+
+interface TradingPeriods {
+  pre?: { start?: number; end?: number }
+  regular?: { start?: number; end?: number }
+  post?: { start?: number; end?: number }
+}
+
+// Classify where `nowSec` sits against Yahoo's trading-period windows.
+// Defaults to 'closed' if the periods aren't present or if we're outside all
+// three windows (overnight lull or weekend).
+function classifyMarketState(nowSec: number, periods: TradingPeriods | undefined): MarketState {
+  if (!periods) return 'closed'
+  const { pre, regular, post } = periods
+  if (regular?.start && regular?.end && nowSec >= regular.start && nowSec < regular.end)
+    return 'regular'
+  if (pre?.start && pre?.end && nowSec >= pre.start && nowSec < pre.end) return 'pre'
+  if (post?.start && post?.end && nowSec >= post.start && nowSec < post.end) return 'post'
+  return 'closed'
+}
+
+async function fetchExtendedOne(symbol: string): Promise<ExtendedQuote | null> {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return null
+  const url = `${YAHOO_BASE}${encodeURIComponent(sym)}?interval=1m&range=1d&includePrePost=true`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+      signal: controller.signal
+    })
+    if (!res.ok) return null
+    const json = (await res.json()) as ExtendedChartResponse
+    const result = json.chart.result?.[0]
+    if (!result?.meta) return null
+    const meta = result.meta
+    const nowSec = Math.floor(Date.now() / 1000)
+    const marketState = classifyMarketState(nowSec, meta.currentTradingPeriod ?? undefined)
+
+    const regularPrice = meta.regularMarketPrice ?? null
+    const regularTime =
+      typeof meta.regularMarketTime === 'number' ? meta.regularMarketTime * 1000 : null
+
+    // Walk the minute-bar closes to find the newest extended-session price
+    // on either side of the regular window. Yahoo sometimes pads post-market
+    // bars with nulls; pick the latest non-null entry outside regular hours.
+    let postPrice: number | null = null
+    let postTime: number | null = null
+    let prePrice: number | null = null
+    let preTime: number | null = null
+    const ts = result.timestamp ?? []
+    const closes = result.indicators?.quote?.[0]?.close ?? []
+    const periods = meta.currentTradingPeriod
+    const regularStart = periods?.regular?.start
+    const regularEnd = periods?.regular?.end
+    for (let i = 0; i < ts.length; i++) {
+      const t = ts[i]
+      const c = closes[i]
+      if (c === null || c === undefined || !Number.isFinite(c)) continue
+      if (regularStart && t < regularStart) {
+        if (prePrice === null || t > (preTime ?? 0) / 1000) {
+          prePrice = c
+          preTime = t * 1000
+        }
+      } else if (regularEnd && t >= regularEnd) {
+        // Later minute bar wins — walking forward gives us the latest.
+        postPrice = c
+        postTime = t * 1000
+      }
+    }
+
+    return {
+      symbol: sym,
+      regularPrice,
+      regularTime,
+      postPrice,
+      postTime,
+      prePrice,
+      preTime,
+      marketState,
+      fetchedAt: Date.now()
+    }
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export async function getExtendedQuotes(symbols: string[]): Promise<ExtendedQuote[]> {
+  const unique = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))]
+  if (unique.length === 0) return []
+  // Parallel fan-out. Yahoo's chart endpoint tolerates burstiness well; the
+  // concurrent call pattern is the same one getHistory uses for ranges.
+  const settled = await Promise.all(unique.map((s) => fetchExtendedOne(s)))
+  return settled.filter((q): q is ExtendedQuote => q !== null)
+}

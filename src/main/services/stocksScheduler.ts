@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { listTickers } from '../database/tickers'
 import { getQuotes, type StockQuote } from './stooqService'
+import { getExtendedQuotes } from './yahooFinanceService'
 
 // Three cadences, picked to match when Stooq data is actually changing:
 //  - Active: weekday 04:00–20:00 ET (pre-market + regular + after-hours)
@@ -51,19 +52,74 @@ async function tick(): Promise<void> {
   // back the Value Chain graph view so those tiles show live prices. Watchlist
   // gating happens at UI/service layers that care (notifications, summaries,
   // per-ticker RSS), not here.
-  const symbols = listTickers().map((t) => t.symbol)
+  const tickers = listTickers()
+  const symbols = tickers.map((t) => t.symbol)
   if (symbols.length === 0) {
     lastQuotes = []
     broadcast([])
     return
   }
   try {
-    const quotes = await getQuotes(symbols)
+    // Stooq gives us the regular-session OHLC in a single batched CSV.
+    // Yahoo's chart endpoint provides the extended-session overlay —
+    // pre-market and after-hours prints that Stooq doesn't publish. We
+    // only overlay watchlist symbols during extended-hours windows
+    // (pre-market 4-9:30am ET, after-hours 4-8pm ET); the scheduler's
+    // cadence already brackets these correctly, but gate here too so
+    // we don't burn Yahoo requests during regular hours or overnight.
+    const quotesPromise = getQuotes(symbols)
+    const overlayPromise = shouldOverlayExtended()
+      ? getExtendedQuotes(tickers.filter((t) => t.isActive).map((t) => t.symbol)).catch(() => [])
+      : Promise.resolve([])
+    const [quotes, overlay] = await Promise.all([quotesPromise, overlayPromise])
+
+    if (overlay.length > 0) {
+      const overlayBySymbol = new Map(overlay.map((x) => [x.symbol.toUpperCase(), x]))
+      for (const q of quotes) {
+        const ext = overlayBySymbol.get(q.symbol.toUpperCase())
+        if (!ext) continue
+        q.marketState = ext.marketState
+        // Delta baseline: Stooq's close is the regular-session close, which
+        // matches what Yahoo calls regularMarketPrice — so post-market
+        // deltas measured against it read naturally ("AH +0.42 from close").
+        const baseline = q.price ?? ext.regularPrice
+        if (ext.postPrice !== null) {
+          q.postMarketPrice = ext.postPrice
+          if (baseline !== null && baseline > 0) {
+            q.postMarketChange = ext.postPrice - baseline
+            q.postMarketChangePct = (q.postMarketChange / baseline) * 100
+          }
+        }
+        if (ext.prePrice !== null) {
+          q.preMarketPrice = ext.prePrice
+          if (baseline !== null && baseline > 0) {
+            q.preMarketChange = ext.prePrice - baseline
+            q.preMarketChangePct = (q.preMarketChange / baseline) * 100
+          }
+        }
+      }
+    }
+
     lastQuotes = quotes
     broadcast(quotes)
   } catch (err) {
     console.warn('[stocks] tick failed:', err instanceof Error ? err.message : err)
   }
+}
+
+// Heuristic: run the Yahoo overlay during weekday pre-market (4-9:30 ET)
+// and after-hours (16-20 ET). Outside those windows Stooq's close is all
+// we'd get anyway, and skipping the Yahoo fan-out saves ~20 requests per
+// idle tick overnight.
+function shouldOverlayExtended(): boolean {
+  const { weekday, hour } = nyParts()
+  if (weekday === 0 || weekday === 6) return false
+  // 4am–9:30am OR 4pm–8pm. We round the 9:30 cut-off to 10 to keep the
+  // window check integer-only; the regular-session quote will just come
+  // through Stooq + Yahoo meta normally in that narrow overlap.
+  if (hour >= 4 && hour < 10) return true
+  if (hour >= 16 && hour < 20) return true
+  return false
 }
 
 function broadcast(quotes: StockQuote[]): void {

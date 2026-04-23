@@ -299,6 +299,16 @@ export interface StockQuote {
   changePct: number | null
   volume: number | null
   time: string | null
+  // Extended-session overlay from Yahoo's chart endpoint. Populated during
+  // pre/post-market windows so the UI can show an "AH +0.42 (+0.8%)" badge
+  // alongside the Stooq regular-session close.
+  postMarketPrice: number | null
+  postMarketChange: number | null
+  postMarketChangePct: number | null
+  preMarketPrice: number | null
+  preMarketChange: number | null
+  preMarketChangePct: number | null
+  marketState: 'pre' | 'regular' | 'post' | 'closed' | null
 }
 
 export type HistoryRange = '1D' | '5D' | '1W' | '1M' | '3M' | '1Y' | '5Y' | 'MAX'
