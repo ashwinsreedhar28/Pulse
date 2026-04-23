@@ -197,11 +197,16 @@ function EarningsSummaryCard({
           <div className="text-[9.5px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-1.5">
             Key numbers
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
             {s.keyNumbers.map((kn, i) => (
-              <div key={i} className="flex items-baseline justify-between gap-2 min-w-0">
-                <span className="text-[10.5px] text-zinc-500 truncate">{kn.label}</span>
-                <span className="text-[12px] font-semibold tabular-nums text-zinc-100 shrink-0">
+              <div key={i} className="flex flex-col min-w-0">
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500"
+                  title={kn.label}
+                >
+                  {kn.label}
+                </span>
+                <span className="text-[13px] font-semibold tabular-nums text-zinc-100 leading-snug break-words">
                   {kn.value}
                 </span>
               </div>

@@ -697,6 +697,33 @@ export async function generatePersonalBrief(
   }
 }
 
+// Heuristic: a "concrete figure" contains at least one digit and isn't
+// phrased as prose. Rejects "Not provided", "Highlighted as growth driver",
+// "N/A" — values that aren't useful in a numbers-grid but the model sometimes
+// returns anyway. Keeps cases like "$96.4B", "+8% YoY", "$1.54", "72.3%".
+function isConcreteFigure(value: string): boolean {
+  if (!value) return false
+  if (value.length > 28) return false
+  if (!/\d/.test(value)) return false
+  const lowered = value.toLowerCase()
+  const prosePhrases = [
+    'not provided',
+    'not disclosed',
+    'not specified',
+    'not reported',
+    'not given',
+    'highlighted as',
+    'growth driver',
+    'see release',
+    'see above',
+    'n/a'
+  ]
+  for (const p of prosePhrases) {
+    if (lowered.includes(p)) return false
+  }
+  return true
+}
+
 export interface EarningsReleaseSummary {
   // 3-5 sentence overview of the quarter. No JSON scaffolding, just prose.
   overview: string
@@ -742,7 +769,11 @@ export async function summarizeEarningsRelease(input: {
     `}\n\n` +
     `Rules:\n` +
     `- keyNumbers: labels like "Revenue", "EPS (GAAP)", "Operating margin", "Data Center revenue", ` +
-    `"FCF", "Customer count". Values exactly as stated ("$96.4B", "+8% YoY", "$1.54").\n` +
+    `"FCF", "Customer count". Values must be a concrete figure as stated in the release — ` +
+    `"$96.4B", "+8% YoY", "$1.54", "72.3%". Maximum ~20 characters per value.\n` +
+    `- keyNumbers must be CONCRETE NUMBERS ONLY. If a line item wasn't explicitly reported as a ` +
+    `number, OMIT the entry entirely. Do not write values like "Not provided", "N/A", ` +
+    `"Highlighted as growth driver", or any prose — only labeled figures.\n` +
     `- guidance: only include if the release explicitly cites next-period outlook. Otherwise empty.\n` +
     `- quotes: attribute with role if present ("CEO: ..."). Keep each under 160 chars.\n` +
     `- overview: no marketing language, no "solid quarter" fluff. Lead with the numbers that moved.\n` +
@@ -795,12 +826,17 @@ export async function summarizeEarningsRelease(input: {
     emitHealth(true)
     const overview = typeof parsed.overview === 'string' ? parsed.overview.trim() : ''
     if (!overview) return null
+    // Drop any keyNumbers entry whose value is prose rather than a concrete
+    // figure. The prompt instructs the model to omit these, but defensive
+    // filtering keeps the UI clean even when the model drifts — and also
+    // sanitizes older cached rows surfaced through the same pipeline.
     const keyNumbers = Array.isArray(parsed.keyNumbers)
       ? parsed.keyNumbers
           .map((x: unknown) => x as { label?: unknown; value?: unknown })
           .filter((x) => typeof x.label === 'string' && typeof x.value === 'string')
-          .slice(0, 6)
           .map((x) => ({ label: (x.label as string).trim(), value: (x.value as string).trim() }))
+          .filter((x) => x.label.length > 0 && isConcreteFigure(x.value))
+          .slice(0, 6)
       : []
     const guidance = Array.isArray(parsed.guidance)
       ? parsed.guidance
