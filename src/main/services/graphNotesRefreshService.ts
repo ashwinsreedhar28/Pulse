@@ -56,8 +56,11 @@ const MIN_FRESH_ARTICLES = 3
 // relies on.
 const EVIDENCE_LOOKBACK_MS = 90 * 24 * 60 * 60 * 1000
 
-// Sweep cadence. Once a month is plenty for slow-moving supply-chain notes.
-const SWEEP_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000
+// Sweep cadence. Weekly — Node's setInterval uses a 32-bit int for the
+// delay (max ~24.8 days), so longer cadences overflow and silently clamp
+// to 1ms. Weekly is fine anyway: MAX_PER_SWEEP caps each run at 10 edges
+// and only stale ones (60+ days old) are touched.
+const SWEEP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 
 interface ArticleRow {
   id: number

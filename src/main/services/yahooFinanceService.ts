@@ -1086,22 +1086,49 @@ export async function getOptionsSnapshot(symbol: string): Promise<OptionsSnapsho
   }
 
   const url = `${YAHOO_OPTIONS_BASE}${encodeURIComponent(sym)}`
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+
+  // Options endpoint has been oscillating between "public" and "crumb-gated"
+  // throughout 2024-2026. Try an anonymous hit first (faster, works for most
+  // symbols); on 401, fall back to the cookie-authenticated path we already
+  // use for quoteSummary. Silence the eventual failure since no-options-data
+  // is a common outcome for thinly-traded names and doesn't warrant log spam.
+  const fetchOnce = async (withAuth: boolean): Promise<Response> => {
+    const headers: Record<string, string> = {
+      'User-Agent': UA,
+      Accept: 'application/json'
+    }
+    if (withAuth) {
+      await ensureYahooCreds()
+      if (yahooCookie) headers['Cookie'] = yahooCookie
+    }
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    try {
+      return await fetch(url, { headers, signal: controller.signal })
+    } finally {
+      clearTimeout(t)
+    }
+  }
+
   let json: OptionChainResponse
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': UA, Accept: 'application/json' },
-      signal: controller.signal
-    })
-    if (res.status === 404) return null // symbol has no listed options
+    let res = await fetchOnce(false)
+    if (res.status === 401) {
+      // Yahoo is requesting auth for this symbol. Retry with cookie.
+      res = await fetchOnce(true)
+    }
+    if (res.status === 404 || res.status === 401) {
+      // 404 = no listed options. 401-after-retry = rotating auth denied
+      // access this round. Either way, nothing to surface — return null
+      // quietly and fall through to the cached value when we have one.
+      return cached?.value ?? null
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     json = (await res.json()) as OptionChainResponse
   } catch (err) {
-    console.warn('[yahoo] options fetch failed:', err instanceof Error ? err.message : err)
+    // Don't log — options unavailability is expected intermittent noise.
+    void err
     return cached?.value ?? null
-  } finally {
-    clearTimeout(timer)
   }
 
   const result = json.optionChain.result?.[0]
