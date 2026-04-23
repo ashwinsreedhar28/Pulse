@@ -4,6 +4,7 @@
 
 const YAHOO_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart/'
 const YAHOO_QUOTE_SUMMARY = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary/'
+const YAHOO_OPTIONS_BASE = 'https://query1.finance.yahoo.com/v7/finance/options/'
 const YAHOO_CRUMB_URL = 'https://query2.finance.yahoo.com/v1/test/getcrumb'
 const YAHOO_CONSENT_URL = 'https://fc.yahoo.com/'
 const UA =
@@ -12,6 +13,7 @@ const FETCH_TIMEOUT_MS = 10_000
 const CACHE_TTL_MS = 5 * 60_000
 const FUNDAMENTALS_TTL_MS = 30 * 60_000
 const EARNINGS_TTL_MS = 24 * 60 * 60_000
+const OPTIONS_TTL_MS = 15 * 60_000 // intraday — refresh frequently enough to follow the day
 
 // Yahoo's v10 quoteSummary endpoint has required a crumb + cookie auth dance
 // since 2023. Without it, every request returns HTTP 401. We do a one-time
@@ -964,5 +966,195 @@ export async function getAnalystEstimates(symbol: string): Promise<AnalystEstima
     fetchedAt: Date.now()
   }
   estimatesCache.set(sym, { value })
+  return value
+}
+
+// ---- Options snapshot ------------------------------------------------------
+// Nearest-expiry options summary: IV at the ATM strike, full-chain put/call
+// OI ratio, and the ATM straddle cost (= the market's expected absolute
+// move through expiry). Yahoo's v7/finance/options endpoint bundles the
+// underlying quote + chain for the nearest expiry in a single unauthenticated
+// call — no crumb, no rate-limit friction.
+
+export interface OptionsSnapshot {
+  symbol: string
+  underlyingPrice: number | null
+  expiryDate: number // unix ms of the nearest listed expiry used
+  daysToExpiry: number
+  atmStrike: number | null
+  // Mean of ATM call + put IV. Yahoo returns IV as a decimal (0.42 = 42%).
+  impliedVol: number | null
+  // ATM straddle mid-price — the cost of buying both sides. In options pricing
+  // tradition this approximates the expected absolute move in the underlying
+  // through expiry. Callers divide by underlyingPrice for a percent.
+  expectedMoveUsd: number | null
+  expectedMovePct: number | null
+  // Full-chain put-OI / call-OI across the nearest expiry. >1 = more puts
+  // outstanding than calls (defensive/bearish tilt); <1 = call-heavy.
+  putCallOiRatio: number | null
+  totalCallOi: number | null
+  totalPutOi: number | null
+  // Present when the nearest expiry coincides with an earnings release
+  // (set by callers that know the earnings date; we don't compute it here
+  // to keep this service single-purpose).
+  fetchedAt: number
+}
+
+interface OptionContract {
+  strike?: number
+  lastPrice?: number
+  bid?: number
+  ask?: number
+  impliedVolatility?: number
+  openInterest?: number
+  volume?: number
+  inTheMoney?: boolean
+}
+
+interface OptionChainResponse {
+  optionChain: {
+    result:
+      | Array<{
+          underlyingSymbol?: string
+          expirationDates?: number[]
+          quote?: {
+            regularMarketPrice?: number
+          }
+          options?: Array<{
+            expirationDate?: number
+            calls?: OptionContract[]
+            puts?: OptionContract[]
+          }>
+        }>
+      | null
+    error: { code?: string; description?: string } | null
+  }
+}
+
+interface OptionsCacheEntry {
+  value: OptionsSnapshot
+}
+
+const optionsCache = new Map<string, OptionsCacheEntry>()
+
+function mid(contract: OptionContract | undefined): number | null {
+  if (!contract) return null
+  const bid = contract.bid ?? null
+  const ask = contract.ask ?? null
+  if (bid !== null && ask !== null && Number.isFinite(bid) && Number.isFinite(ask) && ask > 0) {
+    return (bid + ask) / 2
+  }
+  // Fall back to lastPrice when bid/ask is stale (common for wide-spread
+  // strikes right after an open or on thin names).
+  if (typeof contract.lastPrice === 'number' && Number.isFinite(contract.lastPrice)) {
+    return contract.lastPrice
+  }
+  return null
+}
+
+function pickAtm(contracts: OptionContract[], underlying: number): OptionContract | undefined {
+  if (!contracts.length) return undefined
+  let best: OptionContract | undefined
+  let bestDelta = Infinity
+  for (const c of contracts) {
+    if (typeof c.strike !== 'number' || !Number.isFinite(c.strike)) continue
+    const d = Math.abs(c.strike - underlying)
+    if (d < bestDelta) {
+      bestDelta = d
+      best = c
+    }
+  }
+  return best
+}
+
+function sumOi(contracts: OptionContract[]): number {
+  let total = 0
+  for (const c of contracts) {
+    if (typeof c.openInterest === 'number' && Number.isFinite(c.openInterest)) {
+      total += c.openInterest
+    }
+  }
+  return total
+}
+
+export async function getOptionsSnapshot(symbol: string): Promise<OptionsSnapshot | null> {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return null
+  const cached = optionsCache.get(sym)
+  if (cached && Date.now() - cached.value.fetchedAt < OPTIONS_TTL_MS) {
+    return cached.value
+  }
+
+  const url = `${YAHOO_OPTIONS_BASE}${encodeURIComponent(sym)}`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  let json: OptionChainResponse
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+      signal: controller.signal
+    })
+    if (res.status === 404) return null // symbol has no listed options
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    json = (await res.json()) as OptionChainResponse
+  } catch (err) {
+    console.warn('[yahoo] options fetch failed:', err instanceof Error ? err.message : err)
+    return cached?.value ?? null
+  } finally {
+    clearTimeout(timer)
+  }
+
+  const result = json.optionChain.result?.[0]
+  if (!result?.options?.length) return null
+  const nearest = result.options[0]
+  const expirySec = nearest.expirationDate
+  if (typeof expirySec !== 'number' || !Number.isFinite(expirySec)) return null
+  const underlyingPrice = result.quote?.regularMarketPrice ?? null
+  const calls = nearest.calls ?? []
+  const puts = nearest.puts ?? []
+
+  const atmCall = underlyingPrice !== null ? pickAtm(calls, underlyingPrice) : undefined
+  const atmPut = underlyingPrice !== null ? pickAtm(puts, underlyingPrice) : undefined
+  const atmStrike = atmCall?.strike ?? atmPut?.strike ?? null
+
+  const ivCall = atmCall?.impliedVolatility ?? null
+  const ivPut = atmPut?.impliedVolatility ?? null
+  let impliedVol: number | null = null
+  if (ivCall !== null && ivPut !== null && Number.isFinite(ivCall) && Number.isFinite(ivPut)) {
+    impliedVol = (ivCall + ivPut) / 2
+  } else if (ivCall !== null && Number.isFinite(ivCall)) impliedVol = ivCall
+  else if (ivPut !== null && Number.isFinite(ivPut)) impliedVol = ivPut
+
+  const callMid = mid(atmCall)
+  const putMid = mid(atmPut)
+  const expectedMoveUsd =
+    callMid !== null && putMid !== null ? callMid + putMid : callMid ?? putMid ?? null
+  const expectedMovePct =
+    expectedMoveUsd !== null && underlyingPrice !== null && underlyingPrice > 0
+      ? expectedMoveUsd / underlyingPrice
+      : null
+
+  const totalCallOi = sumOi(calls)
+  const totalPutOi = sumOi(puts)
+  const putCallOiRatio = totalCallOi > 0 ? totalPutOi / totalCallOi : null
+
+  const expiryMs = expirySec * 1000
+  const daysToExpiry = Math.max(0, Math.round((expiryMs - Date.now()) / (24 * 60 * 60 * 1000)))
+
+  const value: OptionsSnapshot = {
+    symbol: sym,
+    underlyingPrice,
+    expiryDate: expiryMs,
+    daysToExpiry,
+    atmStrike,
+    impliedVol,
+    expectedMoveUsd,
+    expectedMovePct,
+    putCallOiRatio,
+    totalCallOi: totalCallOi || null,
+    totalPutOi: totalPutOi || null,
+    fetchedAt: Date.now()
+  }
+  optionsCache.set(sym, { value })
   return value
 }

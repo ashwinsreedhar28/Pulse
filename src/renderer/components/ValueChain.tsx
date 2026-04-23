@@ -3,6 +3,7 @@ import type {
   AnalystEstimates,
   EarningsBadge,
   FinancialsSnapshot,
+  OptionsSnapshot,
   SecFiling,
   StockQuote,
   Ticker
@@ -298,6 +299,30 @@ export function ValueChain({
         })
     })
   }, [])
+
+  // Options snapshot for the focused ticker only. Fetching on hover keeps
+  // us from making ~65 options calls at mount for tiles the user never
+  // looks at. The 15-min in-memory cache in yahooFinanceService means
+  // hopping between tiles inside that window is free.
+  const [focusOptions, setFocusOptions] = useState<OptionsSnapshot | null>(null)
+  useEffect(() => {
+    if (!focusSymbol) {
+      setFocusOptions(null)
+      return
+    }
+    let cancelled = false
+    window.api.stocks
+      .getOptionsSnapshot(focusSymbol)
+      .then((snap) => {
+        if (!cancelled) setFocusOptions(snap)
+      })
+      .catch(() => {
+        if (!cancelled) setFocusOptions(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [focusSymbol])
 
   const tickerBySymbol = useMemo(() => {
     const m = new Map<string, Ticker>()
@@ -607,6 +632,10 @@ export function ValueChain({
                 <FocusAnalystStrip
                   estimates={estimatesMap.get(focusSymbol!)}
                   currentPrice={quoteBySymbol.get(focusSymbol!)?.price ?? null}
+                />
+                <FocusOptionsStrip
+                  options={focusOptions}
+                  earnings={earningsMap.get(focusSymbol!)}
                 />
               </header>
               <div
@@ -1094,6 +1123,77 @@ function recommendationLabel(
     return { label: pretty, color: 'text-zinc-300' }
   }
   return null
+}
+
+// Options micro-summary: IV, expected move through the nearest expiry, and
+// put/call OI skew. The killer detail is the expected move — when earnings
+// sit inside the expiry window, this is literally "the market's number"
+// for the post-print gap. Tags the expiry as "covers earnings" when the
+// next scheduled earnings date falls inside the options window so users
+// know the IV reading is earnings-driven, not baseline.
+function FocusOptionsStrip({
+  options,
+  earnings
+}: {
+  options: OptionsSnapshot | null
+  earnings: EarningsBadge | undefined
+}): JSX.Element | null {
+  if (!options) return null
+  const iv = options.impliedVol
+  const ivLabel = iv !== null ? `${(iv * 100).toFixed(0)}%` : null
+  const moveUsd = options.expectedMoveUsd
+  const movePct = options.expectedMovePct
+  const moveLabel =
+    moveUsd !== null
+      ? `±$${moveUsd.toFixed(2)}${movePct !== null ? ` (${(movePct * 100).toFixed(1)}%)` : ''}`
+      : null
+  const ratio = options.putCallOiRatio
+  const ratioLabel =
+    ratio !== null && Number.isFinite(ratio)
+      ? ratio >= 1
+        ? `${ratio.toFixed(2)}× puts`
+        : `${(1 / ratio).toFixed(2)}× calls`
+      : null
+  const ratioColor =
+    ratio === null
+      ? 'text-zinc-400'
+      : ratio > 1.2
+        ? 'text-red-300'
+        : ratio < 0.8
+          ? 'text-emerald-300'
+          : 'text-zinc-300'
+
+  const coversEarnings =
+    earnings?.nextDate !== undefined &&
+    earnings?.nextDate !== null &&
+    earnings.nextDate <= options.expiryDate
+  const expiryLabel =
+    options.daysToExpiry > 0
+      ? `${options.daysToExpiry}d expiry`
+      : 'expires today'
+
+  if (!ivLabel && !moveLabel && !ratioLabel) return null
+
+  return (
+    <div
+      className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10.5px] tabular-nums"
+      title={`Nearest expiry ${new Date(options.expiryDate).toLocaleDateString()} · ATM strike $${options.atmStrike?.toFixed(2) ?? '—'}`}
+    >
+      <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+        Options · {expiryLabel}
+        {coversEarnings && (
+          <span className="ml-1 text-amber-300">(covers earnings)</span>
+        )}
+      </span>
+      <KPI label="IV" value={ivLabel} valueClass="text-zinc-200" />
+      <KPI
+        label="Expected move"
+        value={moveLabel}
+        valueClass={coversEarnings ? 'text-amber-200' : 'text-zinc-200'}
+      />
+      <KPI label="Put/call OI" value={ratioLabel} valueClass={ratioColor} />
+    </div>
+  )
 }
 
 function KPI({

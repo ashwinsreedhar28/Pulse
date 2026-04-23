@@ -406,6 +406,23 @@ export interface AnalystEstimates {
   fetchedAt: number
 }
 
+// Nearest-expiry options snapshot. IV is a decimal (0.42 = 42%). Put/call
+// ratio > 1 means more puts outstanding (defensive tilt).
+export interface OptionsSnapshot {
+  symbol: string
+  underlyingPrice: number | null
+  expiryDate: number
+  daysToExpiry: number
+  atmStrike: number | null
+  impliedVol: number | null
+  expectedMoveUsd: number | null
+  expectedMovePct: number | null
+  putCallOiRatio: number | null
+  totalCallOi: number | null
+  totalPutOi: number | null
+  fetchedAt: number
+}
+
 // SEC EDGAR filing record. Dates are unix ms. filingUrl is the accession
 // index page; primaryDocUrl is the main document (10-K, 8-K body, etc.).
 export interface SecFiling {
@@ -973,6 +990,8 @@ const api = {
       invoke<AnalystEstimates[]>('stocks:getEstimatesBatch', symbols),
     refreshEstimates: (symbol: string) =>
       invoke<AnalystEstimates | null>('stocks:refreshEstimates', symbol),
+    getOptionsSnapshot: (symbol: string) =>
+      invoke<OptionsSnapshot | null>('stocks:getOptionsSnapshot', symbol),
     onUpdated: (cb: (quotes: StockQuote[]) => void): (() => void) => {
       const listener = (_e: unknown, quotes: StockQuote[]): void => cb(quotes)
       ipcRenderer.on('stocks:updated', listener)

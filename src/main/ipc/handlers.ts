@@ -10,7 +10,12 @@ import { extractReadable } from '../services/readerService'
 import { probeFeed } from '../services/rssParser'
 import { runDailyDrip, runWeeklyCurated, runPortfolioGaps } from '../services/discoveryService'
 import { getLastQuotes, refreshStocksNow } from '../services/stocksScheduler'
-import { getFundamentals, getHistory, type HistoryRange } from '../services/yahooFinanceService'
+import {
+  getFundamentals,
+  getHistory,
+  getOptionsSnapshot,
+  type HistoryRange
+} from '../services/yahooFinanceService'
 import {
   computeSnapshot,
   computeSnapshotsForSymbols,
@@ -401,6 +406,14 @@ export function registerDbIpc(): void {
     }
   )
   ipcMain.handle('sec:refreshFilings', (_e, symbol: string) => forceRefreshFilings(symbol))
+
+  // Options snapshot — nearest-expiry IV, put/call OI ratio, ATM straddle
+  // cost (= expected move through expiry). 15-min in-memory cache inside
+  // yahooFinanceService handles intraday refresh; the IPC handler just
+  // passes through.
+  ipcMain.handle('stocks:getOptionsSnapshot', (_e, symbol: string) =>
+    getOptionsSnapshot(symbol)
+  )
 
   // sports
   ipcMain.handle('sports:listLeagues', () => listLeagues())

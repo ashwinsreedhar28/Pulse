@@ -10,6 +10,7 @@ import { ExternalReader } from './components/ExternalReader'
 import { ValueChain } from './components/ValueChain'
 import { StockValueChainCard } from './components/StockValueChainCard'
 import { SecFilingsSection } from './components/SecFilingsSection'
+import { OptionsSnapshotSection } from './components/OptionsSnapshotSection'
 import { WhyThisMatters } from './components/WhyThisMatters'
 import {
   ScoreFlourish,
@@ -3436,6 +3437,8 @@ function StockDetail({
           )}
 
           <StockValueChainCard symbol={ticker.symbol} tickers={tickers} />
+
+          <OptionsSnapshotSection symbol={ticker.symbol} />
 
           <SecFilingsSection symbol={ticker.symbol} />
 
