@@ -6,6 +6,11 @@
 const STOOQ_BASE = 'https://stooq.com/q/l/'
 const FETCH_TIMEOUT_MS = 10_000
 const CACHE_TTL_MS = 55_000
+// Stooq silently returns N/D rows for a subset of symbols once the batch
+// gets past ~100. Observed: a 106-symbol batch drops 6 rows; anything ≤100
+// is clean. Chunk well under the cliff so we stay safe as the ticker list
+// grows and so an unlucky symbol ordering can't drift us into truncation.
+const CHUNK_SIZE = 50
 
 export interface StockQuote {
   symbol: string
@@ -36,31 +41,65 @@ export async function getQuotes(symbols: string[]): Promise<StockQuote[]> {
     return cached.quotes
   }
 
-  const encoded = unique.map((s) => `${s.toLowerCase()}.us`).join('+')
+  const chunks: string[][] = []
+  for (let i = 0; i < unique.length; i += CHUNK_SIZE) {
+    chunks.push(unique.slice(i, i + CHUNK_SIZE))
+  }
+
+  const chunkResults = await Promise.all(chunks.map((c) => fetchChunk(c)))
+
+  // If every chunk failed and we have a prior snapshot, fall back to stale
+  // rather than broadcasting an empty list.
+  const allFailed = chunkResults.every((r) => r === null)
+  if (allFailed && cached) return cached.quotes
+
+  const bySymbol = new Map<string, StockQuote>()
+  chunkResults.forEach((chunk, idx) => {
+    const requested = chunks[idx]
+    const quotes = chunk ?? requested.map(nullQuote)
+    for (const q of quotes) bySymbol.set(q.symbol, q)
+  })
+
+  const quotes = unique.map((s) => bySymbol.get(s) ?? nullQuote(s))
+  cache.set(key, { quotes, fetchedAt: Date.now() })
+  return quotes
+}
+
+async function fetchChunk(symbols: string[]): Promise<StockQuote[] | null> {
+  const encoded = symbols.map((s) => `${s.toLowerCase()}.us`).join('+')
   const url = `${STOOQ_BASE}?s=${encoded}&f=sd2t2ohlcv&h&e=csv`
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 
-  let body: string
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Pulse/0.1 (macOS stocks ticker)' },
       signal: controller.signal
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    body = await res.text()
+    const body = await res.text()
+    return parseCsv(body, symbols)
   } catch (err) {
-    console.warn('[stooq] fetch failed:', err instanceof Error ? err.message : err)
-    // Serve stale cache on failure if we have any; otherwise empty.
-    return cached?.quotes ?? []
+    console.warn('[stooq] chunk fetch failed:', err instanceof Error ? err.message : err)
+    return null
   } finally {
     clearTimeout(timer)
   }
+}
 
-  const quotes = parseCsv(body, unique)
-  cache.set(key, { quotes, fetchedAt: Date.now() })
-  return quotes
+function nullQuote(symbol: string): StockQuote {
+  return {
+    symbol,
+    price: null,
+    open: null,
+    high: null,
+    low: null,
+    change: null,
+    changePct: null,
+    volume: null,
+    time: null
+  }
 }
 
 function parseCsv(body: string, requested: string[]): StockQuote[] {
@@ -93,20 +132,7 @@ function parseCsv(body: string, requested: string[]): StockQuote[] {
       time: date && date !== 'N/D' ? `${date} ${time}` : null
     })
   }
-  return requested.map(
-    (s) =>
-      bySymbol.get(s) ?? {
-        symbol: s,
-        price: null,
-        open: null,
-        high: null,
-        low: null,
-        change: null,
-        changePct: null,
-        volume: null,
-        time: null
-      }
-  )
+  return requested.map((s) => bySymbol.get(s) ?? nullQuote(s))
 }
 
 function parseNum(raw: string | undefined): number | null {

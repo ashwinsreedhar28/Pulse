@@ -498,40 +498,64 @@ app.whenReady().then(async () => {
   onOllamaStatusChange((online) => broadcastOllamaStatus(online ? 'online' : 'offline'))
   const prefs = getPreferences()
 
-  // Kick the heavy Python workers FIRST so their services flip to a busy
-  // state synchronously (before any await inside). The feed poller checks
-  // those flags at entry and defers if either is loading — but it can only
-  // see "busy" if the status has been set by the time pollAllFeeds() runs.
-  const kokoroP = ensureKokoroReady()
-    .then((ok) => splashUpdate('kokoro', ok ? 'ok' : 'skip'))
-    .catch(() => splashUpdate('kokoro', 'skip'))
-  const piperP = ensurePiperReady()
-    .then((ok) => splashUpdate('piper', ok ? 'ok' : 'skip'))
-    .catch(() => splashUpdate('piper', 'skip'))
+  // Cold-toggle gate for the reels + TTS pipeline. When disabled, the Python
+  // workers (Kokoro, Piper, videoGen diffusers, ffmpeg/yt-dlp downloads) are
+  // never started, which meaningfully extends battery life on laptops. The
+  // toggle is cold — flipping it in Settings requires a restart, and the UI
+  // surfaces that hint.
+  let kokoroP: Promise<void>
+  let piperP: Promise<void>
+  let videoP: Promise<void>
+  let mediaToolsP: Promise<void>
   let videoReady = false
-  const videoP = ensureVideoGenInstalled()
-    .then((ok) => {
-      videoReady = ok
-      splashUpdate('video', ok ? 'ok' : 'skip')
-    })
-    .catch(() => splashUpdate('video', 'skip'))
   let mediaToolsReady = false
-  const mediaToolsP = ensureMediaTools()
-    .then((ok) => {
-      mediaToolsReady = ok
-      splashUpdate('mediaTools', ok ? 'ok' : 'skip')
-    })
-    .catch(() => splashUpdate('mediaTools', 'skip'))
+
+  if (prefs.mediaPipelineEnabled) {
+    // Kick the heavy Python workers FIRST so their services flip to a busy
+    // state synchronously (before any await inside). The feed poller checks
+    // those flags at entry and defers if either is loading — but it can only
+    // see "busy" if the status has been set by the time pollAllFeeds() runs.
+    kokoroP = ensureKokoroReady()
+      .then((ok) => splashUpdate('kokoro', ok ? 'ok' : 'skip'))
+      .catch(() => splashUpdate('kokoro', 'skip'))
+    piperP = ensurePiperReady()
+      .then((ok) => splashUpdate('piper', ok ? 'ok' : 'skip'))
+      .catch(() => splashUpdate('piper', 'skip'))
+    videoP = ensureVideoGenInstalled()
+      .then((ok) => {
+        videoReady = ok
+        splashUpdate('video', ok ? 'ok' : 'skip')
+      })
+      .catch(() => splashUpdate('video', 'skip'))
+    mediaToolsP = ensureMediaTools()
+      .then((ok) => {
+        mediaToolsReady = ok
+        splashUpdate('mediaTools', ok ? 'ok' : 'skip')
+      })
+      .catch(() => splashUpdate('mediaTools', 'skip'))
+  } else {
+    console.log('[boot] media pipeline disabled via preference — skipping reels + TTS startup')
+    splashUpdate('kokoro', 'skip')
+    splashUpdate('piper', 'skip')
+    splashUpdate('video', 'skip')
+    splashUpdate('mediaTools', 'skip')
+    kokoroP = Promise.resolve()
+    piperP = Promise.resolve()
+    videoP = Promise.resolve()
+    mediaToolsP = Promise.resolve()
+  }
 
   startPolling(prefs.pollIntervalMin * 60 * 1000)
   startDigestTimer(prefs.digestIntervalMin * 60 * 1000)
   app.setLoginItemSettings({ openAtLogin: prefs.launchAtLogin })
   startDiscoverySchedule()
   startStocksScheduler()
-  startSportsReelScheduler()
   setAlertsWindowOpener(showMainWindow)
   if (prefs.favoriteTeamAlertsEnabled) startSportsAlerts()
-  startReelScheduler()
+  if (prefs.mediaPipelineEnabled) {
+    startSportsReelScheduler()
+    startReelScheduler()
+  }
   startMaintenanceSchedule()
 
   // Hold the splash until every boot service is ready — otherwise heavy
@@ -576,7 +600,9 @@ app.whenReady().then(async () => {
   clearTimeout(watchdog)
   reveal('Ready')
 
-  // Defer heavy post-boot work until the main window has settled.
+  // Defer heavy post-boot work until the main window has settled. The
+  // mediaPipelineEnabled gate above ensures videoReady/mediaToolsReady stay
+  // false when the pipeline is off, so these are already no-ops in that case.
   if (videoReady) {
     setTimeout(() => void backfillReelKeyframes(), 8_000)
   }

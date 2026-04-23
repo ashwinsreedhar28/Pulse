@@ -17,6 +17,7 @@ export interface Preferences {
   ttsEngine: TtsEngine
   ttsVoice: string
   theme: Theme
+  mediaPipelineEnabled: boolean
 }
 
 const DEFAULTS: Preferences = {
@@ -30,7 +31,8 @@ const DEFAULTS: Preferences = {
   favoriteTeamAlertsEnabled: true,
   ttsEngine: 'kokoro',
   ttsVoice: 'am_michael',
-  theme: 'default'
+  theme: 'default',
+  mediaPipelineEnabled: true
 }
 
 export function getPreferences(): Preferences {
@@ -53,7 +55,11 @@ export function getPreferences(): Preferences {
         : map.get('favoriteTeamAlertsEnabled') === 'true',
     ttsEngine: normalizeEngine(map.get('ttsEngine')),
     ttsVoice: map.get('ttsVoice') ?? DEFAULTS.ttsVoice,
-    theme: normalizeTheme(map.get('theme'))
+    theme: normalizeTheme(map.get('theme')),
+    mediaPipelineEnabled:
+      map.get('mediaPipelineEnabled') === undefined
+        ? DEFAULTS.mediaPipelineEnabled
+        : map.get('mediaPipelineEnabled') === 'true'
   }
 }
 

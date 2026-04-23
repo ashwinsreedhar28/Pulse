@@ -140,6 +140,22 @@ const REGISTRY: SettingsDescriptor[] = [
     writable: { valueType: 'boolean' }
   },
   {
+    key: 'mediaPipelineEnabled',
+    label: 'Reels + narration pipeline',
+    tab: 'preferences',
+    keywords: [
+      'reels',
+      'narration',
+      'tts pipeline',
+      'media pipeline',
+      'kokoro',
+      'piper',
+      'video generation',
+      'battery saver'
+    ],
+    writable: { valueType: 'boolean' }
+  },
+  {
     key: 'ttsEngine',
     label: 'Text-to-speech engine',
     tab: 'preferences',
@@ -264,6 +280,11 @@ async function describeSetting(desc: SettingsDescriptor): Promise<SettingsSnapsh
       return {
         descriptor: desc,
         value: prefs.favoriteTeamAlertsEnabled ? 'on' : 'off'
+      }
+    case 'mediaPipelineEnabled':
+      return {
+        descriptor: desc,
+        value: prefs.mediaPipelineEnabled ? 'on' : 'off'
       }
     case 'ttsEngine':
       return { descriptor: desc, value: prefs.ttsEngine }

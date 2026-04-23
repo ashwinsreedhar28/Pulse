@@ -635,5 +635,57 @@ export const migrations: Migration[] = [
         insert.run(t.symbol, t.name, t.sector, t.industry, now)
       }
     }
+  },
+  {
+    version: 25,
+    name: 'seed quantum + defense + test-equipment graph additions',
+    // Follow-up to v24 as the value-chain graph grew: quantum compute
+    // (IONQ, RGTI, QBTS, QUBT, ARQQ), broader defense (HEI, CW) and
+    // Keysight on the equipment side. Same passive pattern — rows land
+    // with isActive=0 so the stocks scheduler polls quotes but the
+    // watchlist-scoped code paths stay untouched.
+    up: (db) => {
+      const passive: Array<{
+        symbol: string
+        name: string
+        sector: string
+        industry: string
+      }> = [
+        { symbol: 'KEYS', name: 'Keysight Technologies', sector: 'Technology Hardware', industry: 'Test & Measurement' },
+        { symbol: 'HEI', name: 'HEICO', sector: 'Aerospace & Defense', industry: 'Aerospace Aftermarket' },
+        { symbol: 'CW', name: 'Curtiss-Wright', sector: 'Aerospace & Defense', industry: 'Defense Electronics / Naval' },
+        { symbol: 'IONQ', name: 'IonQ', sector: 'Quantum Computing', industry: 'Trapped-Ion Quantum' },
+        { symbol: 'RGTI', name: 'Rigetti Computing', sector: 'Quantum Computing', industry: 'Superconducting Quantum' },
+        { symbol: 'QBTS', name: 'D-Wave Quantum', sector: 'Quantum Computing', industry: 'Quantum Annealing' },
+        { symbol: 'QUBT', name: 'Quantum Computing Inc.', sector: 'Quantum Computing', industry: 'Photonic / Entropy' },
+        { symbol: 'ARQQ', name: 'Arqit Quantum', sector: 'Quantum Computing', industry: 'Quantum-Safe Encryption' },
+        { symbol: 'XNDU', name: 'Xanadu', sector: 'Quantum Computing', industry: 'Photonic Quantum' }
+      ]
+      const insert = db.prepare(
+        `INSERT OR IGNORE INTO tickers (symbol, companyName, sector, industry, isActive, addedAt)
+         VALUES (?, ?, ?, ?, 0, ?)`
+      )
+      const now = Date.now()
+      for (const t of passive) {
+        insert.run(t.symbol, t.name, t.sector, t.industry, now)
+      }
+    }
+  },
+  {
+    version: 26,
+    name: 'drop JNPR (HPE acquisition closed), reassert XNDU seed',
+    // Juniper Networks finished being absorbed into HPE in 2025; JNPR no
+    // longer trades. Its graph edges roll up into HPE in the JSON; here we
+    // just delete the ticker row so quote polling stops hitting a dead
+    // symbol. XNDU is reasserted because an earlier draft of v25 shipped
+    // without it — dev DBs with schema_migrations.version=25 already
+    // recorded would otherwise never get the row.
+    up: (db) => {
+      db.prepare(`DELETE FROM tickers WHERE symbol = 'JNPR'`).run()
+      db.prepare(
+        `INSERT OR IGNORE INTO tickers (symbol, companyName, sector, industry, isActive, addedAt)
+         VALUES ('XNDU', 'Xanadu', 'Quantum Computing', 'Photonic Quantum', 0, ?)`
+      ).run(Date.now())
+    }
   }
 ]

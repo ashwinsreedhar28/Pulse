@@ -1108,7 +1108,11 @@ const CORE_PREF_KEYS: (keyof Preferences)[] = [
   'favoriteTeamAlertsEnabled',
   'launchAtLogin'
 ]
-const REELS_PREF_KEYS: (keyof Preferences)[] = ['ttsEngine', 'ttsVoice']
+const REELS_PREF_KEYS: (keyof Preferences)[] = [
+  'ttsEngine',
+  'ttsVoice',
+  'mediaPipelineEnabled'
+]
 
 function PreferencesTab(): JSX.Element {
   // `prefs` = last known committed state from the DB.
@@ -1268,6 +1272,8 @@ function PreferencesTab(): JSX.Element {
       <ReelsPrefSection
         engine={draft.ttsEngine}
         voice={draft.ttsVoice}
+        mediaPipelineEnabled={draft.mediaPipelineEnabled}
+        committedMediaPipelineEnabled={prefs.mediaPipelineEnabled}
         dirtyCount={reelsDirty}
         status={reelsStatus}
         onPatch={(k, v) => patch(k, v as Preferences[typeof k])}
@@ -1573,6 +1579,8 @@ function CalendarPrefSection(): JSX.Element {
 function ReelsPrefSection({
   engine,
   voice,
+  mediaPipelineEnabled,
+  committedMediaPipelineEnabled,
   dirtyCount,
   status,
   onPatch,
@@ -1581,6 +1589,8 @@ function ReelsPrefSection({
 }: {
   engine: TtsEngine
   voice: string
+  mediaPipelineEnabled: boolean
+  committedMediaPipelineEnabled: boolean
   dirtyCount: number
   status: ApplyStatus
   onPatch: (key: keyof Preferences, value: string | number | boolean) => void
@@ -1615,8 +1625,32 @@ function ReelsPrefSection({
   const statusLabel = kokoroStatusLabel(kokoro)
   const statusTone = kokoroStatusTone(kokoro)
 
+  // Cold toggle — a toggle committed in a prior session shows no banner, only
+  // pending unsaved toggles or flips relative to the committed value do. We
+  // never try to tear the pipeline down mid-run: flipping it off warms a hint
+  // and takes effect on the next launch.
+  const pipelineRestartRequired = mediaPipelineEnabled !== committedMediaPipelineEnabled
+
   return (
     <div className="space-y-3">
+      <PrefSection title="Reels &amp; narration pipeline">
+        <PrefRow label="Enable reels + audio narration">
+          <ToggleSwitch
+            checked={mediaPipelineEnabled}
+            onChange={(v) => onPatch('mediaPipelineEnabled', v)}
+          />
+        </PrefRow>
+        <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
+          Turn off to save battery on laptops — Kokoro, Piper, video generation,
+          and ffmpeg workers will not launch at startup. New reels won&apos;t be
+          generated until you turn it back on.
+        </div>
+        {pipelineRestartRequired && (
+          <div className="text-[11px] text-amber-300 leading-relaxed pl-1">
+            Restart Pulse after applying for this change to take effect.
+          </div>
+        )}
+      </PrefSection>
       <PrefSection title="Flash narration">
         <PrefRow label="TTS engine">
           <select

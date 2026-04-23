@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { StockQuote, Ticker } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
+import { ValueChainDiagram } from './ValueChainDiagram'
+import {
+  TransactionCluster,
+  categoryGlow,
+  type Category,
+  type Counterparty
+} from './StockValueChainCard'
 
 interface ValueChainSector {
   id: string
@@ -15,6 +22,10 @@ interface ValueChainNode {
   stage: string
   sector: string
   blurb?: string
+  // Fallback display name for nodes without a matching `tickers` row (e.g.
+  // private companies). The graph JSON supplies it; the tickers table wins
+  // when available.
+  name?: string
 }
 interface ValueChainEdge {
   from: string
@@ -26,11 +37,33 @@ interface ValueChainGraph {
   stages: ValueChainStage[]
   nodes: ValueChainNode[]
   edges: ValueChainEdge[]
+  competitors: string[][]
 }
 
 const CHAIN = graph as ValueChainGraph
 
-type RelatedRole = 'focus' | 'customer' | 'supplier' | 'both'
+// Competitor relationships are symmetric — stored once in the JSON as
+// [A, B] pairs but indexed both directions here so either side of the pair
+// resolves its peers without double-bookkeeping in the source data.
+const COMPETITOR_MAP: Map<string, Set<string>> = (() => {
+  const m = new Map<string, Set<string>>()
+  for (const pair of CHAIN.competitors ?? []) {
+    if (pair.length !== 2) continue
+    const [a, b] = pair
+    if (!m.has(a)) m.set(a, new Set())
+    if (!m.has(b)) m.set(b, new Set())
+    m.get(a)!.add(b)
+    m.get(b)!.add(a)
+  }
+  return m
+})()
+
+// Role precedence when a tile matches multiple relationships to the focus:
+//   focus > competitor > both (customer+supplier) > customer > supplier
+// Competitor wins over directional roles because a supplier-who-also-competes
+// (e.g. INTC selling Xeon to AMZN while also competing with AWS Graviton) is
+// a more unusual and informative signal than the directional one.
+type RelatedRole = 'focus' | 'customer' | 'supplier' | 'both' | 'competitor'
 
 export function ValueChain({
   tickers,
@@ -50,6 +83,7 @@ export function ValueChain({
   const [hoverSymbol, setHoverSymbol] = useState<string | null>(null)
   const [lockedSymbol, setLockedSymbol] = useState<string | null>(null)
   const [sectorId, setSectorId] = useState<string>('all')
+  const [diagramSymbol, setDiagramSymbol] = useState<string | null>(null)
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Single/double-click discrimination. The first click starts a timer; a
   // second click inside the window cancels the timer and runs the
@@ -134,8 +168,10 @@ export function ValueChain({
   }, [visibleSymbols])
 
   // Track not just "is this tile related" but "how" — so tile coloring can
-  // mirror the Customers (emerald) / Suppliers (indigo) split in the focus
-  // panel. A tile can be both (e.g. mutual supply) → render as 'both'.
+  // mirror the Customers (emerald) / Suppliers (indigo) / Competitors (orange)
+  // split in the focus panel. A tile can be both customer and supplier
+  // (e.g. mutual supply) → render as 'both'. Competitor beats directional
+  // roles when both apply (see comment on RelatedRole).
   const related = useMemo(() => {
     if (!focusSymbol) return null
     const m = new Map<string, RelatedRole>()
@@ -148,8 +184,19 @@ export function ValueChain({
       const prev = m.get(e.from)
       m.set(e.from, prev === 'customer' ? 'both' : 'supplier')
     }
+    for (const peer of COMPETITOR_MAP.get(focusSymbol) ?? []) {
+      if (!visibleSymbols.has(peer)) continue
+      m.set(peer, 'competitor')
+    }
     return m
-  }, [focusSymbol, outgoing, incoming])
+  }, [focusSymbol, outgoing, incoming, visibleSymbols])
+
+  const focusCompetitors = useMemo(() => {
+    if (!focusSymbol) return []
+    const peers = COMPETITOR_MAP.get(focusSymbol)
+    if (!peers) return []
+    return [...peers].filter((s) => visibleSymbols.has(s)).sort()
+  }, [focusSymbol, visibleSymbols])
 
   const openDetail = (symbol: string): void => {
     const t = tickerBySymbol.get(symbol.toUpperCase())
@@ -211,6 +258,41 @@ export function ValueChain({
   const focusCompanyName = focusTicker?.companyName ?? focusSymbol ?? ''
   const focusBlurb = focusNode?.blurb ?? ''
 
+  // Reshape the focus panel's counterparties into the Counterparty structure
+  // used by TransactionCluster so the panel body reads identically to the
+  // stock-detail page's value-chain card. Stage sort lives inside the cluster.
+  const buildCounterparty = (sym: string, note: string | null): Counterparty => {
+    const n = nodeBySymbol.get(sym)
+    const stage = n?.stage ?? ''
+    return {
+      symbol: sym,
+      stage,
+      stageLabel: stage ? stageLabelById.get(stage) ?? stage : '—',
+      companyName: tickerBySymbol.get(sym.toUpperCase())?.companyName ?? n?.name ?? sym,
+      note
+    }
+  }
+  const customerItems = useMemo(
+    () => focusEdgesOut.map((e) => buildCounterparty(e.to, e.note ?? null)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [focusEdgesOut, nodeBySymbol, stageLabelById, tickerBySymbol]
+  )
+  const supplierItems = useMemo(
+    () => focusEdgesIn.map((e) => buildCounterparty(e.from, e.note ?? null)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [focusEdgesIn, nodeBySymbol, stageLabelById, tickerBySymbol]
+  )
+  const competitorItems = useMemo(
+    () => focusCompetitors.map((sym) => buildCounterparty(sym, null)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [focusCompetitors, nodeBySymbol, stageLabelById, tickerBySymbol]
+  )
+  const presentCategories: Category[] = []
+  if (supplierItems.length > 0) presentCategories.push('supplier')
+  if (competitorItems.length > 0) presentCategories.push('competitor')
+  if (customerItems.length > 0) presentCategories.push('customer')
+  const { boxShadow: focusBoxShadow, glowBackground: focusGlow } = categoryGlow(presentCategories)
+
   return (
     <div className="px-6 pt-2 pb-8">
       <div className="flex items-start justify-between gap-4 mb-4">
@@ -255,10 +337,19 @@ export function ValueChain({
           tickers with different numbers of edges. Inner grid scrolls if a
           heavily-connected node's lists exceed the visible box. */}
       <aside className="sticky top-0 z-20 -mx-6 px-6 pt-1 pb-3 mb-4 bg-surface-0/95 backdrop-blur border-b border-edge/40">
-        <div className="rounded-xl border border-emerald-500/30 bg-surface-1 h-[240px] overflow-hidden flex flex-col">
+        <div
+          className="rounded-xl border border-edge bg-gradient-to-br from-surface-1 to-surface-0 h-[240px] overflow-hidden flex flex-col relative"
+          style={focusSymbol && presentCategories.length > 0 ? { boxShadow: focusBoxShadow } : undefined}
+        >
+          {focusSymbol && presentCategories.length > 0 && (
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{ backgroundImage: focusGlow }}
+            />
+          )}
           {focusSymbol ? (
             <>
-              <header className="px-4 pt-3 pb-3 border-b border-edge/40">
+              <header className="relative px-4 pt-3 pb-3 border-b border-edge/40">
                 <div className="flex items-baseline gap-2 mb-1.5 flex-wrap">
                   <span className="text-[15px] font-bold tracking-[0.04em] text-zinc-50">
                     {focusSymbol}
@@ -291,6 +382,12 @@ export function ValueChain({
                       >
                         Open detail →
                       </button>
+                      <button
+                        onClick={() => setDiagramSymbol(focusSymbol!)}
+                        className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-200 ring-1 ring-inset ring-purple-500/40 hover:bg-purple-500/25"
+                      >
+                        View diagram
+                      </button>
                       {focusTicker.isActive ? (
                         <span
                           className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/40"
@@ -315,24 +412,35 @@ export function ValueChain({
                   )}
                 </p>
               </header>
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 px-4 py-3 overflow-y-auto">
-                <EdgeList
-                  title="Customers"
-                  arrow="↗"
-                  tone="customers"
-                  edges={focusEdgesOut}
-                  direction="to"
-                  stageLabelById={stageLabelById}
-                  nodeBySymbol={nodeBySymbol}
+              <div
+                className={`relative flex-1 grid grid-cols-1 gap-4 px-4 py-3 overflow-y-auto ${
+                  presentCategories.length === 3
+                    ? 'md:grid-cols-3'
+                    : presentCategories.length === 2
+                      ? 'md:grid-cols-2'
+                      : ''
+                }`}
+              >
+                <TransactionCluster
+                  category="supplier"
+                  items={supplierItems}
+                  onPick={toggleLock}
+                  onHover={focusTile}
+                  onLeave={scheduleClear}
                 />
-                <EdgeList
-                  title="Suppliers"
-                  arrow="↙"
-                  tone="suppliers"
-                  edges={focusEdgesIn}
-                  direction="from"
-                  stageLabelById={stageLabelById}
-                  nodeBySymbol={nodeBySymbol}
+                <TransactionCluster
+                  category="competitor"
+                  items={competitorItems}
+                  onPick={toggleLock}
+                  onHover={focusTile}
+                  onLeave={scheduleClear}
+                />
+                <TransactionCluster
+                  category="customer"
+                  items={customerItems}
+                  onPick={toggleLock}
+                  onHover={focusTile}
+                  onLeave={scheduleClear}
                 />
               </div>
             </>
@@ -394,6 +502,20 @@ export function ValueChain({
           </div>
         ))}
       </div>
+
+      {diagramSymbol && (
+        <ValueChainDiagram
+          initialSymbol={diagramSymbol}
+          tickers={tickers}
+          quotes={quotes}
+          onClose={() => setDiagramSymbol(null)}
+          onOpenTicker={(id) => {
+            setDiagramSymbol(null)
+            onOpenTicker(id)
+          }}
+          onActivateTicker={onActivateTicker}
+        />
+      )}
     </div>
   )
 }
@@ -476,6 +598,8 @@ function ValueChainTile({
     tone = 'border-indigo-400/80 bg-indigo-500/[0.08] shadow-[0_0_0_1px_rgba(99,102,241,0.35)]'
   } else if (role === 'both') {
     tone = 'border-emerald-400/70 bg-indigo-500/[0.06] shadow-[0_0_0_1px_rgba(99,102,241,0.35)]'
+  } else if (role === 'competitor') {
+    tone = 'border-orange-400/80 bg-orange-500/[0.08] shadow-[0_0_0_1px_rgba(249,115,22,0.35)]'
   } else if (inWatchlist) {
     tone = 'border-edge/70 bg-surface-1 hover:border-edge'
   } else if (hasTickerRow) {
@@ -525,75 +649,3 @@ function ValueChainTile({
   )
 }
 
-function EdgeList({
-  title,
-  arrow,
-  tone,
-  edges,
-  direction,
-  stageLabelById,
-  nodeBySymbol
-}: {
-  title: string
-  arrow: string
-  tone: 'customers' | 'suppliers'
-  edges: ValueChainEdge[]
-  direction: 'from' | 'to'
-  stageLabelById: Map<string, string>
-  nodeBySymbol: Map<string, ValueChainNode>
-}): JSX.Element {
-  // Sort by the counterparty's stage order so defense contractors group with
-  // each other, fabless with fabless, etc. — the list reads as a walk along
-  // the chain instead of in JSON insertion order.
-  const sorted = useMemo(() => {
-    return [...edges].sort((a, b) => {
-      const sa = nodeBySymbol.get(a[direction])?.stage ?? ''
-      const sb = nodeBySymbol.get(b[direction])?.stage ?? ''
-      return sa.localeCompare(sb)
-    })
-  }, [edges, direction, nodeBySymbol])
-
-  // Emerald = revenue flowing in (customers); indigo = inputs/dependencies
-  // (suppliers). The split lets the eye separate the two columns at a glance.
-  const arrowColor = tone === 'customers' ? 'text-emerald-400/80' : 'text-indigo-400/80'
-  const titleColor = tone === 'customers' ? 'text-emerald-200' : 'text-indigo-200'
-  const symbolColor = tone === 'customers' ? 'text-emerald-50' : 'text-indigo-50'
-
-  return (
-    <div>
-      <div className="flex items-center gap-1.5 mb-2">
-        <span className={`text-[13px] leading-none ${arrowColor}`}>{arrow}</span>
-        <span className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${titleColor}`}>
-          {title}
-        </span>
-        <span className="text-[10px] tabular-nums text-zinc-600">· {edges.length}</span>
-      </div>
-      {sorted.length === 0 ? (
-        <div className="text-[11px] text-zinc-600 italic">None in graph.</div>
-      ) : (
-        <ul className="space-y-1.5">
-          {sorted.map((e, i) => {
-            const counterparty = e[direction]
-            const stageId = nodeBySymbol.get(counterparty)?.stage
-            const stageLabel = stageId ? stageLabelById.get(stageId) ?? stageId : ''
-            return (
-              <li key={i} className="flex gap-2 text-[12px] items-start">
-                <span className={`font-bold tabular-nums w-[52px] shrink-0 leading-snug ${symbolColor}`}>
-                  {counterparty}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[9px] uppercase tracking-[0.18em] text-zinc-500 mb-0.5">
-                    {stageLabel}
-                  </div>
-                  <div className="text-zinc-300 leading-snug text-[11.5px]">
-                    {e.note ?? <span className="text-zinc-600">—</span>}
-                  </div>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </div>
-  )
-}

@@ -906,8 +906,8 @@ function StoryTickerItem({
       title={article.title}
       className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors"
     >
-      <span className={`font-bold uppercase tracking-[0.16em] ${badgeColor}`}>{label}</span>
-      <span className="text-zinc-200 max-w-[520px] truncate">{article.title}</span>
+      <span className={`font-bold uppercase tracking-[0.16em] shrink-0 ${badgeColor}`}>{label}</span>
+      <span className="text-zinc-200 truncate w-[440px]">{article.title}</span>
     </button>
   )
 }
@@ -1063,9 +1063,9 @@ function GameTickerItem({
       type="button"
       onClick={onOpen}
       title={`${game.away.shortName} @ ${game.home.shortName}`}
-      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors"
+      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors min-w-[180px]"
     >
-      <span className={`font-bold uppercase tracking-[0.16em] tabular-nums ${statusColor}`}>
+      <span className={`font-bold uppercase tracking-[0.16em] tabular-nums shrink-0 w-[52px] ${statusColor}`}>
         {timeLabel}
       </span>
       <span className="relative font-semibold tracking-[0.08em] text-zinc-100">
@@ -1145,7 +1145,7 @@ function StockTickerItem({
       type="button"
       onClick={onOpen}
       title={`Open ${quote.symbol}`}
-      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors"
+      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors min-w-[172px]"
     >
       <span className="font-semibold tracking-[0.14em] text-zinc-100">{quote.symbol}</span>
       <span className="tabular-nums text-zinc-300">{price}</span>
@@ -2903,6 +2903,7 @@ function StocksPage({
         return (
           <StockDetail
             ticker={t}
+            tickers={tickers}
             quote={bySymbol.get(t.symbol.toUpperCase())}
             onClose={() => setSelectedTickerId(null)}
             onOpenArticle={onOpenArticle}
@@ -3102,12 +3103,14 @@ function BriefSummary({ summary }: { summary: string }): JSX.Element {
 
 function StockDetail({
   ticker,
+  tickers,
   quote,
   onClose,
   onOpenArticle,
   onActivate
 }: {
   ticker: Ticker
+  tickers: Ticker[]
   quote: StockQuote | undefined
   onClose: () => void
   onOpenArticle: (id: number) => void
@@ -3410,7 +3413,7 @@ function StockDetail({
             </section>
           )}
 
-          <StockValueChainCard symbol={ticker.symbol} />
+          <StockValueChainCard symbol={ticker.symbol} tickers={tickers} />
 
           {!ticker.isActive ? (
             <section className="mt-6 rounded-2xl border border-dashed border-edge/70 bg-surface-1 p-5">

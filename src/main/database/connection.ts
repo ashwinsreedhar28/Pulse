@@ -3,6 +3,7 @@ import { app } from 'electron'
 import { join } from 'node:path'
 import { mkdirSync } from 'node:fs'
 import { migrations } from './migrations'
+import { reconcileGraphTickers } from './reconcileGraphTickers'
 
 let dbInstance: Database.Database | null = null
 
@@ -26,6 +27,10 @@ export function initDatabase(): Database.Database {
   db.pragma('optimize')
 
   runMigrations(db)
+  // After migrations: ensure every graph-referenced symbol has a tickers row.
+  // This replaces the old "author a new migration every time the graph grows"
+  // pattern — idempotent, runs on every boot, INSERT OR IGNORE.
+  reconcileGraphTickers(db)
 
   dbInstance = db
   return db

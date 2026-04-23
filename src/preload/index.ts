@@ -184,6 +184,7 @@ export interface Preferences {
   ttsEngine: TtsEngine
   ttsVoice: string
   theme: Theme
+  mediaPipelineEnabled: boolean
 }
 
 export interface SportsTeam {
