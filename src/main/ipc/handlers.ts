@@ -48,6 +48,16 @@ import {
   getEarningsRelease,
   getEarningsReleasesForSymbol
 } from '../database/earningsReleases'
+import { runGraphSweep } from '../services/graphCandidatesService'
+import {
+  countCandidatesSince,
+  listCandidates,
+  markCandidateRejected
+} from '../database/graphCandidates'
+import {
+  deleteEdgeOverride,
+  listEdgeOverrides
+} from '../database/graphOverrides'
 import {
   ensureCompanyProfile,
   getCompanyProfile,
@@ -450,6 +460,42 @@ export function registerDbIpc(): void {
   // passes through.
   ipcMain.handle('stocks:getOptionsSnapshot', (_e, symbol: string) =>
     getOptionsSnapshot(symbol)
+  )
+
+  // Value-chain growth pipeline. Renderer surfaces the audit log + overlay
+  // list in Settings, lets users trigger a sweep manually, and hit Undo on
+  // any auto-accepted edge they disagree with. The Undo flow deletes the
+  // override and marks the source candidate rejected so next sweep doesn't
+  // re-propose.
+  ipcMain.handle(
+    'graph:listCandidates',
+    (_e, opts?: { status?: 'accepted' | 'rejected' | 'pending'; limit?: number }) =>
+      listCandidates(opts)
+  )
+  ipcMain.handle('graph:listOverrides', () => listEdgeOverrides())
+  ipcMain.handle(
+    'graph:countSince',
+    (_e, sinceMs: number) => countCandidatesSince(sinceMs)
+  )
+  ipcMain.handle('graph:runSweep', async () => {
+    const summary = await runGraphSweep()
+    return summary
+  })
+  ipcMain.handle(
+    'graph:undoOverride',
+    (
+      _e,
+      fromSymbol: string,
+      toSymbol: string,
+      relationship: string,
+      candidateId?: number | null
+    ) => {
+      deleteEdgeOverride(fromSymbol, toSymbol, relationship)
+      if (candidateId) {
+        markCandidateRejected(candidateId, 'User removed override via audit panel')
+      }
+      return { ok: true }
+    }
   )
 
   // sports

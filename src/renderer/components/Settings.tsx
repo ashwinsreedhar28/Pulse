@@ -20,6 +20,7 @@ import type {
 } from '../../preload'
 import tickerReference from '../../data/tickerReference.json'
 import locationReference from '../../data/locationReference.json'
+import { GraphUpdatesTab } from './GraphUpdatesTab'
 
 interface TickerRef {
   symbol: string
@@ -38,7 +39,7 @@ interface LocationRef {
 const REFERENCE_TICKERS = tickerReference as TickerRef[]
 const REFERENCE_LOCATIONS = locationReference as LocationRef[]
 
-type Tab = 'categories' | 'feeds' | 'tickers' | 'locations' | 'teams' | 'preferences'
+type Tab = 'categories' | 'feeds' | 'tickers' | 'locations' | 'teams' | 'graph' | 'preferences'
 
 export function Settings({
   onClose,
@@ -93,7 +94,7 @@ export function Settings({
         <header className="h-11 shrink-0 flex items-center gap-3 px-4 border-b border-edge">
           <div className="text-xs tracking-[0.2em] uppercase text-zinc-400 font-medium">Settings</div>
           <div className="flex gap-1 ml-4">
-            {(['categories', 'feeds', 'tickers', 'locations', 'teams', 'preferences'] as const).map((t) => (
+            {(['categories', 'feeds', 'tickers', 'locations', 'teams', 'graph', 'preferences'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -128,6 +129,7 @@ export function Settings({
           {tab === 'tickers' && <TickersTab tickers={tickers} reload={reloadAll} />}
           {tab === 'locations' && <LocationsTab geo={geo} reload={reloadAll} />}
           {tab === 'teams' && <TeamsTab />}
+          {tab === 'graph' && <GraphUpdatesTab />}
           {tab === 'preferences' && <PreferencesTab />}
         </div>
       </div>

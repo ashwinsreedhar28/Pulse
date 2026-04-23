@@ -697,6 +697,181 @@ export async function generatePersonalBrief(
   }
 }
 
+// Classify a candidate edge between two tickers by reading a few supporting
+// article snippets. Returns the model's view of the relationship along with
+// a calibrated confidence score that the graph-candidates auto-judge uses to
+// gate commits. Unlike the looser generate/summarize prompts, the model here
+// is explicitly told to return "unclear" when the evidence is thin — a low-
+// confidence answer is more useful than a hallucinated one.
+export type GraphEdgeRelationship =
+  | 'supplier'
+  | 'customer'
+  | 'competitor'
+  | 'partner'
+  | 'unclear'
+
+export interface GraphEdgeClassification {
+  relationship: GraphEdgeRelationship
+  // Which symbol supplies/buys/competes: always expressed as `fromSymbol -> toSymbol`.
+  // For 'supplier', from supplies to. For 'customer', from buys from to. For
+  // 'competitor' and 'partner', direction is symmetric (model returns either
+  // valid orientation and the service stores it as-is).
+  direction: 'a_to_b' | 'b_to_a' | 'symmetric'
+  // Short (<90 char) human-readable note describing the relationship, grounded
+  // in the evidence. Empty string when relationship is 'unclear'.
+  note: string
+  // 0..1 self-reported confidence. Calibrated to the threshold gate:
+  //   < 0.6 → reject
+  //   0.6-0.8 → accept if source signal is strong (e.g. ≥5 co-mentions)
+  //   > 0.8 → accept
+  confidence: number
+  // One-line rationale that the audit log surfaces back to the user.
+  rationale: string
+}
+
+export async function classifyGraphEdge(input: {
+  symbolA: string
+  symbolB: string
+  // Usually tickers' company names; used so the model can reason about
+  // "Apple" rather than just "AAPL".
+  nameA: string
+  nameB: string
+  snippets: Array<{ title: string; summary: string | null }>
+}): Promise<GraphEdgeClassification | null> {
+  if (input.snippets.length === 0) return null
+  if (!(await checkOllamaHealth())) return null
+
+  const bullets = input.snippets
+    .slice(0, 6)
+    .map((s, i) => {
+      const sum = s.summary?.slice(0, 280) ?? ''
+      return `${i + 1}. "${s.title}"${sum ? ` — ${sum}` : ''}`
+    })
+    .join('\n')
+
+  const system =
+    `You judge supply-chain relationships between pairs of public companies ` +
+    `based ONLY on the article snippets provided. You are the quality gate for ` +
+    `an automated graph-growth pipeline; precision matters more than recall. ` +
+    `When in doubt, return "unclear" with low confidence — a false positive ` +
+    `poisons the graph.\n\n` +
+    `Return strict JSON:\n` +
+    `{\n` +
+    `  "relationship": "supplier" | "customer" | "competitor" | "partner" | "unclear",\n` +
+    `  "direction": "a_to_b" | "b_to_a" | "symmetric",\n` +
+    `  "note": "...under 90 chars, grounded in the evidence...",\n` +
+    `  "confidence": 0.0-1.0,\n` +
+    `  "rationale": "one-line reason for this classification"\n` +
+    `}\n\n` +
+    `Definitions:\n` +
+    `- supplier: A sells physical products / services / IP to B that B uses ` +
+    `as inputs (e.g. chips, equipment, software licenses, cloud compute).\n` +
+    `- customer: A buys from B (inverse of supplier).\n` +
+    `- competitor: A and B sell substitutable products to overlapping buyers.\n` +
+    `- partner: joint venture, co-development, distribution, licensing deal, ` +
+    `or other strategic alignment that isn't a straight buy/sell.\n` +
+    `- unclear: articles don't concretely support any of the above. Default to ` +
+    `this whenever there's genuine ambiguity; return confidence ≤ 0.4.\n\n` +
+    `Direction conventions:\n` +
+    `- "a_to_b" = symbol A is the FROM end of the edge (supplier when ` +
+    `relationship=supplier; buyer when customer).\n` +
+    `- "b_to_a" = symbol B is the FROM end.\n` +
+    `- "symmetric" for competitor/partner (direction doesn't apply).\n\n` +
+    `Rules:\n` +
+    `- Only claim a relationship the articles actually describe. If the pair ` +
+    `is only mentioned in a shared sector context, return "unclear".\n` +
+    `- Don't infer from a single ambiguous mention. Require either an explicit ` +
+    `statement ("Nvidia supplies AI chips to AWS") or two independent ` +
+    `corroborating mentions.\n` +
+    `- Note should name the what: product line, deal type, context. No ` +
+    `marketing language. Example: "Supplies H100 GPUs used in AWS Trainium ` +
+    `and Bedrock workloads."\n` +
+    `- confidence calibration: >0.8 means "an analyst would write this edge ` +
+    `into a research note." 0.6-0.8 means "likely but worth verifying." ` +
+    `Below 0.6 means "don't commit."`
+
+  const user =
+    `Symbol A: ${input.symbolA} (${input.nameA})\n` +
+    `Symbol B: ${input.symbolB} (${input.nameB})\n\n` +
+    `Article snippets mentioning both:\n${bullets}`
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    let res: Response
+    try {
+      res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user }
+          ],
+          stream: false,
+          format: 'json',
+          options: { num_predict: 260, temperature: 0.1 }
+        }),
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!res.ok) {
+      emitHealth(false)
+      return null
+    }
+    const body = (await res.json()) as { message?: { content?: string } }
+    const content = body.message?.content
+    if (!content) return null
+    const parsed = JSON.parse(content) as {
+      relationship?: unknown
+      direction?: unknown
+      note?: unknown
+      confidence?: unknown
+      rationale?: unknown
+    }
+    emitHealth(true)
+    const validRels: GraphEdgeRelationship[] = [
+      'supplier',
+      'customer',
+      'competitor',
+      'partner',
+      'unclear'
+    ]
+    const rel =
+      typeof parsed.relationship === 'string' &&
+      (validRels as string[]).includes(parsed.relationship)
+        ? (parsed.relationship as GraphEdgeRelationship)
+        : 'unclear'
+    const dir =
+      parsed.direction === 'a_to_b' || parsed.direction === 'b_to_a'
+        ? (parsed.direction as 'a_to_b' | 'b_to_a')
+        : 'symmetric'
+    const note =
+      typeof parsed.note === 'string' ? parsed.note.trim().slice(0, 120) : ''
+    const confRaw = typeof parsed.confidence === 'number' ? parsed.confidence : 0
+    const confidence = Math.max(0, Math.min(1, confRaw))
+    const rationale =
+      typeof parsed.rationale === 'string' ? parsed.rationale.trim().slice(0, 180) : ''
+    return {
+      relationship: rel,
+      direction: dir,
+      note,
+      confidence,
+      rationale
+    }
+  } catch (err) {
+    console.warn(
+      '[ollama] classifyGraphEdge failed:',
+      err instanceof Error ? err.message : err
+    )
+    emitHealth(false)
+    return null
+  }
+}
+
 // Heuristic: a "concrete figure" contains at least one digit and isn't
 // phrased as prose. Rejects "Not provided", "Highlighted as growth driver",
 // "N/A" — values that aren't useful in a numbers-grid but the model sometimes

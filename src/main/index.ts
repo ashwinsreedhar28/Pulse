@@ -59,6 +59,10 @@ import {
   stopEarningsReleasesScheduler
 } from './services/earningsReleasesService'
 import {
+  startGraphCandidatesScheduler,
+  stopGraphCandidatesScheduler
+} from './services/graphCandidatesService'
+import {
   startSportsReelScheduler,
   stopSportsReelScheduler
 } from './services/sportsReelScheduler'
@@ -582,6 +586,10 @@ app.whenReady().then(async () => {
   // New filings trigger a one-shot summarize inside refreshFilings; this
   // scheduler just catches the stuff that failed because Ollama was down.
   startEarningsReleasesScheduler()
+  // Dynamic value-chain growth — weekly news co-occurrence sweep with an
+  // inline Ollama auto-judge. Proposes edges, auto-accepts the high-confidence
+  // ones into graph_edge_overrides, logs the rest to graph_candidates.
+  startGraphCandidatesScheduler()
   setAlertsWindowOpener(showMainWindow)
   if (prefs.favoriteTeamAlertsEnabled) startSportsAlerts()
   // Sports reel scheduler is just an ESPN scoreboard fetcher — it has no
@@ -657,6 +665,7 @@ app.on('will-quit', () => {
   stopEstimatesScheduler()
   stopSecFilingsScheduler()
   stopEarningsReleasesScheduler()
+  stopGraphCandidatesScheduler()
   stopSportsReelScheduler()
   stopSportsAlerts()
   stopReelScheduler()

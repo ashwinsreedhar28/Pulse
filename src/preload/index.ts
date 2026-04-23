@@ -416,6 +416,58 @@ export interface AnalystEstimates {
   fetchedAt: number
 }
 
+// Value-chain growth pipeline: audit log rows + accepted-edge overlay.
+// Kinds and statuses mirror the main-process types so a shared helper can
+// reason about both sides.
+export type GraphCandidateKind = 'edge' | 'node' | 'sector_move' | 'note_refresh'
+export type GraphCandidateStatus = 'pending' | 'accepted' | 'rejected'
+
+export interface GraphCandidateEvidence {
+  kind: 'article' | 'filing'
+  id: number | string
+  title: string
+  url: string | null
+  publishedAt: number | null
+}
+
+export interface GraphCandidateEdgePayload {
+  relationship: 'supplier' | 'customer' | 'competitor' | 'partner' | 'unclear'
+  note: string
+}
+
+export interface GraphCandidate {
+  id: number
+  kind: GraphCandidateKind
+  fromSymbol: string | null
+  toSymbol: string | null
+  symbol: string | null
+  payload: GraphCandidateEdgePayload | Record<string, unknown>
+  evidence: GraphCandidateEvidence[]
+  confidence: number
+  source: string
+  status: GraphCandidateStatus
+  createdAt: number
+  reviewedAt: number | null
+  reviewNote: string | null
+}
+
+export interface GraphEdgeOverride {
+  fromSymbol: string
+  toSymbol: string
+  relationship: string
+  note: string | null
+  weight: number | null
+  source: string
+  acceptedAt: number
+}
+
+export interface GraphSweepSummary {
+  proposed: number
+  accepted: number
+  rejected: number
+  skipped: number
+}
+
 // Nearest-expiry options snapshot. IV is a decimal (0.42 = 42%). Put/call
 // ratio > 1 means more puts outstanding (defensive tilt).
 export interface OptionsSnapshot {
@@ -1075,6 +1127,38 @@ const api = {
       ipcRenderer.on('earningsReleases:updated', listener)
       return (): void => {
         ipcRenderer.off('earningsReleases:updated', listener)
+      }
+    }
+  },
+  graph: {
+    listCandidates: (opts?: {
+      status?: GraphCandidateStatus
+      limit?: number
+    }): Promise<GraphCandidate[]> => invoke<GraphCandidate[]>('graph:listCandidates', opts),
+    listOverrides: (): Promise<GraphEdgeOverride[]> =>
+      invoke<GraphEdgeOverride[]>('graph:listOverrides'),
+    countSince: (sinceMs: number): Promise<{ accepted: number; rejected: number }> =>
+      invoke<{ accepted: number; rejected: number }>('graph:countSince', sinceMs),
+    runSweep: (): Promise<GraphSweepSummary> =>
+      invoke<GraphSweepSummary>('graph:runSweep'),
+    undoOverride: (
+      fromSymbol: string,
+      toSymbol: string,
+      relationship: string,
+      candidateId?: number | null
+    ): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>(
+        'graph:undoOverride',
+        fromSymbol,
+        toSymbol,
+        relationship,
+        candidateId ?? null
+      ),
+    onUpdated: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('graph:updated', listener)
+      return (): void => {
+        ipcRenderer.off('graph:updated', listener)
       }
     }
   },

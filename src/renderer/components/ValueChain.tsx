@@ -3,6 +3,7 @@ import type {
   AnalystEstimates,
   EarningsBadge,
   FinancialsSnapshot,
+  GraphEdgeOverride,
   OptionsSnapshot,
   SecFiling,
   StockQuote,
@@ -254,6 +255,37 @@ export function ValueChain({
     })
   }, [])
 
+  // Auto-committed graph-edge overlays from the candidates pipeline. Merged
+  // into CHAIN.edges / COMPETITOR_MAP at the relationship-building useMemos
+  // below so accepted edges participate in the same role inference as the
+  // static JSON edges. Refreshes on every graph:updated broadcast (fires
+  // when a sweep commits new edges or the user undoes one in Settings).
+  const [edgeOverrides, setEdgeOverrides] = useState<GraphEdgeOverride[]>([])
+  useEffect(() => {
+    let cancelled = false
+    window.api.graph
+      .listOverrides()
+      .then((rows) => {
+        if (!cancelled) setEdgeOverrides(rows)
+      })
+      .catch((err: unknown) => {
+        console.warn('[valueChain] overrides fetch failed', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  useEffect(() => {
+    return window.api.graph.onUpdated(() => {
+      window.api.graph
+        .listOverrides()
+        .then(setEdgeOverrides)
+        .catch(() => {
+          /* keep prior overrides */
+        })
+    })
+  }, [])
+
   // Recent SEC filings (last 72h) — powers the 📄 badge on value-chain tiles
   // to flag "something just got filed here". Only tickers with interesting
   // forms in the window come back, so non-watchlist graph nodes won't appear
@@ -359,10 +391,49 @@ export function ValueChain({
       .filter((g) => g.nodes.length > 0)
   }, [visibleSymbols])
 
+  // Static graph edges + directional overlay edges (supplier/partner). The
+  // overrides pipeline auto-classifies high-confidence ticker pairs into
+  // supplier/customer/competitor/partner; directional kinds get threaded
+  // through outgoing/incoming so they show up as customer/supplier roles
+  // on the focus panel just like the static edges do.
+  const mergedDirectionalEdges = useMemo<ValueChainEdge[]>(() => {
+    const out: ValueChainEdge[] = [...CHAIN.edges]
+    for (const o of edgeOverrides) {
+      if (o.relationship === 'supplier' || o.relationship === 'partner') {
+        out.push({
+          from: o.fromSymbol.toUpperCase(),
+          to: o.toSymbol.toUpperCase(),
+          note: o.note ?? undefined
+        })
+      }
+    }
+    return out
+  }, [edgeOverrides])
+
+  // Static competitor pairs + competitor-typed overrides. Same shape as the
+  // module-level COMPETITOR_MAP built from supplyChainGraph.json's competitors
+  // array — Map<symbol, Set<peer>>, symmetric.
+  const mergedCompetitorMap = useMemo<Map<string, Set<string>>>(() => {
+    const m = new Map<string, Set<string>>()
+    for (const [k, v] of COMPETITOR_MAP) {
+      m.set(k, new Set(v))
+    }
+    for (const o of edgeOverrides) {
+      if (o.relationship !== 'competitor') continue
+      const a = o.fromSymbol.toUpperCase()
+      const b = o.toSymbol.toUpperCase()
+      if (!m.has(a)) m.set(a, new Set())
+      if (!m.has(b)) m.set(b, new Set())
+      m.get(a)!.add(b)
+      m.get(b)!.add(a)
+    }
+    return m
+  }, [edgeOverrides])
+
   const { outgoing, incoming } = useMemo(() => {
     const out = new Map<string, ValueChainEdge[]>()
     const inc = new Map<string, ValueChainEdge[]>()
-    for (const e of CHAIN.edges) {
+    for (const e of mergedDirectionalEdges) {
       if (!visibleSymbols.has(e.from) || !visibleSymbols.has(e.to)) continue
       if (!out.has(e.from)) out.set(e.from, [])
       out.get(e.from)!.push(e)
@@ -370,7 +441,7 @@ export function ValueChain({
       inc.get(e.to)!.push(e)
     }
     return { outgoing: out, incoming: inc }
-  }, [visibleSymbols])
+  }, [visibleSymbols, mergedDirectionalEdges])
 
   // Track not just "is this tile related" but "how" — so tile coloring can
   // mirror the Customers (emerald) / Suppliers (indigo) / Competitors (orange)
@@ -389,19 +460,19 @@ export function ValueChain({
       const prev = m.get(e.from)
       m.set(e.from, prev === 'customer' ? 'both' : 'supplier')
     }
-    for (const peer of COMPETITOR_MAP.get(focusSymbol) ?? []) {
+    for (const peer of mergedCompetitorMap.get(focusSymbol) ?? []) {
       if (!visibleSymbols.has(peer)) continue
       m.set(peer, 'competitor')
     }
     return m
-  }, [focusSymbol, outgoing, incoming, visibleSymbols])
+  }, [focusSymbol, outgoing, incoming, visibleSymbols, mergedCompetitorMap])
 
   const focusCompetitors = useMemo(() => {
     if (!focusSymbol) return []
-    const peers = COMPETITOR_MAP.get(focusSymbol)
+    const peers = mergedCompetitorMap.get(focusSymbol)
     if (!peers) return []
     return [...peers].filter((s) => visibleSymbols.has(s)).sort()
-  }, [focusSymbol, visibleSymbols])
+  }, [focusSymbol, visibleSymbols, mergedCompetitorMap])
 
   const openDetail = (symbol: string): void => {
     const t = tickerBySymbol.get(symbol.toUpperCase())
@@ -756,7 +827,7 @@ export function ValueChain({
       {peerCompareSymbol && (
         <PeerCompareModal
           focusSymbol={peerCompareSymbol}
-          peers={[...(COMPETITOR_MAP.get(peerCompareSymbol) ?? [])].sort()}
+          peers={[...(mergedCompetitorMap.get(peerCompareSymbol) ?? [])].sort()}
           tickerBySymbol={tickerBySymbol}
           quoteBySymbol={quoteBySymbol}
           financialsBySymbol={financialsMap}
