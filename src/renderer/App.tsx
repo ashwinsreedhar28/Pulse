@@ -11,6 +11,8 @@ import { ValueChain } from './components/ValueChain'
 import { StockValueChainCard } from './components/StockValueChainCard'
 import { SecFilingsSection } from './components/SecFilingsSection'
 import { OptionsSnapshotSection } from './components/OptionsSnapshotSection'
+import { EarningsReleaseSection } from './components/EarningsReleaseSection'
+import { CollapsibleSection } from './components/CollapsibleSection'
 import { WhyThisMatters } from './components/WhyThisMatters'
 import {
   ScoreFlourish,
@@ -3415,16 +3417,7 @@ function StockDetail({
           </section>
 
           {fundamentals && (
-            <section className="mt-6 rounded-2xl border border-edge bg-surface-1 p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
-                  Key stats
-                </h2>
-                <span className="h-px flex-1 bg-edge/80" />
-                <span className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
-                  via Yahoo Finance
-                </span>
-              </div>
+            <CollapsibleSection title="Key stats" meta="via Yahoo Finance" defaultOpen>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-5 gap-y-3">
                 <FundamentalCell label="P/E" value={formatPE(fundamentals.peRatio)} />
                 <FundamentalCell label="Fwd P/E" value={formatPE(fundamentals.forwardPE)} />
@@ -3433,26 +3426,61 @@ function StockDetail({
                 <FundamentalCell label="Div yield" value={formatYield(fundamentals.dividendYield)} />
                 <FundamentalCell label="52W range" value={format52wRange(fundamentals.weekLow52, fundamentals.weekHigh52, fundamentals.currency)} />
               </div>
-            </section>
+            </CollapsibleSection>
           )}
 
           <StockValueChainCard symbol={ticker.symbol} tickers={tickers} />
 
-          <OptionsSnapshotSection symbol={ticker.symbol} />
+          <EarningsReleaseSection symbol={ticker.symbol} />
+
+          {ticker.isActive && (
+            <CollapsibleSection
+              title="Today's brief"
+              meta={
+                summaryCount > 0
+                  ? `${summaryCount} ${summaryCount === 1 ? 'article' : 'articles'}`
+                  : undefined
+              }
+              defaultOpen
+            >
+              {summaryState === 'loading' && (
+                <div className="text-[12px] uppercase tracking-[0.22em] text-zinc-600">
+                  Summarizing…
+                </div>
+              )}
+              {summaryState === 'empty' && (
+                <div className="text-[13px] text-zinc-500">
+                  No news today for {ticker.symbol}.
+                </div>
+              )}
+              {summaryState === 'no-material' && (
+                <div className="text-[13px] text-zinc-500">
+                  No material news today for {ticker.symbol}. {summaryCount}{' '}
+                  {summaryCount === 1 ? 'article' : 'articles'} surfaced but none were
+                  substantively about the company (see below).
+                </div>
+              )}
+              {summaryState === 'offline' && (
+                <div className="text-[13px] text-zinc-500">
+                  AI summary unavailable — Ollama is offline. {summaryCount}{' '}
+                  {summaryCount === 1 ? 'article' : 'articles'} in the last 24h (see below).
+                </div>
+              )}
+              {summaryState === 'ready' && summary && <BriefSummary summary={summary} />}
+            </CollapsibleSection>
+          )}
 
           <SecFilingsSection symbol={ticker.symbol} />
 
+          <OptionsSnapshotSection symbol={ticker.symbol} />
+
           {!ticker.isActive ? (
-            <section className="mt-6 rounded-2xl border border-dashed border-edge/70 bg-surface-1 p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
-                  News coverage
-                </h2>
-                <span className="h-px flex-1 bg-edge/80" />
-                <span className="text-[10px] uppercase tracking-[0.22em] text-indigo-300">
-                  tracked · not in watchlist
-                </span>
-              </div>
+            <CollapsibleSection
+              title="News coverage"
+              meta={<span className="text-indigo-300">tracked · not in watchlist</span>}
+              defaultOpen
+              tone="dashed"
+            >
               <p className="text-[13px] text-zinc-400 leading-snug">
                 {ticker.symbol} is tracked for quotes and value-chain context, but no news
                 feeds are ingested until it's added to your watchlist.
@@ -3463,55 +3491,9 @@ function StockDetail({
               >
                 + Add {ticker.symbol} to watchlist
               </button>
-            </section>
+            </CollapsibleSection>
           ) : (
-            <>
-          <section className="mt-6 rounded-2xl border border-edge bg-surface-1 p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
-                Today's brief
-              </h2>
-              <span className="h-px flex-1 bg-edge/80" />
-              {summaryCount > 0 && (
-                <span className="text-[10px] tabular-nums text-zinc-500">
-                  {summaryCount} {summaryCount === 1 ? 'article' : 'articles'}
-                </span>
-              )}
-            </div>
-            {summaryState === 'loading' && (
-              <div className="text-[12px] uppercase tracking-[0.22em] text-zinc-600">
-                Summarizing…
-              </div>
-            )}
-            {summaryState === 'empty' && (
-              <div className="text-[13px] text-zinc-500">
-                No news today for {ticker.symbol}.
-              </div>
-            )}
-            {summaryState === 'no-material' && (
-              <div className="text-[13px] text-zinc-500">
-                No material news today for {ticker.symbol}. {summaryCount}{' '}
-                {summaryCount === 1 ? 'article' : 'articles'} surfaced but none were
-                substantively about the company (see below).
-              </div>
-            )}
-            {summaryState === 'offline' && (
-              <div className="text-[13px] text-zinc-500">
-                AI summary unavailable — Ollama is offline. {summaryCount}{' '}
-                {summaryCount === 1 ? 'article' : 'articles'} in the last 24h (see below).
-              </div>
-            )}
-            {summaryState === 'ready' && summary && <BriefSummary summary={summary} />}
-          </section>
-
-          <section className="mt-8">
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
-                Latest coverage
-              </h2>
-              <span className="h-px flex-1 bg-edge/80" />
-              <span className="text-[10px] tabular-nums text-zinc-500">{articles.length}</span>
-            </div>
+            <CollapsibleSection title="Latest coverage" meta={String(articles.length)} defaultOpen>
             {loadingArticles ? (
               <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-600 py-10 text-center">
                 Searching feeds…
@@ -3582,8 +3564,7 @@ function StockDetail({
                 ))}
               </div>
             )}
-          </section>
-            </>
+            </CollapsibleSection>
           )}
         </div>
       </div>

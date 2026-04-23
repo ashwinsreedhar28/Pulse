@@ -41,6 +41,14 @@ import {
   INTERESTING_FORMS
 } from '../services/secService'
 import {
+  isEarningsRelease,
+  summarizeRelease
+} from '../services/earningsReleasesService'
+import {
+  getEarningsRelease,
+  getEarningsReleasesForSymbol
+} from '../database/earningsReleases'
+import {
   ensureCompanyProfile,
   getCompanyProfile,
   regenerateCompanyProfile
@@ -406,6 +414,35 @@ export function registerDbIpc(): void {
     }
   )
   ipcMain.handle('sec:refreshFilings', (_e, symbol: string) => forceRefreshFilings(symbol))
+
+  // Earnings-release AI summaries. getReleaseSummary returns the cached row
+  // (null when we haven't processed this accession yet); summarizeRelease
+  // fetches the 8-K primary doc, extracts text, and runs the Ollama
+  // pipeline — useful when a user expands an old 8-K that landed before
+  // this feature was installed.
+  ipcMain.handle(
+    'sec:getReleaseSummary',
+    (_e, symbol: string, accessionNumber: string) =>
+      getEarningsRelease(symbol, accessionNumber)
+  )
+  ipcMain.handle(
+    'sec:getReleaseSummariesForSymbol',
+    (_e, symbol: string, limit?: number) =>
+      getEarningsReleasesForSymbol(symbol, limit ?? 12)
+  )
+  ipcMain.handle(
+    'sec:summarizeRelease',
+    async (_e, symbol: string, accessionNumber: string) => {
+      const filings = getFilingsForSymbol(symbol, 50)
+      const match = filings.find((f) => f.accessionNumber === accessionNumber)
+      if (!match || !isEarningsRelease(match)) return null
+      const ticker = tickersDb
+        .listTickers()
+        .find((t) => t.symbol.toUpperCase() === symbol.toUpperCase())
+      const companyName = ticker?.companyName ?? symbol
+      return summarizeRelease({ symbol, companyName, filing: match })
+    }
+  )
 
   // Options snapshot — nearest-expiry IV, put/call OI ratio, ATM straddle
   // cost (= expected move through expiry). 15-min in-memory cache inside

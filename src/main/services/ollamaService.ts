@@ -697,6 +697,134 @@ export async function generatePersonalBrief(
   }
 }
 
+export interface EarningsReleaseSummary {
+  // 3-5 sentence overview of the quarter. No JSON scaffolding, just prose.
+  overview: string
+  // Key reported figures as "label: value" pairs. Model extracts what the
+  // release actually cites — revenue, EPS, growth rates, segment results,
+  // whatever the company emphasized. Limited to 6 so the UI can render as a
+  // tight grid.
+  keyNumbers: Array<{ label: string; value: string }>
+  // Forward guidance pulled from the release (next quarter / full year).
+  // Empty array when the company didn't reaffirm or update guidance.
+  guidance: string[]
+  // 0-2 short management quotes that capture the tone of the call.
+  quotes: string[]
+}
+
+// Summarize the text of a company's own earnings press release (Item 2.02 of
+// an 8-K, usually surfaced as Exhibit 99.1). This is the most reliable free
+// source for "what the company said about the quarter" — it's their words,
+// not a third-party writer's. We extract structured fields so the UI can
+// render as a dashboard rather than a prose blob.
+export async function summarizeEarningsRelease(input: {
+  symbol: string
+  companyName: string
+  filedAt: number
+  bodyText: string
+}): Promise<EarningsReleaseSummary | null> {
+  if (!input.bodyText.trim()) return null
+  if (!(await checkOllamaHealth())) return null
+
+  const filedDate = new Date(input.filedAt).toISOString().slice(0, 10)
+
+  const system =
+    `You summarize corporate earnings press releases (SEC Item 2.02 / Exhibit 99.1) ` +
+    `for an investor-facing dashboard. Extract what the company reported, grounded ` +
+    `strictly in the provided text. Do not invent numbers, quotes, or guidance.\n\n` +
+    `Output strict JSON with this shape:\n` +
+    `{\n` +
+    `  "overview": "3-5 concise sentences summarizing the quarter — revenue direction, ` +
+    `margin/profit tone, segment callouts, any notable events.",\n` +
+    `  "keyNumbers": [{"label": "...", "value": "..."}, ...],  // up to 6 items\n` +
+    `  "guidance": ["...forward guidance statement...", ...],  // up to 3 items, empty array if no guidance\n` +
+    `  "quotes": ["...short management quote...", ...]         // up to 2 items, empty array if none worth citing\n` +
+    `}\n\n` +
+    `Rules:\n` +
+    `- keyNumbers: labels like "Revenue", "EPS (GAAP)", "Operating margin", "Data Center revenue", ` +
+    `"FCF", "Customer count". Values exactly as stated ("$96.4B", "+8% YoY", "$1.54").\n` +
+    `- guidance: only include if the release explicitly cites next-period outlook. Otherwise empty.\n` +
+    `- quotes: attribute with role if present ("CEO: ..."). Keep each under 160 chars.\n` +
+    `- overview: no marketing language, no "solid quarter" fluff. Lead with the numbers that moved.\n` +
+    `- If the text isn't actually an earnings release (e.g., the 8-K was a different event), return ` +
+    `{"overview": "", "keyNumbers": [], "guidance": [], "quotes": []}.`
+
+  // mistral:7b handles ~8k-token context; we budget 6000 chars for the body
+  // which is roughly 1500 tokens — leaves ample headroom for system + output.
+  const user =
+    `Company: ${input.companyName} (${input.symbol})\n` +
+    `Filed: ${filedDate}\n\n` +
+    `Earnings release text:\n${input.bodyText.slice(0, 6000)}`
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    let res: Response
+    try {
+      res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user }
+          ],
+          stream: false,
+          format: 'json',
+          options: { num_predict: 900, temperature: 0.2 }
+        }),
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!res.ok) {
+      emitHealth(false)
+      return null
+    }
+    const body = (await res.json()) as { message?: { content?: string } }
+    const content = body.message?.content
+    if (!content) return null
+    const parsed = JSON.parse(content) as {
+      overview?: unknown
+      keyNumbers?: unknown
+      guidance?: unknown
+      quotes?: unknown
+    }
+    emitHealth(true)
+    const overview = typeof parsed.overview === 'string' ? parsed.overview.trim() : ''
+    if (!overview) return null
+    const keyNumbers = Array.isArray(parsed.keyNumbers)
+      ? parsed.keyNumbers
+          .map((x: unknown) => x as { label?: unknown; value?: unknown })
+          .filter((x) => typeof x.label === 'string' && typeof x.value === 'string')
+          .slice(0, 6)
+          .map((x) => ({ label: (x.label as string).trim(), value: (x.value as string).trim() }))
+      : []
+    const guidance = Array.isArray(parsed.guidance)
+      ? parsed.guidance
+          .filter((g): g is string => typeof g === 'string' && g.trim().length > 0)
+          .slice(0, 3)
+          .map((g) => g.trim())
+      : []
+    const quotes = Array.isArray(parsed.quotes)
+      ? parsed.quotes
+          .filter((q): q is string => typeof q === 'string' && q.trim().length > 0)
+          .slice(0, 2)
+          .map((q) => q.trim())
+      : []
+    return { overview, keyNumbers, guidance, quotes }
+  } catch (err) {
+    console.warn(
+      '[ollama] summarizeEarningsRelease failed:',
+      err instanceof Error ? err.message : err
+    )
+    emitHealth(false)
+    return null
+  }
+}
+
 export interface TickerSummaryInput {
   symbol: string
   companyName: string

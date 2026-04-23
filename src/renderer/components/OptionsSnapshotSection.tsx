@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 
 import type { OptionsSnapshot } from '../../preload'
+import { CollapsibleSection } from './CollapsibleSection'
 
 function formatPct(ratio: number | null, digits = 1): string {
   if (ratio === null || !Number.isFinite(ratio)) return '—'
@@ -71,16 +72,9 @@ export function OptionsSnapshotSection({ symbol }: { symbol: string }): JSX.Elem
   if (snap === null) return null
   if (snap === undefined) {
     return (
-      <section className="mt-6 rounded-2xl border border-edge bg-surface-1 p-5">
-        <div className="flex items-center gap-3 mb-3">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
-            Options signal
-          </h2>
-          <span className="h-px flex-1 bg-edge/80" />
-          <span className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">via Yahoo</span>
-        </div>
+      <CollapsibleSection title="Options signal" meta="via Yahoo" defaultOpen>
         <div className="text-[12px] text-zinc-500">Loading options data…</div>
-      </section>
+      </CollapsibleSection>
     )
   }
 
@@ -92,16 +86,11 @@ export function OptionsSnapshotSection({ symbol }: { symbol: string }): JSX.Elem
   const iv = ivTone(snap.impliedVol)
 
   return (
-    <section className="mt-6 rounded-2xl border border-edge bg-surface-1 p-5">
-      <div className="flex items-center gap-3 mb-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
-          Options signal
-        </h2>
-        <span className="h-px flex-1 bg-edge/80" />
-        <span className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
-          {expiryStr} · {snap.daysToExpiry}d
-        </span>
-      </div>
+    <CollapsibleSection
+      title="Options signal"
+      meta={`${expiryStr} · ${snap.daysToExpiry}d`}
+      defaultOpen
+    >
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-3">
         <Stat
           label="Implied vol"
@@ -138,7 +127,7 @@ export function OptionsSnapshotSection({ symbol }: { symbol: string }): JSX.Elem
         Expected move = ATM straddle mid price — the market&apos;s implied absolute move in{' '}
         {symbol} through {expiryStr}. IV is the mean of the ATM call + put implied volatilities.
       </p>
-    </section>
+    </CollapsibleSection>
   )
 }
 

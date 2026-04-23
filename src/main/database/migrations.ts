@@ -818,5 +818,36 @@ export const migrations: Migration[] = [
           ON sec_filings(formType);
       `)
     }
+  },
+  {
+    version: 31,
+    name: 'create earnings_releases for 8-K 2.02 AI summaries',
+    // One row per (symbol, accessionNumber) where the 8-K carries Item 2.02
+    // (Results of Operations). summaryJson holds the structured Ollama output
+    // — highlights, key numbers, guidance, notable quotes — so the UI can
+    // render it as a small dashboard rather than a blob of prose.
+    //
+    // status tracks the async pipeline: 'pending' while the body is being
+    // fetched + summarized, 'ready' when the row has a summary, 'offline'
+    // when Ollama was unreachable (chips still show via the raw filing),
+    // 'error' when parsing or summarization failed. Re-queued on next open.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS earnings_releases (
+          symbol TEXT NOT NULL,
+          accessionNumber TEXT NOT NULL,
+          status TEXT NOT NULL,
+          summaryJson TEXT,
+          rawTextLength INTEGER,
+          filedAt INTEGER NOT NULL,
+          generatedAt INTEGER,
+          PRIMARY KEY (symbol, accessionNumber)
+        );
+        CREATE INDEX IF NOT EXISTS idx_earnings_releases_symbol_filedAt
+          ON earnings_releases(symbol, filedAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_earnings_releases_status
+          ON earnings_releases(status);
+      `)
+    }
   }
 ]

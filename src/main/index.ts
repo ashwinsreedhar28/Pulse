@@ -55,6 +55,10 @@ import {
   stopSecFilingsScheduler
 } from './services/secFilingsService'
 import {
+  startEarningsReleasesScheduler,
+  stopEarningsReleasesScheduler
+} from './services/earningsReleasesService'
+import {
   startSportsReelScheduler,
   stopSportsReelScheduler
 } from './services/sportsReelScheduler'
@@ -574,6 +578,10 @@ app.whenReady().then(async () => {
   // CIK map refreshes monthly, filings per-symbol daily. Separate scheduler
   // because SEC has a different rate-limit regime than Yahoo.
   startSecFilingsScheduler()
+  // Earnings-release AI summaries — retries pending/offline rows every 30min.
+  // New filings trigger a one-shot summarize inside refreshFilings; this
+  // scheduler just catches the stuff that failed because Ollama was down.
+  startEarningsReleasesScheduler()
   setAlertsWindowOpener(showMainWindow)
   if (prefs.favoriteTeamAlertsEnabled) startSportsAlerts()
   // Sports reel scheduler is just an ESPN scoreboard fetcher — it has no
@@ -648,6 +656,7 @@ app.on('will-quit', () => {
   stopFinancialsScheduler()
   stopEstimatesScheduler()
   stopSecFilingsScheduler()
+  stopEarningsReleasesScheduler()
   stopSportsReelScheduler()
   stopSportsAlerts()
   stopReelScheduler()

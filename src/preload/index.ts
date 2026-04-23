@@ -423,6 +423,28 @@ export interface OptionsSnapshot {
   fetchedAt: number
 }
 
+// Structured AI summary of an earnings press release (8-K Item 2.02 /
+// Exhibit 99.1). overview is prose; keyNumbers / guidance / quotes render
+// as typed blocks in the UI.
+export interface EarningsReleaseSummary {
+  overview: string
+  keyNumbers: Array<{ label: string; value: string }>
+  guidance: string[]
+  quotes: string[]
+}
+
+export type EarningsReleaseStatus = 'pending' | 'ready' | 'offline' | 'error'
+
+export interface EarningsReleaseRow {
+  symbol: string
+  accessionNumber: string
+  status: EarningsReleaseStatus
+  summary: EarningsReleaseSummary | null
+  rawTextLength: number | null
+  filedAt: number
+  generatedAt: number | null
+}
+
 // SEC EDGAR filing record. Dates are unix ms. filingUrl is the accession
 // index page; primaryDocUrl is the main document (10-K, 8-K body, etc.).
 export interface SecFiling {
@@ -1030,6 +1052,19 @@ const api = {
       ipcRenderer.on('secFilings:updated', listener)
       return (): void => {
         ipcRenderer.off('secFilings:updated', listener)
+      }
+    },
+    getReleaseSummary: (symbol: string, accessionNumber: string) =>
+      invoke<EarningsReleaseRow | null>('sec:getReleaseSummary', symbol, accessionNumber),
+    getReleaseSummariesForSymbol: (symbol: string, limit?: number) =>
+      invoke<EarningsReleaseRow[]>('sec:getReleaseSummariesForSymbol', symbol, limit),
+    summarizeRelease: (symbol: string, accessionNumber: string) =>
+      invoke<EarningsReleaseRow | null>('sec:summarizeRelease', symbol, accessionNumber),
+    onReleaseSummaryUpdated: (cb: (symbol: string) => void): (() => void) => {
+      const listener = (_e: unknown, symbol: string): void => cb(symbol)
+      ipcRenderer.on('earningsReleases:updated', listener)
+      return (): void => {
+        ipcRenderer.off('earningsReleases:updated', listener)
       }
     }
   },
