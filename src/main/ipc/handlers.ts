@@ -21,6 +21,11 @@ import {
   getEarningsBadgesForSymbols
 } from '../services/earningsService'
 import {
+  forceRefreshEstimates,
+  getEstimatesSnapshot,
+  getEstimatesSnapshotsForSymbols
+} from '../services/analystEstimatesService'
+import {
   ensureCompanyProfile,
   getCompanyProfile,
   regenerateCompanyProfile
@@ -328,6 +333,18 @@ export function registerDbIpc(): void {
   )
   ipcMain.handle('stocks:getEarningsBatch', (_e, symbols: string[]) =>
     getEarningsBadgesForSymbols(symbols)
+  )
+  // Analyst consensus (forward EPS, price targets, upgrade/downgrade tally).
+  // Batch variant backs the value-chain focus panel + peer-compare modal;
+  // refresh endpoint bypasses the weekly staleness gate for manual kicks.
+  ipcMain.handle('stocks:getEstimates', (_e, symbol: string) =>
+    getEstimatesSnapshot(symbol)
+  )
+  ipcMain.handle('stocks:getEstimatesBatch', (_e, symbols: string[]) =>
+    getEstimatesSnapshotsForSymbols(symbols)
+  )
+  ipcMain.handle('stocks:refreshEstimates', (_e, symbol: string) =>
+    forceRefreshEstimates(symbol)
   )
 
   // sports

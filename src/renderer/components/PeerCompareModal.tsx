@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import type {
+  AnalystEstimates,
   EarningsBadge,
   FinancialsSnapshot,
   StockQuote,
@@ -24,6 +25,7 @@ import { EarningsBeatMiss } from './EarningsBeatMiss'
 import { FcfSparkline } from './FcfSparkline'
 import {
   fcfMarginTone,
+  formatEpsDelta,
   formatMoneyCompact,
   formatPctDelta,
   formatPctValue
@@ -35,7 +37,8 @@ type SortKey =
   | 'revenueTTM'
   | 'revYoY'
   | 'fcfMargin'
-  | 'recentSurprise'
+  | 'recentDelta'
+  | 'ptUpside'
 
 interface Row {
   symbol: string
@@ -45,6 +48,7 @@ interface Row {
   quote: StockQuote | undefined
   financials: FinancialsSnapshot | undefined
   earnings: EarningsBadge | undefined
+  estimates: AnalystEstimates | undefined
 }
 
 function rowSortValue(row: Row, key: SortKey): number | null {
@@ -61,8 +65,17 @@ function rowSortValue(row: Row, key: SortKey): number | null {
       return row.financials?.yoy.revenue ?? null
     case 'fcfMargin':
       return row.financials?.ttm.fcfMargin ?? null
-    case 'recentSurprise':
-      return row.earnings?.history[0]?.surprisePct ?? null
+    case 'recentDelta': {
+      const q = row.earnings?.history[0]
+      if (!q || q.epsActual === null || q.epsEstimate === null) return null
+      return q.epsActual - q.epsEstimate
+    }
+    case 'ptUpside': {
+      const price = row.quote?.price ?? null
+      const target = row.estimates?.targetMean ?? null
+      if (price === null || target === null || price <= 0) return null
+      return (target - price) / price
+    }
   }
 }
 
@@ -73,6 +86,7 @@ export function PeerCompareModal({
   quoteBySymbol,
   financialsBySymbol,
   earningsBySymbol,
+  estimatesBySymbol,
   onClose,
   onOpenTicker,
   onActivateTicker
@@ -83,6 +97,7 @@ export function PeerCompareModal({
   quoteBySymbol: Map<string, StockQuote>
   financialsBySymbol: Map<string, FinancialsSnapshot>
   earningsBySymbol: Map<string, EarningsBadge>
+  estimatesBySymbol: Map<string, AnalystEstimates>
   onClose: () => void
   onOpenTicker: (tickerId: number) => void
   onActivateTicker: (tickerId: number) => void
@@ -109,12 +124,21 @@ export function PeerCompareModal({
         ticker,
         quote: quoteBySymbol.get(sym),
         financials: financialsBySymbol.get(sym),
-        earnings: earningsBySymbol.get(sym)
+        earnings: earningsBySymbol.get(sym),
+        estimates: estimatesBySymbol.get(sym)
       }
     }
     const all: Row[] = [build(focusSymbol, true), ...peers.map((p) => build(p, false))]
     return all
-  }, [focusSymbol, peers, tickerBySymbol, quoteBySymbol, financialsBySymbol, earningsBySymbol])
+  }, [
+    focusSymbol,
+    peers,
+    tickerBySymbol,
+    quoteBySymbol,
+    financialsBySymbol,
+    earningsBySymbol,
+    estimatesBySymbol
+  ])
 
   const sortedRows = useMemo<Row[]>(() => {
     // Focus ticker always pins to the top regardless of sort — the point of
@@ -221,12 +245,19 @@ export function PeerCompareModal({
                 <th className="text-right font-semibold py-3 px-3">FCF 8Q</th>
                 <HeaderCell
                   label="Last EPS Δ"
-                  sortKey="recentSurprise"
+                  sortKey="recentDelta"
                   currentKey={sortKey}
                   dir={sortDir}
-                  onClick={() => toggleSort('recentSurprise')}
+                  onClick={() => toggleSort('recentDelta')}
                 />
-                <th className="text-right font-semibold py-3 px-3">EPS 4Q</th>
+                <th className="text-right font-semibold py-3 px-3">EPS Δ 4Q</th>
+                <HeaderCell
+                  label="PT upside"
+                  sortKey="ptUpside"
+                  currentKey={sortKey}
+                  dir={sortDir}
+                  onClick={() => toggleSort('ptUpside')}
+                />
                 <th className="py-3 px-3" />
               </tr>
             </thead>
@@ -303,23 +334,38 @@ function PeerRow({
           : 'text-zinc-300'
   const marginTone = fcfMarginTone(fin?.ttm.fcfMargin ?? null)
   const marginPct = formatPctValue(fin?.ttm.fcfMargin ?? null)
-  const recentSurprise = row.earnings?.history[0]?.surprisePct ?? null
-  const recentSurpriseLabel =
-    recentSurprise === null || !Number.isFinite(recentSurprise)
-      ? null
-      : (() => {
-          const percent = Math.abs(recentSurprise) > 1 ? recentSurprise : recentSurprise * 100
-          const sign = percent >= 0 ? '+' : ''
-          return `${sign}${percent.toFixed(1)}%`
-        })()
-  const recentSurpriseColor =
-    recentSurprise === null
+  const recentQuarter = row.earnings?.history[0]
+  const recentDeltaLabel = formatEpsDelta(
+    recentQuarter?.epsActual ?? null,
+    recentQuarter?.epsEstimate ?? null
+  )
+  const recentDeltaValue =
+    recentQuarter && recentQuarter.epsActual !== null && recentQuarter.epsEstimate !== null
+      ? recentQuarter.epsActual - recentQuarter.epsEstimate
+      : null
+  const recentDeltaColor =
+    recentDeltaValue === null
       ? 'text-zinc-500'
-      : recentSurprise > 0.01
+      : recentDeltaValue > 0
         ? 'text-emerald-300'
-        : recentSurprise < -0.01
+        : recentDeltaValue < 0
           ? 'text-red-300'
           : 'text-zinc-300'
+
+  const price = row.quote?.price ?? null
+  const targetMean = row.estimates?.targetMean ?? null
+  const ptUpside =
+    price !== null && targetMean !== null && price > 0 ? (targetMean - price) / price : null
+  const ptUpsideColor =
+    ptUpside === null
+      ? 'text-zinc-500'
+      : ptUpside > 0
+        ? 'text-emerald-300'
+        : ptUpside < 0
+          ? 'text-red-300'
+          : 'text-zinc-300'
+  const ptUpsideLabel =
+    ptUpside !== null ? `${ptUpside >= 0 ? '+' : ''}${(ptUpside * 100).toFixed(1)}%` : null
 
   const rowBg = row.isFocus
     ? 'bg-emerald-500/[0.06] hover:bg-emerald-500/[0.10]'
@@ -368,13 +414,30 @@ function PeerRow({
           <FcfSparkline financials={fin} variant="strip" />
         </div>
       </td>
-      <td className={`py-3 px-3 text-right ${recentSurpriseColor}`}>
-        {recentSurpriseLabel ?? '—'}
+      <td
+        className={`py-3 px-3 text-right ${recentDeltaColor}`}
+        title={
+          recentQuarter
+            ? `EPS actual ${recentQuarter.epsActual?.toFixed(2) ?? '—'} vs est ${recentQuarter.epsEstimate?.toFixed(2) ?? '—'}`
+            : undefined
+        }
+      >
+        {recentDeltaLabel ?? '—'}
       </td>
       <td className="py-3 px-3">
         <div className="flex justify-end">
           <EarningsBeatMiss history={row.earnings?.history} variant="tile" />
         </div>
+      </td>
+      <td
+        className={`py-3 px-3 text-right ${ptUpsideColor}`}
+        title={
+          row.estimates
+            ? `Price target $${targetMean?.toFixed(2) ?? '—'} · ${row.estimates.analystCount ?? 0} analysts`
+            : undefined
+        }
+      >
+        {ptUpsideLabel ?? '—'}
       </td>
       <td className="py-3 px-3">
         {row.ticker ? (

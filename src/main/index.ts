@@ -47,6 +47,10 @@ import {
   stopFinancialsScheduler
 } from './services/financialsService'
 import {
+  startEstimatesScheduler,
+  stopEstimatesScheduler
+} from './services/analystEstimatesService'
+import {
   startSportsReelScheduler,
   stopSportsReelScheduler
 } from './services/sportsReelScheduler'
@@ -558,6 +562,10 @@ app.whenReady().then(async () => {
   // minutes) because statements only change on earnings. See financialsService
   // for the staleness gate + per-tick batching.
   startFinancialsScheduler()
+  // Analyst consensus (forward EPS, price targets, upgrade/downgrade tally)
+  // on its own slow cadence — weekly per-symbol refresh; nothing user-visible
+  // changes more often than that.
+  startEstimatesScheduler()
   setAlertsWindowOpener(showMainWindow)
   if (prefs.favoriteTeamAlertsEnabled) startSportsAlerts()
   // Sports reel scheduler is just an ESPN scoreboard fetcher — it has no
@@ -630,6 +638,7 @@ app.on('will-quit', () => {
   stopDiscoverySchedule()
   stopStocksScheduler()
   stopFinancialsScheduler()
+  stopEstimatesScheduler()
   stopSportsReelScheduler()
   stopSportsAlerts()
   stopReelScheduler()

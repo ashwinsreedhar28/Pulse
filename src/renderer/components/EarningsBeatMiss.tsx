@@ -9,6 +9,7 @@
 // adds the "EPS 4Q" label and the most-recent surprise %.
 
 import type { EarningsHistoryQuarter } from '../../preload'
+import { formatEpsDelta } from './financialsFormat'
 
 const IN_LINE_THRESHOLD = 0.01 // ±1% is "in line"
 
@@ -36,16 +37,6 @@ function classify(q: EarningsHistoryQuarter): BeatState {
   return 'unknown'
 }
 
-function formatSurprise(pct: number | null): string | null {
-  if (pct === null || !Number.isFinite(pct)) return null
-  // Yahoo's surprisePercent is already percent-scaled in the JSON (e.g. 5 =
-  // +5%) half the time and decimal-scaled the other half depending on the
-  // module. We treat anything |x| > 1 as already-percent to catch both.
-  const percent = Math.abs(pct) > 1 ? pct : pct * 100
-  const sign = percent >= 0 ? '+' : ''
-  return `${sign}${percent.toFixed(1)}%`
-}
-
 const DOT_CLASS: Record<BeatState, string> = {
   beat: 'bg-emerald-400',
   miss: 'bg-red-400',
@@ -65,7 +56,10 @@ export function EarningsBeatMiss({
   // how the FCF sparkline lays out.
   const ordered = [...history].reverse()
   const mostRecent = history[0]
-  const recentSurprise = formatSurprise(mostRecent?.surprisePct ?? null)
+  const recentDelta = formatEpsDelta(
+    mostRecent?.epsActual ?? null,
+    mostRecent?.epsEstimate ?? null
+  )
   const dotSize = variant === 'tile' ? 'h-1.5 w-1.5' : 'h-2 w-2'
 
   if (variant === 'tile') {
@@ -86,7 +80,7 @@ export function EarningsBeatMiss({
 
   return (
     <div className="flex items-center gap-1.5" title="EPS beat/miss, oldest → newest">
-      <span className="text-[9px] uppercase tracking-[0.18em] text-zinc-500">EPS 4Q</span>
+      <span className="text-[9px] uppercase tracking-[0.18em] text-zinc-500">EPS Δ 4Q</span>
       <div className="flex items-center gap-1">
         {ordered.map((q) => (
           <span
@@ -95,7 +89,7 @@ export function EarningsBeatMiss({
           />
         ))}
       </div>
-      {recentSurprise && (
+      {recentDelta && (
         <span
           className={`text-[10px] font-semibold tabular-nums ${
             classify(mostRecent!) === 'beat'
@@ -104,8 +98,9 @@ export function EarningsBeatMiss({
                 ? 'text-red-300'
                 : 'text-zinc-400'
           }`}
+          title={`Last EPS: ${mostRecent?.epsActual?.toFixed(2) ?? '—'} vs est ${mostRecent?.epsEstimate?.toFixed(2) ?? '—'}`}
         >
-          {recentSurprise}
+          {recentDelta}
         </span>
       )}
     </div>

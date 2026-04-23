@@ -32,6 +32,23 @@ export function formatPctDelta(ratio: number | null, decimals = 1): string | nul
   return `${sign}${pct.toFixed(decimals)}%`
 }
 
+// EPS actual-minus-estimate rendered as a dollar delta ("+$0.02", "-$0.15").
+// We deliberately show dollars rather than surprise % because thin-EPS names
+// (e.g. Intel at $0.02 baseline) turn a $0.016 beat into +81.5%, which visually
+// equates it to massive surprises. Dollars read as what traders actually say
+// ("beat by two cents") and don't distort across companies with different EPS
+// magnitudes.
+export function formatEpsDelta(
+  actual: number | null,
+  estimate: number | null
+): string | null {
+  if (actual === null || estimate === null) return null
+  if (!Number.isFinite(actual) || !Number.isFinite(estimate)) return null
+  const delta = actual - estimate
+  const sign = delta >= 0 ? '+' : '-'
+  return `${sign}$${Math.abs(delta).toFixed(2)}`
+}
+
 // FCF margin tone buckets, picked so the eye can scan a value-chain sector
 // and instantly see which companies convert revenue to cash:
 //   > 25% emerald-300 (elite — software, platforms)

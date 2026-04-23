@@ -756,5 +756,25 @@ export const migrations: Migration[] = [
           ON ticker_financials(fetchedAt);
       `)
     }
+  },
+  {
+    version: 29,
+    name: 'create ticker_estimates for analyst consensus + price targets',
+    // One row per symbol with a JSON blob carrying the full estimates snapshot
+    // (forward EPS per period, price-target range, recommendation split,
+    // 30-day upgrade/downgrade tally). Analyst data is read as a whole unit
+    // and never queried on individual fields, so a single JSON column is
+    // cleaner than a 15-column schema that'd need a migration per new field.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ticker_estimates (
+          symbol TEXT PRIMARY KEY,
+          dataJson TEXT NOT NULL,
+          fetchedAt INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_ticker_estimates_fetchedAt
+          ON ticker_estimates(fetchedAt);
+      `)
+    }
   }
 ]

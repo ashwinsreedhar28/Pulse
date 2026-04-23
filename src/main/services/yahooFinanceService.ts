@@ -716,3 +716,253 @@ export async function getEarningsHistory(symbol: string): Promise<EarningsHistor
   earningsHistoryCache.set(sym, { value })
   return value
 }
+
+// Forward-looking analyst consensus: price targets, forward EPS estimates
+// per period, broker recommendation split, and a 30-day upgrade/downgrade
+// tally. Bundles four quoteSummary modules into one call so the UI can show
+// "Next Q est: $X · PT $Y (N analysts)" on a single row. Caching through
+// the shared 24h TTL since analyst activity isn't high-frequency.
+export interface EstimatePeriod {
+  avg: number | null
+  high: number | null
+  low: number | null
+  count: number | null
+}
+
+export interface RecommendationSplit {
+  strongBuy: number
+  buy: number
+  hold: number
+  sell: number
+  strongSell: number
+}
+
+export interface AnalystEstimates {
+  symbol: string
+  // Forward EPS estimates, keyed by the period Yahoo reports. We surface the
+  // next-quarter and full-year slots directly (the rest are ignored for now).
+  nextQuarter: EstimatePeriod | null
+  currentYear: EstimatePeriod | null
+  nextYear: EstimatePeriod | null
+  // Price targets.
+  targetMean: number | null
+  targetHigh: number | null
+  targetLow: number | null
+  targetMedian: number | null
+  analystCount: number | null
+  // 1.0 = strong buy, 5.0 = strong sell (Yahoo's scale).
+  recommendationMean: number | null
+  recommendationKey: string | null // 'buy' | 'hold' | 'strong_buy' | 'sell' | 'underperform' | 'none'
+  // Most-recent broker split snapshot. Null when Yahoo returns no trend data.
+  consensus: RecommendationSplit | null
+  // 30d action tally across all firms Yahoo tracks. Great for the
+  // "net upgrades this month" micro-signal on the focus panel.
+  upgradesLast30d: number
+  downgradesLast30d: number
+  fetchedAt: number
+}
+
+interface EstimatesCacheEntry {
+  value: AnalystEstimates
+}
+
+const estimatesCache = new Map<string, EstimatesCacheEntry>()
+
+function tombstoneEstimates(symbol: string): AnalystEstimates {
+  const value: AnalystEstimates = {
+    symbol,
+    nextQuarter: null,
+    currentYear: null,
+    nextYear: null,
+    targetMean: null,
+    targetHigh: null,
+    targetLow: null,
+    targetMedian: null,
+    analystCount: null,
+    recommendationMean: null,
+    recommendationKey: null,
+    consensus: null,
+    upgradesLast30d: 0,
+    downgradesLast30d: 0,
+    fetchedAt: Date.now()
+  }
+  estimatesCache.set(symbol, { value })
+  return value
+}
+
+interface AnalystEstimatesResponse {
+  quoteSummary: {
+    result:
+      | Array<{
+          financialData?: {
+            targetMeanPrice?: RawField
+            targetHighPrice?: RawField
+            targetLowPrice?: RawField
+            targetMedianPrice?: RawField
+            numberOfAnalystOpinions?: RawField
+            recommendationMean?: RawField
+            recommendationKey?: string
+          }
+          earningsTrend?: {
+            trend?: Array<{
+              period?: string // '0q' '+1q' '0y' '+1y' '+5y'
+              earningsEstimate?: {
+                avg?: RawField
+                high?: RawField
+                low?: RawField
+                numberOfAnalysts?: RawField
+              }
+            }>
+          }
+          recommendationTrend?: {
+            trend?: Array<{
+              period?: string // '0m' '-1m' '-2m' '-3m'
+              strongBuy?: number
+              buy?: number
+              hold?: number
+              sell?: number
+              strongSell?: number
+            }>
+          }
+          upgradeDowngradeHistory?: {
+            history?: Array<{
+              firm?: string
+              toGrade?: string
+              fromGrade?: string
+              action?: string // 'up' 'down' 'main' 'init' 'reit'
+              epochGradeDate?: number // unix seconds
+            }>
+          }
+        }>
+      | null
+    error: { code?: string; description?: string } | null
+  }
+}
+
+interface EarningsTrendEntry {
+  period?: string
+  earningsEstimate?: {
+    avg?: RawField
+    high?: RawField
+    low?: RawField
+    numberOfAnalysts?: RawField
+  }
+}
+
+function pickPeriod(
+  trend: EarningsTrendEntry[] | undefined,
+  period: string
+): EstimatePeriod | null {
+  const entry = trend?.find((t) => t.period === period)
+  if (!entry?.earningsEstimate) return null
+  const est = entry.earningsEstimate
+  return {
+    avg: raw(est.avg),
+    high: raw(est.high),
+    low: raw(est.low),
+    count: raw(est.numberOfAnalysts)
+  }
+}
+
+export async function getAnalystEstimates(symbol: string): Promise<AnalystEstimates | null> {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return null
+  const cached = estimatesCache.get(sym)
+  if (cached && Date.now() - cached.value.fetchedAt < EARNINGS_TTL_MS) {
+    return cached.value
+  }
+
+  const modules = 'financialData,earningsTrend,recommendationTrend,upgradeDowngradeHistory'
+  const fetchOnce = async (): Promise<AnalystEstimatesResponse> => {
+    const ok = await ensureYahooCreds()
+    if (!ok || !yahooCrumb || !yahooCookie) throw new Error('no-creds')
+    const url = `${YAHOO_QUOTE_SUMMARY}${encodeURIComponent(sym)}?modules=${modules}&crumb=${encodeURIComponent(yahooCrumb)}`
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': UA, Cookie: yahooCookie, Accept: 'application/json' },
+        signal: controller.signal
+      })
+      if (res.status === 401) {
+        yahooCookie = null
+        yahooCrumb = null
+        throw new Error('HTTP 401')
+      }
+      if (res.status === 404) throw new Error('HTTP 404')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return (await res.json()) as AnalystEstimatesResponse
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  let json: AnalystEstimatesResponse
+  try {
+    json = await fetchOnce()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg === 'HTTP 401') {
+      try {
+        await ensureYahooCreds(true)
+        json = await fetchOnce()
+      } catch (err2) {
+        const msg2 = err2 instanceof Error ? err2.message : String(err2)
+        if (msg2 === 'HTTP 404') return tombstoneEstimates(sym)
+        console.warn('[yahoo] analyst estimates fetch failed:', msg2)
+        return cached?.value ?? null
+      }
+    } else if (msg === 'HTTP 404') {
+      return tombstoneEstimates(sym)
+    } else {
+      console.warn('[yahoo] analyst estimates fetch failed:', msg)
+      return cached?.value ?? null
+    }
+  }
+
+  const result = json.quoteSummary.result?.[0]
+  if (!result) return cached?.value ?? null
+
+  const fd = result.financialData
+  const trend = result.earningsTrend?.trend
+  const recentRecTrend = result.recommendationTrend?.trend?.[0]
+  const history = result.upgradeDowngradeHistory?.history ?? []
+
+  const cutoffSec = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60
+  let up = 0
+  let down = 0
+  for (const row of history) {
+    const t = row.epochGradeDate
+    if (typeof t !== 'number' || t < cutoffSec) continue
+    if (row.action === 'up') up++
+    else if (row.action === 'down') down++
+  }
+
+  const value: AnalystEstimates = {
+    symbol: sym,
+    nextQuarter: pickPeriod(trend, '+1q'),
+    currentYear: pickPeriod(trend, '0y'),
+    nextYear: pickPeriod(trend, '+1y'),
+    targetMean: raw(fd?.targetMeanPrice),
+    targetHigh: raw(fd?.targetHighPrice),
+    targetLow: raw(fd?.targetLowPrice),
+    targetMedian: raw(fd?.targetMedianPrice),
+    analystCount: raw(fd?.numberOfAnalystOpinions),
+    recommendationMean: raw(fd?.recommendationMean),
+    recommendationKey: fd?.recommendationKey ?? null,
+    consensus: recentRecTrend
+      ? {
+          strongBuy: recentRecTrend.strongBuy ?? 0,
+          buy: recentRecTrend.buy ?? 0,
+          hold: recentRecTrend.hold ?? 0,
+          sell: recentRecTrend.sell ?? 0,
+          strongSell: recentRecTrend.strongSell ?? 0
+        }
+      : null,
+    upgradesLast30d: up,
+    downgradesLast30d: down,
+    fetchedAt: Date.now()
+  }
+  estimatesCache.set(sym, { value })
+  return value
+}

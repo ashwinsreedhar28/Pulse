@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { EarningsBadge, FinancialsSnapshot, StockQuote, Ticker } from '../../preload'
+import type {
+  AnalystEstimates,
+  EarningsBadge,
+  FinancialsSnapshot,
+  StockQuote,
+  Ticker
+} from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
 import { ValueChainDiagram } from './ValueChainDiagram'
 import {
@@ -199,6 +205,50 @@ export function ValueChain({
     return () => {
       cancelled = true
     }
+  }, [])
+
+  // Analyst consensus (forward EPS, price target, upgrade/downgrade tally).
+  // Only symbols the estimates scheduler has already cached will come back
+  // here — passive graph nodes won't have entries until the user promotes
+  // them to the watchlist. The UI degrades gracefully (em-dashes).
+  const [estimatesMap, setEstimatesMap] = useState<Map<string, AnalystEstimates>>(
+    () => new Map()
+  )
+  useEffect(() => {
+    let cancelled = false
+    const symbols = [...new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))]
+    window.api.stocks
+      .getEstimatesBatch(symbols)
+      .then((rows) => {
+        if (cancelled) return
+        const m = new Map<string, AnalystEstimates>()
+        for (const r of rows) m.set(r.symbol.toUpperCase(), r)
+        setEstimatesMap(m)
+      })
+      .catch((err: unknown) => {
+        console.warn('[valueChain] estimates batch fetch failed', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  useEffect(() => {
+    return window.api.stocks.onEstimatesUpdated((symbol) => {
+      const sym = symbol.toUpperCase()
+      window.api.stocks
+        .getEstimates(sym)
+        .then((row) => {
+          if (!row) return
+          setEstimatesMap((prev) => {
+            const next = new Map(prev)
+            next.set(sym, row)
+            return next
+          })
+        })
+        .catch(() => {
+          /* swallow — stale data stays */
+        })
+    })
   }, [])
 
   const tickerBySymbol = useMemo(() => {
@@ -506,6 +556,10 @@ export function ValueChain({
                   financials={financialsMap.get(focusSymbol!)}
                   earnings={earningsMap.get(focusSymbol!)}
                 />
+                <FocusAnalystStrip
+                  estimates={estimatesMap.get(focusSymbol!)}
+                  currentPrice={quoteBySymbol.get(focusSymbol!)?.price ?? null}
+                />
               </header>
               <div
                 className={`relative flex-1 grid grid-cols-1 gap-4 px-4 py-3 overflow-y-auto ${
@@ -624,6 +678,7 @@ export function ValueChain({
           quoteBySymbol={quoteBySymbol}
           financialsBySymbol={financialsMap}
           earningsBySymbol={earningsMap}
+          estimatesBySymbol={estimatesMap}
           onClose={() => setPeerCompareSymbol(null)}
           onOpenTicker={(id) => {
             setPeerCompareSymbol(null)
@@ -867,6 +922,90 @@ function deltaTone(ratio: number | null): string {
   if (ratio > 0) return 'text-emerald-300'
   if (ratio < 0) return 'text-red-300'
   return 'text-zinc-300'
+}
+
+// Analyst consensus row for the focus panel: forward EPS estimate (next Q),
+// price target with % upside, analyst coverage count, and a 30d net-upgrade
+// tally. Renders nothing when the backing row is missing — the scheduler
+// populates estimates weekly, so non-watchlist graph nodes commonly have
+// no entry yet.
+function FocusAnalystStrip({
+  estimates,
+  currentPrice
+}: {
+  estimates: AnalystEstimates | undefined
+  currentPrice: number | null
+}): JSX.Element | null {
+  if (!estimates) return null
+  const nextQ = estimates.nextQuarter?.avg ?? null
+  const targetMean = estimates.targetMean
+  const upside =
+    targetMean !== null && currentPrice !== null && currentPrice > 0
+      ? (targetMean - currentPrice) / currentPrice
+      : null
+  const netUpgrades = estimates.upgradesLast30d - estimates.downgradesLast30d
+  const recLabel = recommendationLabel(estimates.recommendationKey, estimates.recommendationMean)
+  const hasAny =
+    nextQ !== null ||
+    targetMean !== null ||
+    estimates.analystCount !== null ||
+    netUpgrades !== 0 ||
+    recLabel !== null
+  if (!hasAny) return null
+
+  const upsideTone = deltaTone(upside)
+  const upgradeTone =
+    netUpgrades > 0 ? 'text-emerald-300' : netUpgrades < 0 ? 'text-red-300' : 'text-zinc-400'
+  const targetLabel =
+    targetMean !== null
+      ? `$${targetMean.toFixed(2)}${upside !== null ? ` (${upside >= 0 ? '+' : ''}${(upside * 100).toFixed(1)}%)` : ''}`
+      : null
+  const nextQLabel = nextQ !== null ? `$${nextQ.toFixed(2)}` : null
+  const coverage =
+    estimates.analystCount !== null
+      ? `${estimates.analystCount} analyst${estimates.analystCount === 1 ? '' : 's'}`
+      : null
+  const upgradeLabel =
+    netUpgrades !== 0
+      ? `${netUpgrades > 0 ? '+' : ''}${netUpgrades} 30d`
+      : null
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10.5px] tabular-nums">
+      <KPI label="Next Q est" value={nextQLabel} valueClass="text-zinc-200" />
+      <KPI
+        label="Price target"
+        value={targetLabel}
+        valueClass={upside === null ? 'text-zinc-200' : upsideTone}
+      />
+      {coverage && <KPI label="Coverage" value={coverage} valueClass="text-zinc-400" />}
+      {recLabel && <KPI label="Consensus" value={recLabel.label} valueClass={recLabel.color} />}
+      {upgradeLabel && (
+        <KPI label="Revisions" value={upgradeLabel} valueClass={upgradeTone} />
+      )}
+    </div>
+  )
+}
+
+// Yahoo's recommendationMean is 1.0..5.0 where 1=Strong Buy and 5=Strong Sell.
+// Map it to a readable label + color tone. Prefer the numeric mean because
+// recommendationKey is often "none" even when there's usable data.
+function recommendationLabel(
+  key: string | null,
+  mean: number | null
+): { label: string; color: string } | null {
+  if (mean !== null && Number.isFinite(mean)) {
+    if (mean < 1.5) return { label: 'Strong buy', color: 'text-emerald-300' }
+    if (mean < 2.5) return { label: 'Buy', color: 'text-emerald-400' }
+    if (mean < 3.5) return { label: 'Hold', color: 'text-zinc-300' }
+    if (mean < 4.5) return { label: 'Sell', color: 'text-red-400' }
+    return { label: 'Strong sell', color: 'text-red-300' }
+  }
+  if (key && key !== 'none') {
+    const pretty = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    return { label: pretty, color: 'text-zinc-300' }
+  }
+  return null
 }
 
 function KPI({

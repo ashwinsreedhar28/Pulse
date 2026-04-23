@@ -372,6 +372,40 @@ export interface EarningsBadge {
   fetchedAt: number | null
 }
 
+export interface EstimatePeriod {
+  avg: number | null
+  high: number | null
+  low: number | null
+  count: number | null
+}
+
+export interface RecommendationSplit {
+  strongBuy: number
+  buy: number
+  hold: number
+  sell: number
+  strongSell: number
+}
+
+export interface AnalystEstimates {
+  symbol: string
+  nextQuarter: EstimatePeriod | null
+  currentYear: EstimatePeriod | null
+  nextYear: EstimatePeriod | null
+  targetMean: number | null
+  targetHigh: number | null
+  targetLow: number | null
+  targetMedian: number | null
+  analystCount: number | null
+  // 1.0 = strong buy, 5.0 = strong sell (Yahoo's scale)
+  recommendationMean: number | null
+  recommendationKey: string | null
+  consensus: RecommendationSplit | null
+  upgradesLast30d: number
+  downgradesLast30d: number
+  fetchedAt: number
+}
+
 export interface SportsLeague {
   id: string
   name: string
@@ -915,6 +949,12 @@ const api = {
       invoke<EarningsBadge>('stocks:getEarnings', symbol),
     getEarningsBatch: (symbols: string[]) =>
       invoke<EarningsBadge[]>('stocks:getEarningsBatch', symbols),
+    getEstimates: (symbol: string) =>
+      invoke<AnalystEstimates | null>('stocks:getEstimates', symbol),
+    getEstimatesBatch: (symbols: string[]) =>
+      invoke<AnalystEstimates[]>('stocks:getEstimatesBatch', symbols),
+    refreshEstimates: (symbol: string) =>
+      invoke<AnalystEstimates | null>('stocks:refreshEstimates', symbol),
     onUpdated: (cb: (quotes: StockQuote[]) => void): (() => void) => {
       const listener = (_e: unknown, quotes: StockQuote[]): void => cb(quotes)
       ipcRenderer.on('stocks:updated', listener)
@@ -927,6 +967,13 @@ const api = {
       ipcRenderer.on('financials:updated', listener)
       return (): void => {
         ipcRenderer.off('financials:updated', listener)
+      }
+    },
+    onEstimatesUpdated: (cb: (symbol: string) => void): (() => void) => {
+      const listener = (_e: unknown, symbol: string): void => cb(symbol)
+      ipcRenderer.on('estimates:updated', listener)
+      return (): void => {
+        ipcRenderer.off('estimates:updated', listener)
       }
     }
   },
