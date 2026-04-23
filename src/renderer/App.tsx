@@ -1159,7 +1159,9 @@ function StockTickerItem({
           ? `${quote.symbol} · ${rq.sessionBadge} ${price} (${pct})`
           : `Open ${quote.symbol}`
       }
-      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors min-w-[172px]"
+      className={`flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors shrink-0 ${
+        rq.sessionBadge ? 'min-w-[218px]' : 'min-w-[172px]'
+      }`}
     >
       <span className="font-semibold tracking-[0.14em] text-zinc-100">{quote.symbol}</span>
       {rq.sessionBadge && (
@@ -1168,8 +1170,8 @@ function StockTickerItem({
         </span>
       )}
       <span className="tabular-nums text-zinc-300">{price}</span>
-      <span className={`tabular-nums font-semibold ${color}`}>
-        {arrow} {pct}
+      <span className={`tabular-nums font-semibold ${color} whitespace-nowrap`}>
+        {arrow}&nbsp;{pct}
       </span>
     </button>
   )
