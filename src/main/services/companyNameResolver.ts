@@ -122,6 +122,19 @@ const NAME_ALIASES: Record<string, string> = {
   'fiat chrysler': 'STLA',
   'fiat chrysler automobiles': 'STLA',
   stellantis: 'STLA',
+  // Dual-class common stock where SEC returns both classes and the resolver
+  // can't pick without a hint. The mapped symbol is the primary / more-
+  // liquid class. Without these aliases, pickCommonStock now (correctly)
+  // returns null for multi-class ambiguity — add an entry here whenever a
+  // ticker regression surfaces in a chain.
+  comcast: 'CMCSA',
+  'comcast corporation': 'CMCSA',
+  'fox corporation': 'FOXA',
+  'news corporation': 'NWSA',
+  paramount: 'PARA',
+  'paramount global': 'PARA',
+  'liberty media': 'LSXMA',
+  'liberty sirius': 'LSXMA',
   // Private / state entities — keep the alias map explicit about these so
   // they don't slip through if Ollama claims them as tickers. These all
   // resolve to null by returning a known non-ticker sentinel? Actually we
@@ -239,12 +252,22 @@ function isWordBoundaryMatch(a: string, b: string): boolean {
 // name — typically one common-stock ticker + a handful of preferred-stock
 // classes (BAC vs BAC-PB/PK/PL/PE, JPM vs JPM-PC/PD/PJ/PK, etc.) — pick
 // the common stock. Preferred tickers always carry a hyphen; common stock
-// doesn't. Shortest symbol as tiebreaker favors the primary class over
-// warrants / tracking stocks that might share the name.
+// doesn't.
+//
+// When MULTIPLE non-hyphenated symbols share a normalized name, the company
+// has two (or more) publicly-traded classes of common stock (Comcast CCZ vs
+// CMCSA, Alphabet GOOG vs GOOGL, Fox FOX vs FOXA). We can't pick between
+// them on length alone — CCZ is 3 chars and would win the shortest-symbol
+// tiebreak even though CMCSA is the more-traded primary. Return null in
+// that case so the caller falls through to NAME_ALIASES (which curates the
+// primary class for known dual-class names) rather than silently choosing
+// the less-traded variant.
 function pickCommonStock<T extends { symbol: string }>(candidates: T[]): T | null {
   const commonStock = candidates.filter((c) => !c.symbol.includes('-'))
   if (commonStock.length === 0) return null
-  return [...commonStock].sort((a, b) => a.symbol.length - b.symbol.length)[0]
+  if (commonStock.length === 1) return commonStock[0]
+  // Dual-class ambiguity. Let the caller fall through to the alias table.
+  return null
 }
 
 // Resolve a single name against the index. Strategy:
