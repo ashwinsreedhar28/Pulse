@@ -1,582 +1,916 @@
 {
-  "version": 2,
-  "description": "GICS-11 top-level sectors with deeper sub-sector breakdowns. Every leaf sub-sector defines a canonical stages list — the chain generator is constrained to pick from these so stages don't fragment across chains (JPM using 'consumer-banking', BAC using 'retail-lending', COF using 'credit-card-issuance' for the same concept). legacyIds map old supplyChainGraph.json 'sector' values to current ids.",
+  "version": 3,
+  "description": "Value-chain taxonomy for public-equity analysis. 58 leaf sub-sectors organized upstream-to-downstream. Stage IDs are globally unique via sub-sector short-id prefix (e.g. semi.foundry, retail.fulfillment) so 'all sectors' views no longer collapse unrelated nodes into a single stage column. Departs from GICS where a different grouping produces cleaner supply/customer/competitor graphs for an individual investor (e.g. instruments split from machinery, REITs split by property type, renewables as their own leaf, crypto and alt-asset-managers broken out).",
   "sectors": [
     {
       "id": "technology",
       "name": "Information Technology",
-      "description": "Hardware, software, semiconductors, IT services."
+      "description": "Semiconductors, hardware, cloud/software, and IT services."
     },
     {
       "id": "tech-semi",
       "parentId": "technology",
+      "shortId": "semi",
       "name": "Semiconductors",
-      "description": "Chip design, manufacturing, equipment, materials.",
+      "description": "From wafer materials and fab equipment through design, manufacture, and packaging of silicon.",
       "legacyIds": ["semi"],
       "stages": [
-        { "id": "specialty-materials", "name": "Specialty Materials & Gases" },
-        { "id": "equipment", "name": "Fab Equipment" },
-        { "id": "eda-ip", "name": "EDA & IP" },
-        { "id": "foundry", "name": "Foundries & IDMs" },
-        { "id": "memory", "name": "Memory" },
-        { "id": "fabless", "name": "Fabless Designers" },
-        { "id": "power-sic", "name": "Power & SiC" },
-        { "id": "atp", "name": "Assembly, Test & Packaging" }
+        { "id": "semi.specialty-materials", "name": "Specialty Materials & Gases" },
+        { "id": "semi.equipment", "name": "Wafer Fab Equipment" },
+        { "id": "semi.eda-ip", "name": "EDA & IP Licensing" },
+        { "id": "semi.foundry", "name": "Foundries & IDMs" },
+        { "id": "semi.memory", "name": "Memory" },
+        { "id": "semi.fabless-logic", "name": "Fabless Logic", "legacyIds": ["fabless"] },
+        { "id": "semi.analog-power", "name": "Analog & Power", "legacyIds": ["power-sic"] },
+        { "id": "semi.atp", "name": "Assembly, Test & Packaging" }
       ]
     },
     {
       "id": "tech-hardware",
       "parentId": "technology",
-      "name": "Hardware & Systems",
-      "description": "Servers, PCs, networking, storage, consumer devices.",
+      "shortId": "hw",
+      "name": "Technology Hardware",
+      "description": "Physical IT gear: components, storage, networking, devices, and contract manufacturing.",
       "legacyIds": ["hardware"],
       "stages": [
-        { "id": "components", "name": "Networking & Optical Components" },
-        { "id": "storage", "name": "Storage Systems" },
-        { "id": "oems", "name": "OEMs & Server Makers" },
-        { "id": "consumer-devices", "name": "Consumer Devices" },
-        { "id": "contract-mfg", "name": "Contract Manufacturing" }
+        { "id": "hw.components", "name": "Components & Subassemblies", "legacyIds": ["components"] },
+        { "id": "hw.storage", "name": "Storage Systems", "legacyIds": ["storage"] },
+        { "id": "hw.networking-equipment", "name": "Networking Equipment" },
+        { "id": "hw.oems", "name": "Server & PC OEMs", "legacyIds": ["oems"] },
+        { "id": "hw.consumer-devices", "name": "Consumer Devices", "legacyIds": ["consumer-devices"] },
+        { "id": "hw.contract-mfg", "name": "Contract Manufacturing", "legacyIds": ["contract-mfg"] }
       ]
     },
     {
       "id": "tech-cloud",
       "parentId": "technology",
+      "shortId": "cloud",
       "name": "Cloud & Software",
-      "description": "Cloud platforms, SaaS, enterprise software.",
+      "description": "Hyperscale and specialty cloud, SaaS platforms and apps, security, data/AI, and edge/CDN.",
       "legacyIds": ["cloud"],
       "stages": [
-        { "id": "hyperscalers", "name": "Hyperscale Cloud" },
-        { "id": "saas-platform", "name": "Platform SaaS" },
-        { "id": "saas-app", "name": "Application SaaS" },
-        { "id": "security-obs", "name": "Security & Observability" },
-        { "id": "edge-cdn", "name": "Edge & CDN" },
-        { "id": "data-ai", "name": "Data & AI Platforms" }
+        { "id": "cloud.hyperscalers", "name": "Hyperscale Cloud", "legacyIds": ["hyperscalers"] },
+        { "id": "cloud.ai-infra", "name": "AI Infrastructure & Neoclouds" },
+        { "id": "cloud.saas-platform", "name": "Platform SaaS", "legacyIds": ["saas-platform"] },
+        { "id": "cloud.saas-app", "name": "Application SaaS", "legacyIds": ["saas-app"] },
+        { "id": "cloud.security", "name": "Security", "legacyIds": ["security-obs"] },
+        { "id": "cloud.data-ai", "name": "Data & Observability Platforms", "legacyIds": ["data-ai"] },
+        { "id": "cloud.edge-cdn", "name": "Edge, CDN & Connectivity", "legacyIds": ["edge-cdn"] }
       ]
     },
     {
       "id": "tech-services",
       "parentId": "technology",
+      "shortId": "itsvc",
       "name": "IT Services",
-      "description": "Consulting, systems integration, outsourced IT.",
+      "description": "Consulting, systems integration, and managed IT services sold to enterprise buyers.",
       "stages": [
-        { "id": "consulting-advisory", "name": "Consulting & Advisory" },
-        { "id": "systems-integration", "name": "Systems Integration" },
-        { "id": "managed-services", "name": "Managed Services" },
-        { "id": "enterprise-clients", "name": "Enterprise Clients" }
+        { "id": "itsvc.consulting", "name": "Strategy & Consulting", "legacyIds": ["consulting-advisory"] },
+        { "id": "itsvc.systems-integration", "name": "Systems Integration", "legacyIds": ["systems-integration"] },
+        { "id": "itsvc.managed-services", "name": "Managed Services & BPO", "legacyIds": ["managed-services"] },
+        { "id": "itsvc.customers", "name": "Enterprise Customers", "legacyIds": ["enterprise-clients"] }
       ]
     },
 
     {
       "id": "communication-services",
       "name": "Communication Services",
-      "description": "Media, telecom, interactive media."
+      "description": "Telecom carriers, media and entertainment, interactive/internet platforms."
     },
     {
       "id": "comms-telecom",
       "parentId": "communication-services",
-      "name": "Telecom Services",
+      "shortId": "telecom",
+      "name": "Telecommunications",
+      "description": "Wireless and wireline carriers with their equipment and wholesale-infrastructure suppliers.",
       "stages": [
-        { "id": "network-equipment", "name": "Network Equipment" },
-        { "id": "carriers", "name": "Carriers" },
-        { "id": "resellers-retail", "name": "Resellers & Retail" },
-        { "id": "end-users", "name": "Consumers & Businesses" }
+        { "id": "telecom.network-equipment", "name": "Network Equipment", "legacyIds": ["network-equipment"] },
+        { "id": "telecom.tower-fiber", "name": "Towers & Fiber Backbone" },
+        { "id": "telecom.carriers", "name": "Wireless & Wireline Carriers", "legacyIds": ["carriers"] },
+        { "id": "telecom.resellers-mvno", "name": "Resellers & MVNOs", "legacyIds": ["resellers-retail"] },
+        { "id": "telecom.end-users", "name": "Subscribers & Enterprise", "legacyIds": ["end-users"] }
       ]
     },
     {
       "id": "comms-media",
       "parentId": "communication-services",
+      "shortId": "media",
       "name": "Media & Entertainment",
+      "description": "Content creation, studios and production, and the distribution channels (streaming, theatrical) that reach audiences.",
       "stages": [
-        { "id": "content-creation", "name": "Content Creation" },
-        { "id": "production-studios", "name": "Production & Studios" },
-        { "id": "distribution-streaming", "name": "Distribution & Streaming" },
-        { "id": "audiences", "name": "Audiences & Advertisers" }
+        { "id": "media.content-creation", "name": "Content Creation & IP", "legacyIds": ["content-creation"] },
+        { "id": "media.production-studios", "name": "Production & Studios", "legacyIds": ["production-studios"] },
+        { "id": "media.distribution-streaming", "name": "Distribution & Streaming", "legacyIds": ["distribution-streaming"] },
+        { "id": "media.theaters-exhibitors", "name": "Theaters & Exhibitors" },
+        { "id": "media.advertisers", "name": "Advertisers" },
+        { "id": "media.audiences", "name": "Audiences", "legacyIds": ["audiences"] }
       ]
     },
     {
       "id": "comms-interactive",
       "parentId": "communication-services",
-      "name": "Interactive Media",
-      "description": "Search, social, digital advertising.",
+      "shortId": "interactive",
+      "name": "Interactive Media & Services",
+      "description": "Consumer internet platforms funded largely by advertising: search, social, video, gaming, matching. Kept distinct from tech-cloud because the value chain runs creators -> platform -> advertisers -> users, not enterprise-SaaS.",
       "stages": [
-        { "id": "infrastructure", "name": "Infrastructure" },
-        { "id": "platforms", "name": "Platforms" },
-        { "id": "advertisers", "name": "Advertisers" },
-        { "id": "users", "name": "Users" }
+        { "id": "interactive.infrastructure", "name": "Infrastructure & Hosting", "legacyIds": ["infrastructure"] },
+        { "id": "interactive.platforms", "name": "Consumer Platforms", "legacyIds": ["platforms"] },
+        { "id": "interactive.creators", "name": "Creators & Influencers" },
+        { "id": "interactive.advertisers", "name": "Advertisers", "legacyIds": ["advertisers"] },
+        { "id": "interactive.users", "name": "End Users", "legacyIds": ["users"] }
       ]
     },
 
     {
       "id": "consumer-discretionary",
       "name": "Consumer Discretionary",
-      "description": "Autos, retail, apparel, hotels, restaurants."
+      "description": "Autos, retail/e-commerce, hotels & leisure, apparel & luxury, and restaurants."
     },
     {
       "id": "autos",
       "parentId": "consumer-discretionary",
-      "name": "Autos & EVs",
-      "description": "Vehicle OEMs, EV platforms, battery materials.",
+      "shortId": "autos",
+      "name": "Automobiles & Mobility",
+      "description": "Full auto value chain from battery raw materials through OEMs to dealers, aftermarket, and charging/fueling networks.",
       "legacyIds": ["auto"],
       "stages": [
-        { "id": "battery-raw", "name": "Battery Raw Materials" },
-        { "id": "battery-cells", "name": "Battery Cells & Packs" },
-        { "id": "auto-silicon", "name": "Automotive Silicon" },
-        { "id": "tier1", "name": "Tier-1 Suppliers" },
-        { "id": "oem", "name": "OEMs" },
-        { "id": "charging", "name": "Charging Infrastructure" }
+        { "id": "autos.battery-raw", "name": "Battery Raw Materials", "legacyIds": ["battery-raw"] },
+        { "id": "autos.battery-cells", "name": "Battery Cells & Packs", "legacyIds": ["battery-cells"] },
+        { "id": "autos.semi", "name": "Auto Semiconductors", "legacyIds": ["auto-silicon"] },
+        { "id": "autos.tier1", "name": "Tier 1 Suppliers", "legacyIds": ["tier1"] },
+        { "id": "autos.oem", "name": "Vehicle OEMs", "legacyIds": ["oem"] },
+        { "id": "autos.dealers", "name": "Dealer Networks" },
+        { "id": "autos.aftermarket", "name": "Aftermarket Parts & Service" },
+        { "id": "autos.charging-fuel", "name": "Charging & Fueling Networks", "legacyIds": ["charging"] }
       ]
     },
     {
       "id": "retail-ecom",
       "parentId": "consumer-discretionary",
+      "shortId": "retail",
       "name": "Retail & E-commerce",
+      "description": "Goods retailing across physical stores, marketplaces, and direct-to-consumer, including home improvement and warehouse clubs.",
       "stages": [
-        { "id": "sourcing-suppliers", "name": "Sourcing & Suppliers" },
-        { "id": "private-label-manufacturing", "name": "Private Label Manufacturing" },
-        { "id": "fulfillment-logistics", "name": "Fulfillment & Logistics" },
-        { "id": "marketplace-storefront", "name": "Marketplace & Storefront" },
-        { "id": "consumer", "name": "Consumer" }
+        { "id": "retail.sourcing", "name": "Global Sourcing & Suppliers", "legacyIds": ["sourcing-suppliers"] },
+        { "id": "retail.private-label-mfg", "name": "Private-Label Manufacturing", "legacyIds": ["private-label-manufacturing"] },
+        { "id": "retail.brands-wholesale", "name": "Branded Goods & Wholesale" },
+        { "id": "retail.fulfillment", "name": "Fulfillment & Last-Mile Logistics", "legacyIds": ["fulfillment-logistics"] },
+        { "id": "retail.marketplace", "name": "Online Marketplaces & Storefronts", "legacyIds": ["marketplace-storefront"] },
+        { "id": "retail.physical-stores", "name": "Physical Retail Stores" },
+        { "id": "retail.consumer", "name": "Consumers" }
       ]
     },
     {
       "id": "hotels-leisure",
       "parentId": "consumer-discretionary",
+      "shortId": "leisure",
       "name": "Hotels, Restaurants & Leisure",
+      "description": "Lodging, gaming, cruise, and destination operators, their real-estate holders, franchise/brand layers, and the OTA/loyalty distribution systems.",
       "stages": [
-        { "id": "real-estate", "name": "Real Estate & Properties" },
-        { "id": "operations", "name": "Operations" },
-        { "id": "distribution-loyalty", "name": "Distribution & Loyalty" },
-        { "id": "travelers", "name": "Travelers & Guests" }
+        { "id": "leisure.real-estate", "name": "Hotel & Gaming Real Estate", "legacyIds": ["real-estate"] },
+        { "id": "leisure.operators", "name": "Operators (Hotels, Casinos, Cruise)", "legacyIds": ["operations"] },
+        { "id": "leisure.brands-franchising", "name": "Brand Owners & Franchisors" },
+        { "id": "leisure.distribution-ota", "name": "OTAs & Distribution", "legacyIds": ["distribution-loyalty"] },
+        { "id": "leisure.loyalty-data", "name": "Loyalty & Rewards Programs" },
+        { "id": "leisure.travelers", "name": "Travelers", "legacyIds": ["travelers"] }
       ]
     },
     {
       "id": "apparel-luxury",
       "parentId": "consumer-discretionary",
-      "name": "Apparel & Luxury Goods",
+      "shortId": "apparel",
+      "name": "Apparel, Footwear & Luxury",
+      "description": "Branded apparel, footwear, and luxury goods from raw materials through design, contract manufacturing, retail, resale, and the consumer.",
       "stages": [
-        { "id": "raw-materials", "name": "Raw Materials" },
-        { "id": "design-brand", "name": "Design & Brand" },
-        { "id": "manufacturing", "name": "Manufacturing" },
-        { "id": "retail-distribution", "name": "Retail & Distribution" },
-        { "id": "consumer", "name": "Consumer" }
+        { "id": "apparel.raw-materials", "name": "Raw Materials & Textiles" },
+        { "id": "apparel.design-brand", "name": "Design & Brand", "legacyIds": ["design-brand"] },
+        { "id": "apparel.manufacturing", "name": "Contract Manufacturing" },
+        { "id": "apparel.retail-distribution", "name": "Retail & Distribution", "legacyIds": ["retail-distribution"] },
+        { "id": "apparel.resale", "name": "Resale & Secondary Market" },
+        { "id": "apparel.consumer", "name": "Consumers" }
+      ]
+    },
+    {
+      "id": "restaurants",
+      "parentId": "consumer-discretionary",
+      "shortId": "rest",
+      "name": "Restaurants & Food Service",
+      "description": "Quick-service, fast-casual, casual-dining, and coffee concepts plus the food-distribution and ordering-tech layers that serve them. Split out from food-bev because the capital structure (franchise royalties, unit economics) and value chain are distinct.",
+      "stages": [
+        { "id": "rest.ingredients-suppliers", "name": "Ingredients & Food Suppliers" },
+        { "id": "rest.distribution", "name": "Food Distribution" },
+        { "id": "rest.franchisors", "name": "Franchisors & Brand Owners" },
+        { "id": "rest.operators", "name": "Restaurant Operators" },
+        { "id": "rest.tech-ordering", "name": "Restaurant Tech & Delivery" },
+        { "id": "rest.consumer", "name": "Consumers" }
       ]
     },
 
     {
       "id": "consumer-staples",
       "name": "Consumer Staples",
-      "description": "Food, beverage, household, personal care."
+      "description": "Everyday goods: packaged food and beverages, household and personal care, food retail, and tobacco."
     },
     {
       "id": "food-bev",
       "parentId": "consumer-staples",
-      "name": "Food & Beverage",
+      "shortId": "foodbev",
+      "name": "Packaged Food & Beverages",
+      "description": "Ingredient commodities, packaged-food processors, beverage makers, and the distribution/retail layers that reach consumers.",
       "stages": [
-        { "id": "ingredients-commodities", "name": "Ingredients & Commodities" },
-        { "id": "processing-bottling", "name": "Processing & Bottling" },
-        { "id": "distribution", "name": "Distribution" },
-        { "id": "retail-foodservice", "name": "Retail & Foodservice" },
-        { "id": "consumer", "name": "Consumer" }
+        { "id": "foodbev.ingredients", "name": "Ingredients & Commodities", "legacyIds": ["ingredients-commodities"] },
+        { "id": "foodbev.processing", "name": "Processing & Packaged Foods", "legacyIds": ["processing-bottling"] },
+        { "id": "foodbev.beverages", "name": "Beverages" },
+        { "id": "foodbev.distribution", "name": "Distribution" },
+        { "id": "foodbev.retail-foodservice", "name": "Retail & Food Service", "legacyIds": ["retail-foodservice"] },
+        { "id": "foodbev.consumer", "name": "Consumers" }
       ]
     },
     {
       "id": "household-personal",
       "parentId": "consumer-staples",
+      "shortId": "hpc",
       "name": "Household & Personal Care",
+      "description": "Cleaning, paper, beauty, and personal-care brands and their supply chain.",
       "stages": [
-        { "id": "raw-materials", "name": "Raw Materials" },
-        { "id": "manufacturing-brand", "name": "Manufacturing & Brand" },
-        { "id": "distribution", "name": "Distribution" },
-        { "id": "retail", "name": "Retail" },
-        { "id": "consumer", "name": "Consumer" }
+        { "id": "hpc.raw-materials", "name": "Raw Materials" },
+        { "id": "hpc.manufacturing-brand", "name": "Manufacturing & Brands", "legacyIds": ["manufacturing-brand"] },
+        { "id": "hpc.distribution", "name": "Distribution" },
+        { "id": "hpc.retail", "name": "Retail" },
+        { "id": "hpc.consumer", "name": "Consumers" }
       ]
     },
     {
       "id": "food-retail",
       "parentId": "consumer-staples",
-      "name": "Food & Staples Retail",
+      "shortId": "foodretail",
+      "name": "Food & Staples Retailing",
+      "description": "Supermarkets, discount grocers, and club stores.",
       "stages": [
-        { "id": "sourcing", "name": "Sourcing" },
-        { "id": "distribution-centers", "name": "Distribution Centers" },
-        { "id": "stores", "name": "Stores" },
-        { "id": "consumer", "name": "Consumer" }
+        { "id": "foodretail.sourcing", "name": "Farm & Producer Sourcing", "legacyIds": ["sourcing"] },
+        { "id": "foodretail.distribution-centers", "name": "Distribution Centers", "legacyIds": ["distribution-centers"] },
+        { "id": "foodretail.stores", "name": "Grocery & Club Stores", "legacyIds": ["stores"] },
+        { "id": "foodretail.consumer", "name": "Consumers" }
+      ]
+    },
+    {
+      "id": "tobacco",
+      "parentId": "consumer-staples",
+      "shortId": "tobacco",
+      "name": "Tobacco & Reduced-Risk Products",
+      "description": "Combustible tobacco, smokeless, and reduced-risk categories (vapor, heated tobacco, nicotine pouches). Broken out because regulation, distribution, and capital returns don't map onto generic HPC.",
+      "stages": [
+        { "id": "tobacco.leaf-suppliers", "name": "Leaf Growers & Suppliers" },
+        { "id": "tobacco.manufacturers", "name": "Manufacturers" },
+        { "id": "tobacco.reduced-risk", "name": "Reduced-Risk Products" },
+        { "id": "tobacco.distribution-retail", "name": "Distribution & Retail" },
+        { "id": "tobacco.consumer", "name": "Consumers" }
       ]
     },
 
     {
       "id": "energy",
       "name": "Energy",
-      "description": "Oil, gas, coal, oilfield services."
+      "description": "Hydrocarbon value chain (upstream/midstream/refining/services) plus renewable-energy equipment and projects."
     },
     {
       "id": "energy-upstream",
       "parentId": "energy",
-      "name": "Upstream (E&P)",
+      "shortId": "upstream",
+      "name": "Oil & Gas Upstream",
+      "description": "Exploration and production of crude oil, natural gas, and NGLs.",
       "stages": [
-        { "id": "exploration", "name": "Exploration" },
-        { "id": "drilling-production", "name": "Drilling & Production" },
-        { "id": "reserves-transport", "name": "Reserves & Transport" }
+        { "id": "upstream.leases-acreage", "name": "Leases & Acreage" },
+        { "id": "upstream.exploration", "name": "Exploration & Appraisal", "legacyIds": ["exploration"] },
+        { "id": "upstream.drilling-completion", "name": "Drilling & Completion", "legacyIds": ["drilling-production"] },
+        { "id": "upstream.production", "name": "Production" },
+        { "id": "upstream.gathering-sales", "name": "Gathering & Sales", "legacyIds": ["reserves-transport"] }
       ]
     },
     {
       "id": "energy-midstream",
       "parentId": "energy",
-      "name": "Midstream",
+      "shortId": "midstream",
+      "name": "Oil & Gas Midstream",
+      "description": "Gathering, processing, transportation, storage, and export terminals for hydrocarbons.",
       "stages": [
-        { "id": "gathering-processing", "name": "Gathering & Processing" },
-        { "id": "pipelines-storage", "name": "Pipelines & Storage" },
-        { "id": "terminals-export", "name": "Terminals & Export" }
+        { "id": "midstream.gathering-processing", "name": "Gathering & Processing", "legacyIds": ["gathering-processing"] },
+        { "id": "midstream.pipelines-storage", "name": "Pipelines & Storage", "legacyIds": ["pipelines-storage"] },
+        { "id": "midstream.terminals-export", "name": "Terminals & LNG Export", "legacyIds": ["terminals-export"] },
+        { "id": "midstream.marketing-trading", "name": "Marketing & Trading" }
       ]
     },
     {
       "id": "energy-refining",
       "parentId": "energy",
+      "shortId": "refining",
       "name": "Refining & Marketing",
+      "description": "Crude refining, petrochemical integration, fuel wholesale and retail.",
       "stages": [
-        { "id": "crude-input", "name": "Crude Input" },
-        { "id": "refining", "name": "Refining" },
-        { "id": "marketing-distribution", "name": "Marketing & Distribution" },
-        { "id": "end-fuel-consumers", "name": "Fuel End-Consumers" }
+        { "id": "refining.crude-input", "name": "Crude Input", "legacyIds": ["crude-input"] },
+        { "id": "refining.refining-process", "name": "Refining", "legacyIds": ["refining"] },
+        { "id": "refining.petrochemicals", "name": "Petrochemical Integration" },
+        { "id": "refining.marketing-wholesale", "name": "Marketing & Wholesale", "legacyIds": ["marketing-distribution"] },
+        { "id": "refining.retail-fuel", "name": "Retail Fueling" },
+        { "id": "refining.end-consumers", "name": "End Fuel Consumers", "legacyIds": ["end-fuel-consumers"] }
       ]
     },
     {
       "id": "energy-services",
       "parentId": "energy",
-      "name": "Oilfield Services",
+      "shortId": "ofs",
+      "name": "Oilfield Services & Equipment",
+      "description": "Services, rigs, and equipment sold to upstream operators.",
       "stages": [
-        { "id": "oilfield-services", "name": "Oilfield Services" },
-        { "id": "equipment-manufacturing", "name": "Equipment Manufacturing" },
-        { "id": "drilling-contractors", "name": "Drilling Contractors" },
-        { "id": "operator-customers", "name": "Operator Customers" }
+        { "id": "ofs.equipment-manufacturing", "name": "Equipment Manufacturing", "legacyIds": ["equipment-manufacturing"] },
+        { "id": "ofs.drilling-contractors", "name": "Drilling Contractors", "legacyIds": ["drilling-contractors"] },
+        { "id": "ofs.well-services", "name": "Well Services & Completions", "legacyIds": ["oilfield-services"] },
+        { "id": "ofs.subsea-offshore", "name": "Subsea & Offshore" },
+        { "id": "ofs.operator-customers", "name": "Operator Customers", "legacyIds": ["operator-customers"] }
+      ]
+    },
+    {
+      "id": "energy-renewables",
+      "parentId": "energy",
+      "shortId": "renewables",
+      "name": "Renewables & Clean Energy",
+      "description": "Equipment makers and installers across solar, wind, storage, and hydrogen/fuel-cell. Regulated and independent renewable operators live in util-indep-power; this sub-sector covers what's upstream of them plus residential installers. Added because FSLR, ENPH, PLUG, BE and similar had no natural home in v2.",
+      "stages": [
+        { "id": "renewables.solar-equipment", "name": "Solar Panels & Inverters" },
+        { "id": "renewables.wind-equipment", "name": "Wind Turbines & Components" },
+        { "id": "renewables.storage-batteries", "name": "Grid-Scale Storage" },
+        { "id": "renewables.hydrogen-fuelcell", "name": "Hydrogen & Fuel Cells" },
+        { "id": "renewables.installers", "name": "Installers & Distributors" },
+        { "id": "renewables.project-developers", "name": "Project Developers & EPC" },
+        { "id": "renewables.offtakers", "name": "PPA Offtakers" }
       ]
     },
 
     {
       "id": "financials",
       "name": "Financials",
-      "description": "Banks, insurance, payments, capital markets."
+      "description": "Banks, payments, insurance, capital markets, alternative asset managers, exchanges, and crypto-native financials."
     },
     {
       "id": "fin-banks",
       "parentId": "financials",
+      "shortId": "banks",
       "name": "Banks",
+      "description": "Deposit-funded lenders from community banks to money-center universals.",
       "stages": [
-        { "id": "deposits", "name": "Deposits" },
-        { "id": "retail-lending", "name": "Retail Lending" },
-        { "id": "commercial-lending", "name": "Commercial Lending" },
-        { "id": "capital-markets-activities", "name": "Capital Markets Activities" },
-        { "id": "wealth-management", "name": "Wealth Management" }
+        { "id": "banks.deposits", "name": "Deposits & Core Banking", "legacyIds": ["deposits"] },
+        { "id": "banks.retail-lending", "name": "Retail Lending", "legacyIds": ["retail-lending"] },
+        { "id": "banks.commercial-lending", "name": "Commercial Lending", "legacyIds": ["commercial-lending"] },
+        { "id": "banks.capital-markets", "name": "Capital-Markets Activities", "legacyIds": ["capital-markets-activities"] },
+        { "id": "banks.wealth-management", "name": "Wealth Management", "legacyIds": ["wealth-management"] }
       ]
     },
     {
       "id": "fin-payments",
       "parentId": "financials",
+      "shortId": "payments",
       "name": "Payments",
-      "description": "Networks, processors, fintech.",
+      "description": "Card issuers, networks, acquirers, processors, gateways, and merchants.",
       "stages": [
-        { "id": "issuing", "name": "Issuing Banks" },
-        { "id": "network", "name": "Payments Network" },
-        { "id": "acquiring-processing", "name": "Acquiring & Processing" },
-        { "id": "merchants", "name": "Merchants" },
-        { "id": "consumer", "name": "Consumer" }
+        { "id": "payments.issuing", "name": "Card Issuing", "legacyIds": ["issuing"] },
+        { "id": "payments.network", "name": "Payment Networks", "legacyIds": ["network"] },
+        { "id": "payments.acquiring-processing", "name": "Acquiring & Processing", "legacyIds": ["acquiring-processing"] },
+        { "id": "payments.gateway-orchestration", "name": "Gateways & Orchestration" },
+        { "id": "payments.merchants", "name": "Merchants", "legacyIds": ["merchants"] },
+        { "id": "payments.consumer", "name": "Consumers" }
       ]
     },
     {
       "id": "fin-insurance",
       "parentId": "financials",
+      "shortId": "ins",
       "name": "Insurance",
+      "description": "P&C and life underwriters, reinsurance, brokers, claims services, and insurance asset managers.",
       "stages": [
-        { "id": "underwriting", "name": "Underwriting" },
-        { "id": "reinsurance", "name": "Reinsurance" },
-        { "id": "distribution-brokers", "name": "Distribution & Brokers" },
-        { "id": "claims-services", "name": "Claims Services" },
-        { "id": "asset-management", "name": "Asset Management" }
+        { "id": "ins.underwriting-pc", "name": "P&C Underwriters", "legacyIds": ["underwriting"] },
+        { "id": "ins.underwriting-life", "name": "Life & Annuity Underwriters" },
+        { "id": "ins.reinsurance", "name": "Reinsurers", "legacyIds": ["reinsurance"] },
+        { "id": "ins.distribution-brokers", "name": "Brokers & Distribution", "legacyIds": ["distribution-brokers"] },
+        { "id": "ins.services", "name": "Claims & Services", "legacyIds": ["claims-services"] },
+        { "id": "ins.asset-management", "name": "Insurance Asset Management" }
       ]
     },
     {
       "id": "fin-capital-markets",
       "parentId": "financials",
-      "name": "Capital Markets & Brokers",
+      "shortId": "cm",
+      "name": "Capital Markets",
+      "description": "Investment banks, broker-dealers, traditional asset managers, wealth advisory, and market data. Exchanges are now split into fin-exchanges.",
       "stages": [
-        { "id": "investment-banking", "name": "Investment Banking" },
-        { "id": "sales-trading", "name": "Sales & Trading" },
-        { "id": "asset-management", "name": "Asset Management" },
-        { "id": "wealth-advisory", "name": "Wealth Advisory" },
-        { "id": "market-data", "name": "Market Data & Exchanges" }
+        { "id": "cm.investment-banking", "name": "Investment Banking", "legacyIds": ["investment-banking"] },
+        { "id": "cm.sales-trading", "name": "Sales & Trading", "legacyIds": ["sales-trading"] },
+        { "id": "cm.asset-management", "name": "Traditional Asset Management", "legacyIds": ["asset-management"] },
+        { "id": "cm.wealth-advisory", "name": "Wealth Advisory & Brokerage", "legacyIds": ["wealth-advisory"] },
+        { "id": "cm.market-data-analytics", "name": "Market Data & Analytics", "legacyIds": ["market-data"] }
       ]
     },
     {
-      "id": "fin-diversified",
+      "id": "fin-alternatives",
       "parentId": "financials",
-      "name": "Diversified Financials",
+      "shortId": "alts",
+      "name": "Alternative Asset Managers",
+      "description": "Private equity, private credit, real assets, and hedge-fund platforms (APO, BX, KKR, ARES, OWL, CG, BAM, TPG, HLNE). Replaces fin-diversified, whose 'stages' were really business lines not value-chain positions.",
+      "legacyIds": ["fin-diversified"],
       "stages": [
-        { "id": "lending", "name": "Lending" },
-        { "id": "asset-management", "name": "Asset Management" },
-        { "id": "trading", "name": "Trading" },
-        { "id": "insurance", "name": "Insurance" },
-        { "id": "advisory", "name": "Advisory" }
+        { "id": "alts.lp-fundraising", "name": "LP Capital Raising" },
+        { "id": "alts.gp-managers", "name": "GP Asset Managers" },
+        { "id": "alts.portfolio-companies", "name": "Portfolio Companies" },
+        { "id": "alts.permanent-capital", "name": "Permanent-Capital Vehicles" },
+        { "id": "alts.secondary-exits", "name": "Secondaries & Exits" }
+      ]
+    },
+    {
+      "id": "fin-exchanges",
+      "parentId": "financials",
+      "shortId": "exch",
+      "name": "Exchanges & Trading Infrastructure",
+      "description": "Listing venues, trading platforms, clearinghouses, and the exchange-owned market-data layer (CME, ICE, NDAQ, CBOE, MKTX, VIRT). Split from fin-capital-markets because the value chain is listing -> trading -> clearing -> data, not intermediation.",
+      "stages": [
+        { "id": "exch.listings", "name": "Issuer Listings" },
+        { "id": "exch.trading-venues", "name": "Trading Venues & ECNs" },
+        { "id": "exch.clearing-settlement", "name": "Clearing & Settlement" },
+        { "id": "exch.market-data", "name": "Exchange Market Data" },
+        { "id": "exch.participants", "name": "Members & Participants" }
+      ]
+    },
+    {
+      "id": "fin-crypto",
+      "parentId": "financials",
+      "shortId": "crypto",
+      "name": "Crypto-Native Financials",
+      "description": "Publicly-traded crypto miners, exchanges/brokers, custody and infrastructure, treasury holders, and stablecoin/asset issuers (COIN, MARA, RIOT, CLSK, CORZ, IREN, MSTR, GLXY, CRCL). Worth its own leaf because revenue drivers (BTC price, hashrate, trading velocity) don't map to banks, exchanges, or payments cleanly.",
+      "stages": [
+        { "id": "crypto.mining", "name": "Mining" },
+        { "id": "crypto.exchanges-brokers", "name": "Exchanges & Brokers" },
+        { "id": "crypto.custody-infra", "name": "Custody & Infrastructure" },
+        { "id": "crypto.asset-issuers", "name": "Stablecoin & Asset Issuers" },
+        { "id": "crypto.treasury-holders", "name": "Treasury Holders" },
+        { "id": "crypto.end-users", "name": "End Users" }
       ]
     },
 
     {
       "id": "healthcare",
-      "name": "Healthcare",
-      "description": "Pharma, biotech, devices, insurance, services."
+      "name": "Health Care",
+      "description": "Pharma, biotech, devices, managed care, healthcare services, and life-science tools."
     },
     {
       "id": "hc-pharma",
       "parentId": "healthcare",
+      "shortId": "pharma",
       "name": "Pharmaceuticals",
+      "description": "Large-cap, diversified pharma: discovery, trials, manufacturing, distribution, and payer/prescriber channels.",
       "stages": [
-        { "id": "discovery-research", "name": "Discovery & Research" },
-        { "id": "clinical-trials", "name": "Clinical Trials" },
-        { "id": "manufacturing", "name": "Manufacturing" },
-        { "id": "distribution", "name": "Distribution" },
-        { "id": "prescribers-payers", "name": "Prescribers & Payers" }
+        { "id": "pharma.discovery", "name": "Discovery & Research", "legacyIds": ["discovery-research"] },
+        { "id": "pharma.clinical-trials", "name": "Clinical Trials", "legacyIds": ["clinical-trials"] },
+        { "id": "pharma.manufacturing", "name": "Manufacturing" },
+        { "id": "pharma.distribution", "name": "Distribution" },
+        { "id": "pharma.payers-pbms", "name": "Payers & PBMs" },
+        { "id": "pharma.prescribers", "name": "Prescribers & Providers", "legacyIds": ["prescribers-payers"] }
       ]
     },
     {
       "id": "hc-biotech",
       "parentId": "healthcare",
-      "name": "Biotech",
+      "shortId": "biotech",
+      "name": "Biotechnology",
+      "description": "Single-asset-risk biotech distinct from diversified pharma. Platform technologies (mRNA, gene therapy, antibody engineering) called out as a dedicated stage.",
       "stages": [
-        { "id": "discovery-research", "name": "Discovery & Research" },
-        { "id": "clinical-development", "name": "Clinical Development" },
-        { "id": "manufacturing", "name": "Manufacturing" },
-        { "id": "commercialization", "name": "Commercialization" }
+        { "id": "biotech.discovery", "name": "Discovery & Target ID" },
+        { "id": "biotech.preclinical", "name": "Preclinical" },
+        { "id": "biotech.platform-technology", "name": "Platform Technology" },
+        { "id": "biotech.clinical-development", "name": "Clinical Development", "legacyIds": ["clinical-development"] },
+        { "id": "biotech.manufacturing", "name": "Manufacturing & Scale-up" },
+        { "id": "biotech.commercialization", "name": "Commercialization", "legacyIds": ["commercialization"] }
       ]
     },
     {
       "id": "hc-devices",
       "parentId": "healthcare",
-      "name": "Medical Devices",
+      "shortId": "meddev",
+      "name": "Medical Devices & Supplies",
+      "description": "Durable medical equipment, disposables, diagnostics hardware, and implantables.",
       "stages": [
-        { "id": "research-development", "name": "Research & Development" },
-        { "id": "manufacturing", "name": "Manufacturing" },
-        { "id": "distribution", "name": "Distribution" },
-        { "id": "providers", "name": "Providers & Patients" }
+        { "id": "meddev.research-development", "name": "R&D", "legacyIds": ["research-development"] },
+        { "id": "meddev.components", "name": "Components & Subassemblies" },
+        { "id": "meddev.manufacturing", "name": "Manufacturing" },
+        { "id": "meddev.distribution", "name": "Distribution" },
+        { "id": "meddev.providers", "name": "Providers & Hospitals", "legacyIds": ["providers"] }
       ]
     },
     {
       "id": "hc-insurance",
       "parentId": "healthcare",
-      "name": "Managed Care",
+      "shortId": "hcins",
+      "name": "Managed Care & Health Insurance",
+      "description": "Health insurers, PBMs, and benefits administrators.",
       "stages": [
-        { "id": "carriers", "name": "Carriers" },
-        { "id": "pbms", "name": "PBMs" },
-        { "id": "benefits-administration", "name": "Benefits Administration" },
-        { "id": "providers-consumers", "name": "Providers & Consumers" }
+        { "id": "hcins.carriers", "name": "Managed Care Carriers" },
+        { "id": "hcins.pbms", "name": "PBMs", "legacyIds": ["pbms"] },
+        { "id": "hcins.benefits-admin", "name": "Benefits Administration", "legacyIds": ["benefits-administration"] },
+        { "id": "hcins.providers-consumers", "name": "Providers & Members", "legacyIds": ["providers-consumers"] }
       ]
     },
     {
       "id": "hc-services",
       "parentId": "healthcare",
-      "name": "Providers & Services",
+      "shortId": "hcsvc",
+      "name": "Healthcare Services",
+      "description": "Hospitals, outpatient clinics, diagnostics labs, retail pharmacy, and digital-care platforms.",
       "stages": [
-        { "id": "hospitals-systems", "name": "Hospitals & Systems" },
-        { "id": "outpatient-clinics", "name": "Outpatient Clinics" },
-        { "id": "diagnostics-labs", "name": "Diagnostics & Labs" },
-        { "id": "retail-pharmacy", "name": "Retail Pharmacy" }
+        { "id": "hcsvc.hospitals-systems", "name": "Hospital Systems", "legacyIds": ["hospitals-systems"] },
+        { "id": "hcsvc.outpatient-clinics", "name": "Outpatient & Ambulatory", "legacyIds": ["outpatient-clinics"] },
+        { "id": "hcsvc.diagnostics-labs", "name": "Diagnostics & Labs", "legacyIds": ["diagnostics-labs"] },
+        { "id": "hcsvc.retail-pharmacy", "name": "Retail Pharmacy", "legacyIds": ["retail-pharmacy"] },
+        { "id": "hcsvc.care-mgmt-digital", "name": "Care Management & Digital Health" }
       ]
     },
     {
       "id": "hc-tools",
       "parentId": "healthcare",
-      "name": "Life Sciences Tools",
+      "shortId": "lifesci",
+      "name": "Life Science Tools & CROs",
+      "description": "Instruments, reagents, bioprocessing, and contract research services sold into pharma, biotech, and academia.",
       "stages": [
-        { "id": "instruments", "name": "Instruments" },
-        { "id": "reagents-consumables", "name": "Reagents & Consumables" },
-        { "id": "services", "name": "Services" },
-        { "id": "research-labs", "name": "Research Labs" }
+        { "id": "lifesci.instruments", "name": "Instruments", "legacyIds": ["instruments"] },
+        { "id": "lifesci.reagents-consumables", "name": "Reagents & Consumables", "legacyIds": ["reagents-consumables"] },
+        { "id": "lifesci.bioprocessing", "name": "Bioprocessing" },
+        { "id": "lifesci.cros-services", "name": "CROs & Lab Services", "legacyIds": ["services"] },
+        { "id": "lifesci.research-labs", "name": "Research Labs & Institutions", "legacyIds": ["research-labs"] }
       ]
     },
 
     {
       "id": "industrials",
       "name": "Industrials",
-      "description": "Aerospace, defense, machinery, transportation, electrical infrastructure."
+      "description": "Aerospace & defense, machinery, transportation, construction/E&C, electrical infrastructure, instruments, and commercial services."
     },
     {
       "id": "ind-aerospace-defense",
       "parentId": "industrials",
+      "shortId": "ad",
       "name": "Aerospace & Defense",
+      "description": "Legacy primes and new-space/defense-tech entrants plus the tiered supplier base and MRO layer.",
       "stages": [
-        { "id": "research-development", "name": "Research & Development" },
-        { "id": "primes", "name": "Primes" },
-        { "id": "tier-1-suppliers", "name": "Tier-1 Suppliers" },
-        { "id": "tier-2-suppliers", "name": "Tier-2 Suppliers" },
-        { "id": "customers-military-commercial", "name": "Military & Commercial Customers" }
+        { "id": "ad.research-development", "name": "R&D" },
+        { "id": "ad.primes", "name": "Legacy Primes", "legacyIds": ["primes"] },
+        { "id": "ad.new-space-defense-tech", "name": "New-Space & Defense Tech" },
+        { "id": "ad.tier-1-suppliers", "name": "Tier 1 Suppliers", "legacyIds": ["tier-1-suppliers"] },
+        { "id": "ad.tier-2-suppliers", "name": "Tier 2 Suppliers", "legacyIds": ["tier-2-suppliers"] },
+        { "id": "ad.mro-services", "name": "MRO & Aftermarket" },
+        { "id": "ad.customers-mil-commercial", "name": "Military & Commercial Customers", "legacyIds": ["customers-military-commercial"] }
       ]
     },
     {
       "id": "ind-machinery",
       "parentId": "industrials",
-      "name": "Machinery",
+      "shortId": "mach",
+      "name": "Industrial Machinery",
+      "description": "General industrial, agriculture, and construction-equipment OEMs and their components, distribution, and rental channels.",
       "stages": [
-        { "id": "components", "name": "Components" },
-        { "id": "oems", "name": "OEMs" },
-        { "id": "distribution", "name": "Distribution" },
-        { "id": "end-users", "name": "End Users" }
+        { "id": "mach.components", "name": "Components" },
+        { "id": "mach.oems", "name": "Machinery OEMs" },
+        { "id": "mach.distribution", "name": "Distribution" },
+        { "id": "mach.rental", "name": "Equipment Rental" },
+        { "id": "mach.end-users", "name": "End Users" }
       ]
     },
     {
       "id": "ind-transportation",
       "parentId": "industrials",
+      "shortId": "trans",
       "name": "Transportation & Logistics",
+      "description": "Rail, trucking/LTL, air freight/parcel, ocean shipping, passenger airlines, and logistics platforms. Broken down finer than v2 because the drivers differ substantially by mode.",
       "stages": [
-        { "id": "equipment-assets", "name": "Equipment & Assets" },
-        { "id": "operators-carriers", "name": "Operators & Carriers" },
-        { "id": "logistics-platforms", "name": "Logistics Platforms" },
-        { "id": "shippers-customers", "name": "Shippers & Customers" }
+        { "id": "trans.equipment-assets", "name": "Equipment & Assets", "legacyIds": ["equipment-assets"] },
+        { "id": "trans.freight-rail", "name": "Freight Rail" },
+        { "id": "trans.trucking-ltl", "name": "Trucking & LTL" },
+        { "id": "trans.air-parcel", "name": "Air Freight & Parcel" },
+        { "id": "trans.ocean-shipping", "name": "Ocean Shipping" },
+        { "id": "trans.passenger-airlines", "name": "Passenger Airlines" },
+        { "id": "trans.logistics-tech", "name": "Logistics Platforms & Tech", "legacyIds": ["logistics-platforms", "operators-carriers"] },
+        { "id": "trans.shippers-customers", "name": "Shippers & Customers", "legacyIds": ["shippers-customers"] }
       ]
     },
     {
       "id": "ind-construction",
       "parentId": "industrials",
+      "shortId": "const",
       "name": "Construction & Engineering",
+      "description": "E&C firms, general contractors, and specialty trade contractors. Construction materials live in mat-construction; electrical contractors appear under ind-electrical.",
       "stages": [
-        { "id": "engineering-design", "name": "Engineering & Design" },
-        { "id": "materials-suppliers", "name": "Materials Suppliers" },
-        { "id": "builders-contractors", "name": "Builders & Contractors" },
-        { "id": "end-customers", "name": "End Customers" }
+        { "id": "const.engineering-design", "name": "Engineering & Design", "legacyIds": ["engineering-design"] },
+        { "id": "const.materials-suppliers", "name": "Materials Suppliers", "legacyIds": ["materials-suppliers"] },
+        { "id": "const.construction-equipment", "name": "Construction Equipment" },
+        { "id": "const.builders-contractors", "name": "Builders & Contractors", "legacyIds": ["builders-contractors"] },
+        { "id": "const.specialty-trades", "name": "Specialty Trades" },
+        { "id": "const.end-customers", "name": "End Customers", "legacyIds": ["end-customers"] }
       ]
     },
     {
-      "id": "ind-infra",
+      "id": "ind-electrical",
       "parentId": "industrials",
-      "name": "Electrical & Data Center Infrastructure",
-      "description": "Grid equipment, data center power and cooling, industrial electrical.",
-      "legacyIds": ["energy"],
+      "shortId": "indelec",
+      "name": "Electrical Infrastructure & Automation",
+      "description": "Renamed from ind-infra. Captures the electrification + data-center build-out value chain: power-gen equipment, T&D gear, automation/controls, data-center power and cooling, and electrical EPC. Distinct from util-electric (regulated operators) because these are the SUPPLIERS to those operators and to hyperscalers.",
+      "legacyIds": ["ind-infra", "energy"],
       "stages": [
-        { "id": "grid-equipment", "name": "Grid Equipment" },
-        { "id": "dc-power", "name": "Data Center Power" },
-        { "id": "dc-cooling", "name": "Data Center Cooling" },
-        { "id": "power-gen", "name": "Power Generation" }
+        { "id": "indelec.power-gen-equipment", "name": "Power Generation Equipment", "legacyIds": ["power-gen"] },
+        { "id": "indelec.t-and-d-equipment", "name": "T&D Equipment", "legacyIds": ["grid-equipment"] },
+        { "id": "indelec.automation-controls", "name": "Automation & Controls" },
+        { "id": "indelec.dc-power", "name": "Data Center Power", "legacyIds": ["dc-power"] },
+        { "id": "indelec.dc-cooling", "name": "Data Center Cooling", "legacyIds": ["dc-cooling"] },
+        { "id": "indelec.e-and-c-contractors", "name": "Electrical EPC & Contractors" },
+        { "id": "indelec.customers", "name": "Utilities, Hyperscalers & Factories" }
+      ]
+    },
+    {
+      "id": "ind-instruments",
+      "parentId": "industrials",
+      "shortId": "instr",
+      "name": "Industrial Technology & Instruments",
+      "description": "Test & measurement, process and analytical instruments, and industrial/engineering software. New leaf to handle AME, KEYS, FTV, MKSI, TRMB, and the instrument side of ROP - diversified industrial-tech companies whose value chain (components -> instruments -> software analytics) doesn't match ind-machinery.",
+      "stages": [
+        { "id": "instr.components-sensors", "name": "Components & Sensors" },
+        { "id": "instr.test-measurement", "name": "Test & Measurement Platforms" },
+        { "id": "instr.process-analytical", "name": "Process & Analytical Instruments" },
+        { "id": "instr.industrial-software", "name": "Industrial & Operational Software" },
+        { "id": "instr.distribution", "name": "Distribution" },
+        { "id": "instr.end-markets", "name": "End Markets" }
+      ]
+    },
+    {
+      "id": "ind-commercial-services",
+      "parentId": "industrials",
+      "shortId": "bizsvc",
+      "name": "Commercial & Environmental Services",
+      "description": "Waste management, staffing/HR, uniforms and office supplies, testing/inspection, and pest/facilities services. WM, RSG, CTAS, RHI, ROL had no home in v2.",
+      "stages": [
+        { "id": "bizsvc.waste-environmental", "name": "Waste & Environmental Services" },
+        { "id": "bizsvc.staffing-hr", "name": "Staffing & HR Services" },
+        { "id": "bizsvc.uniforms-supplies", "name": "Uniforms & Office Supplies" },
+        { "id": "bizsvc.testing-inspection", "name": "Testing & Inspection" },
+        { "id": "bizsvc.pest-facilities", "name": "Pest & Facilities Services" },
+        { "id": "bizsvc.customers", "name": "Commercial Customers" }
       ]
     },
 
     {
       "id": "materials",
       "name": "Materials",
-      "description": "Chemicals, metals, mining, paper, packaging."
+      "description": "Chemicals and specialty materials, metals & mining, packaging, and construction materials."
     },
     {
       "id": "mat-chemicals",
       "parentId": "materials",
-      "name": "Chemicals",
+      "shortId": "chem",
+      "name": "Chemicals & Specialty Materials",
+      "description": "Basic chemicals and industrial gases, specialty chemicals, advanced materials (GLW-class specialty glass, composites), agricultural inputs, and coatings/paints.",
       "stages": [
-        { "id": "feedstock", "name": "Feedstock" },
-        { "id": "basic-chemicals", "name": "Basic Chemicals" },
-        { "id": "specialty-chemicals", "name": "Specialty Chemicals" },
-        { "id": "downstream-customers", "name": "Downstream Customers" }
+        { "id": "chem.feedstock", "name": "Feedstock", "legacyIds": ["feedstock"] },
+        { "id": "chem.basic-chemicals", "name": "Basic Chemicals & Industrial Gases", "legacyIds": ["basic-chemicals"] },
+        { "id": "chem.specialty-chemicals", "name": "Specialty Chemicals", "legacyIds": ["specialty-chemicals"] },
+        { "id": "chem.advanced-materials", "name": "Advanced Materials" },
+        { "id": "chem.ag-inputs", "name": "Agricultural Inputs" },
+        { "id": "chem.coatings-paints", "name": "Coatings & Paints" },
+        { "id": "chem.downstream-customers", "name": "Downstream Customers", "legacyIds": ["downstream-customers"] }
       ]
     },
     {
       "id": "mat-metals-mining",
       "parentId": "materials",
+      "shortId": "metals",
       "name": "Metals & Mining",
+      "description": "Exploration, mining, smelting, coal, and metals fabrication.",
       "stages": [
-        { "id": "exploration", "name": "Exploration" },
-        { "id": "mining-extraction", "name": "Mining & Extraction" },
-        { "id": "smelting-refining", "name": "Smelting & Refining" },
-        { "id": "fabrication-customers", "name": "Fabrication & Customers" }
+        { "id": "metals.exploration", "name": "Exploration" },
+        { "id": "metals.mining-extraction", "name": "Mining & Extraction", "legacyIds": ["mining-extraction"] },
+        { "id": "metals.smelting-refining", "name": "Smelting & Refining", "legacyIds": ["smelting-refining"] },
+        { "id": "metals.coal", "name": "Coal Mining" },
+        { "id": "metals.fabrication", "name": "Fabrication", "legacyIds": ["fabrication-customers"] },
+        { "id": "metals.downstream-customers", "name": "Downstream Customers" }
       ]
     },
     {
       "id": "mat-packaging",
       "parentId": "materials",
-      "name": "Paper & Packaging",
+      "shortId": "pkg",
+      "name": "Packaging",
+      "description": "Paper, metal, glass, and flexible plastic packaging.",
       "stages": [
-        { "id": "raw-materials", "name": "Raw Materials" },
-        { "id": "converters-manufacturers", "name": "Converters & Manufacturers" },
-        { "id": "brand-owners", "name": "Brand Owners" },
-        { "id": "retail-consumer", "name": "Retail & Consumer" }
+        { "id": "pkg.raw-materials", "name": "Raw Materials" },
+        { "id": "pkg.paper-board", "name": "Paper & Paperboard" },
+        { "id": "pkg.metal-glass", "name": "Metal & Glass" },
+        { "id": "pkg.plastic-flexible", "name": "Plastic & Flexible", "legacyIds": ["converters-manufacturers"] },
+        { "id": "pkg.brand-owners", "name": "Brand Owners", "legacyIds": ["brand-owners"] },
+        { "id": "pkg.retail-consumer", "name": "Retail & Consumer", "legacyIds": ["retail-consumer"] }
       ]
     },
     {
       "id": "mat-construction",
       "parentId": "materials",
+      "shortId": "bldg",
       "name": "Construction Materials",
+      "description": "Aggregates, cement, building products manufacturing, and distribution into builders and retail.",
       "stages": [
-        { "id": "raw-materials", "name": "Raw Materials" },
-        { "id": "manufacturing", "name": "Manufacturing" },
-        { "id": "distribution", "name": "Distribution" },
-        { "id": "builders-end-use", "name": "Builders & End-Use" }
+        { "id": "bldg.raw-materials", "name": "Raw Materials" },
+        { "id": "bldg.aggregates-cement", "name": "Aggregates & Cement" },
+        { "id": "bldg.manufacturing", "name": "Building Products Manufacturing" },
+        { "id": "bldg.distribution", "name": "Distribution" },
+        { "id": "bldg.builders-end-use", "name": "Builders & End Use", "legacyIds": ["builders-end-use"] }
       ]
     },
 
     {
       "id": "real-estate",
-      "name": "Real Estate"
+      "name": "Real Estate",
+      "description": "REITs split by property type, homebuilders, real-estate services and proptech, and mortgage finance."
     },
     {
-      "id": "re-reits",
+      "id": "re-residential",
       "parentId": "real-estate",
-      "name": "REITs",
+      "shortId": "resi",
+      "name": "Residential REITs",
+      "description": "Apartment, single-family rental, manufactured home, and student housing REITs (AVB, EQR, ESS, UDR, CPT, INVH, AMH, SUI).",
       "stages": [
-        { "id": "property-acquisition", "name": "Property Acquisition" },
-        { "id": "property-management", "name": "Property Management" },
-        { "id": "tenants-users", "name": "Tenants & Users" },
-        { "id": "capital-markets", "name": "Capital Markets" }
+        { "id": "resi.land-sites", "name": "Land & Site Acquisition" },
+        { "id": "resi.development", "name": "Development" },
+        { "id": "resi.property-operations", "name": "Property Operations" },
+        { "id": "resi.tenants", "name": "Tenants" },
+        { "id": "resi.capital-markets", "name": "REIT Capital Markets" }
       ]
     },
     {
-      "id": "re-dev",
+      "id": "re-office",
       "parentId": "real-estate",
-      "name": "Real Estate Development",
+      "shortId": "office",
+      "name": "Office REITs",
+      "description": "Office and lab/office REITs (BXP, VNO, SLG, CUZ, DEI, ARE lab office).",
       "stages": [
-        { "id": "land-acquisition", "name": "Land Acquisition" },
-        { "id": "construction", "name": "Construction" },
-        { "id": "sales-leasing", "name": "Sales & Leasing" }
+        { "id": "office.land-development", "name": "Land & Development" },
+        { "id": "office.property-operations", "name": "Office Property Operations" },
+        { "id": "office.tenants", "name": "Corporate Tenants" },
+        { "id": "office.capital-markets", "name": "Capital Markets" }
+      ]
+    },
+    {
+      "id": "re-retail-property",
+      "parentId": "real-estate",
+      "shortId": "retailprop",
+      "name": "Retail-Property REITs",
+      "description": "Malls, shopping centers, and net-lease retail REITs (SPG, KIM, REG, FRT, O, WPC, ADC, NNN).",
+      "stages": [
+        { "id": "retailprop.land-development", "name": "Land & Development" },
+        { "id": "retailprop.property-operations", "name": "Retail Property Operations" },
+        { "id": "retailprop.tenants-retailers", "name": "Retailer Tenants" },
+        { "id": "retailprop.capital-markets", "name": "Capital Markets" }
+      ]
+    },
+    {
+      "id": "re-industrial-logistics",
+      "parentId": "real-estate",
+      "shortId": "indlog",
+      "name": "Industrial & Logistics REITs",
+      "description": "Warehouse and logistics REITs (PLD, EGP, REXR, FR, TRNO, STAG).",
+      "stages": [
+        { "id": "indlog.land-development", "name": "Industrial Land & Development" },
+        { "id": "indlog.property-operations", "name": "Industrial Property Operations" },
+        { "id": "indlog.tenants-logistics", "name": "Logistics Tenants" },
+        { "id": "indlog.capital-markets", "name": "Capital Markets" }
+      ]
+    },
+    {
+      "id": "re-infrastructure",
+      "parentId": "real-estate",
+      "shortId": "reinfra",
+      "name": "Infrastructure REITs",
+      "description": "Data-center, cell-tower, and fiber REITs (EQIX, DLR, AMT, CCI, SBAC, UNIT). Distinct from re-specialty because the AI/cloud and 5G secular stories are large enough to warrant their own leaf.",
+      "stages": [
+        { "id": "reinfra.data-center", "name": "Data-Center REITs" },
+        { "id": "reinfra.towers", "name": "Cell Towers" },
+        { "id": "reinfra.fiber", "name": "Fiber Networks" },
+        { "id": "reinfra.tenants-hyperscale", "name": "Hyperscaler & Carrier Tenants" },
+        { "id": "reinfra.capital-markets", "name": "Capital Markets" }
+      ]
+    },
+    {
+      "id": "re-specialty",
+      "parentId": "real-estate",
+      "shortId": "respec",
+      "name": "Specialty REITs",
+      "description": "Self-storage, healthcare property, lodging, timber/farmland, and gaming REITs. Also the default landing spot for re-reits tickers during migration - flag them for re-classification.",
+      "legacyIds": ["re-reits"],
+      "stages": [
+        { "id": "respec.self-storage", "name": "Self-Storage", "legacyIds": ["property-management"] },
+        { "id": "respec.healthcare-property", "name": "Healthcare Property" },
+        { "id": "respec.lodging-hotels", "name": "Lodging & Hotel REITs" },
+        { "id": "respec.timber-farmland", "name": "Timber & Farmland" },
+        { "id": "respec.gaming", "name": "Gaming REITs" }
+      ]
+    },
+    {
+      "id": "re-homebuilders",
+      "parentId": "real-estate",
+      "shortId": "homebld",
+      "name": "Homebuilders",
+      "description": "For-sale single-family and multi-family builders (DHI, LEN, PHM, TOL, KBH, NVR, MTH, TMHC, LGIH).",
+      "legacyIds": ["re-dev"],
+      "stages": [
+        { "id": "homebld.land-acquisition", "name": "Land Acquisition", "legacyIds": ["land-acquisition"] },
+        { "id": "homebld.entitlements-sites", "name": "Entitlements & Site Development" },
+        { "id": "homebld.construction", "name": "Construction", "legacyIds": ["construction"] },
+        { "id": "homebld.sales-marketing", "name": "Sales & Marketing", "legacyIds": ["sales-leasing"] },
+        { "id": "homebld.buyers", "name": "Buyers" }
+      ]
+    },
+    {
+      "id": "re-services",
+      "parentId": "real-estate",
+      "shortId": "resvc",
+      "name": "Real-Estate Services & PropTech",
+      "description": "Commercial and residential brokerage, property management, title/escrow, and proptech marketplaces (CBRE, JLL, RMAX, COMP, Z, RDFN, CSGP, OPEN, FAF, FNF).",
+      "stages": [
+        { "id": "resvc.brokerage-commercial", "name": "Commercial Brokerage" },
+        { "id": "resvc.brokerage-residential", "name": "Residential Brokerage" },
+        { "id": "resvc.property-management", "name": "Property Management" },
+        { "id": "resvc.proptech", "name": "PropTech & Marketplaces" },
+        { "id": "resvc.title-escrow", "name": "Title & Escrow" }
+      ]
+    },
+    {
+      "id": "re-mortgage",
+      "parentId": "real-estate",
+      "shortId": "mort",
+      "name": "Mortgage Finance",
+      "description": "Mortgage originators, servicers, mortgage REITs (agency and commercial), and MBS markets (RKT, UWMC, PFSI, COOP, AGNC, NLY, STWD, BXMT, ABR).",
+      "stages": [
+        { "id": "mort.originators", "name": "Mortgage Originators" },
+        { "id": "mort.servicers", "name": "Mortgage Servicers" },
+        { "id": "mort.mreits", "name": "Mortgage REITs" },
+        { "id": "mort.mbs-markets", "name": "MBS Markets" },
+        { "id": "mort.borrowers", "name": "Borrowers" }
       ]
     },
 
     {
       "id": "utilities",
       "name": "Utilities",
-      "description": "Electric, gas, water, renewable generation."
+      "description": "Regulated electric, gas, and water utilities plus merchant and renewable independent power producers."
     },
     {
       "id": "util-electric",
       "parentId": "utilities",
+      "shortId": "utilelec",
       "name": "Electric Utilities",
+      "description": "Regulated electric utilities with integrated or separated generation, transmission, and distribution (DUK, SO, NEE-FPL, AEP, D, XEL, ETR, PPL).",
       "stages": [
-        { "id": "generation", "name": "Generation" },
-        { "id": "transmission", "name": "Transmission" },
-        { "id": "distribution", "name": "Distribution" },
-        { "id": "retail-customers", "name": "Retail Customers" }
+        { "id": "utilelec.generation", "name": "Generation", "legacyIds": ["generation"] },
+        { "id": "utilelec.transmission", "name": "Transmission", "legacyIds": ["transmission"] },
+        { "id": "utilelec.distribution", "name": "Distribution" },
+        { "id": "utilelec.retail-customers", "name": "Retail Customers", "legacyIds": ["retail-customers"] }
       ]
     },
     {
       "id": "util-gas",
       "parentId": "utilities",
+      "shortId": "utilgas",
       "name": "Gas Utilities",
+      "description": "Local gas distribution companies (ATO, NJR, NI, NFG, SWX, SR).",
       "stages": [
-        { "id": "supply", "name": "Supply" },
-        { "id": "pipeline-transport", "name": "Pipeline Transport" },
-        { "id": "distribution", "name": "Distribution" },
-        { "id": "end-users", "name": "End Users" }
+        { "id": "utilgas.supply", "name": "Supply", "legacyIds": ["supply"] },
+        { "id": "utilgas.pipeline-transport", "name": "Pipeline Transport", "legacyIds": ["pipeline-transport"] },
+        { "id": "utilgas.distribution", "name": "Local Distribution" },
+        { "id": "utilgas.end-users", "name": "End Users" }
       ]
     },
     {
       "id": "util-water",
       "parentId": "utilities",
+      "shortId": "water",
       "name": "Water Utilities",
+      "description": "Regulated water and wastewater utilities (AWK, WTRG, CWT, AWR, SJW, YORW).",
       "stages": [
-        { "id": "source-treatment", "name": "Source & Treatment" },
-        { "id": "distribution", "name": "Distribution" },
-        { "id": "customers", "name": "Customers" }
+        { "id": "water.source-treatment", "name": "Source & Treatment", "legacyIds": ["source-treatment"] },
+        { "id": "water.distribution", "name": "Distribution" },
+        { "id": "water.customers", "name": "Customers", "legacyIds": ["customers"] }
       ]
     },
     {
       "id": "util-indep-power",
       "parentId": "utilities",
-      "name": "Independent Power & Renewables",
-      "description": "Merchant generators, nuclear, renewables.",
+      "shortId": "ipp",
+      "name": "Independent Power Producers",
+      "description": "Merchant and renewable IPPs selling into wholesale power markets (NRG, VST, CEG nuclear, TLN, BEP, AES, NEP, AY). Renewable equipment makers live in energy-renewables.",
       "stages": [
-        { "id": "equipment-suppliers", "name": "Equipment Suppliers" },
-        { "id": "power-generators", "name": "Power Generators" },
-        { "id": "grid-offtakers", "name": "Grid & Offtakers" }
+        { "id": "ipp.equipment-suppliers", "name": "Equipment Suppliers", "legacyIds": ["equipment-suppliers"] },
+        { "id": "ipp.merchant-generators", "name": "Merchant Generators", "legacyIds": ["power-generators"] },
+        { "id": "ipp.renewable-operators", "name": "Renewable Operators" },
+        { "id": "ipp.grid-offtakers", "name": "Grid Offtakers & PPA Buyers", "legacyIds": ["grid-offtakers"] }
       ]
     }
   ]

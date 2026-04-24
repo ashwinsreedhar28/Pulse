@@ -9,7 +9,15 @@ import supplyChainGraph from '../../data/supplyChainGraph.json'
 import { classifyTickerSectors as routedClassify } from './aiClient'
 import type { TickerSectorClassification } from './ollamaService'
 
-export type SectorStage = { id: string; name: string }
+export type SectorStage = {
+  id: string
+  name: string
+  // v3+: optional legacy stage IDs so pre-v3 stored chains can map onto a
+  // renamed / re-namespaced stage. Not used by the DB (ticker_sectors only
+  // references sectorId), but exposed here so the renderer can resolve
+  // legacy stage labels when rendering old company_value_chains rows.
+  legacyIds?: string[]
+}
 
 export type Sector = {
   id: string
@@ -31,6 +39,10 @@ export type TickerSector = {
 type CatalogEntry = {
   id: string
   parentId?: string
+  // v3: sub-sector short-id used as the prefix for all of its stage ids
+  // (e.g. shortId='semi' → stage ids like 'semi.foundry'). Informational
+  // only — the actual prefix lives on each stage id, not derived at runtime.
+  shortId?: string
   name: string
   description?: string
   stages?: SectorStage[]
@@ -196,8 +208,122 @@ export function backfillOverrideSectorIds(): { nodes: number; edges: number } {
   return { nodes: nodeCount, edges: edgeCount }
 }
 
+// Remap existing sector assignments that point at sector ids which no longer
+// exist in the catalog. Runs after syncSectorCatalog so the DB's current-
+// catalog set reflects v3 before we remap. For each stale sectorId:
+//   - Check every v3 entry's legacyIds; if one matches, rewrite the row.
+//   - Otherwise leave as-is; those will fail the FK check on further writes
+//     until re-classified. (Unlikely to happen in practice — our curated
+//     catalog has kept every v2 id covered either as a direct id or a
+//     legacyId mapping.)
+// Specifically annotates the source on rewritten rows with a `_v3legacy`
+// suffix so we can tell which were auto-migrated vs freshly classified.
+export function migrateStaleSectorIdsToV3(): void {
+  const db = getDb()
+  const legacyMap = buildLegacyIdMap()
+  if (legacyMap.size === 0) return
+
+  const currentIds = new Set(catalog.sectors.map((s) => s.id))
+
+  // ticker_sectors rows whose sectorId is no longer in the catalog.
+  const stale = db
+    .prepare<[], { symbol: string; sectorId: string; source: string }>(
+      `SELECT symbol, sectorId, source FROM ticker_sectors`
+    )
+    .all()
+    .filter((r) => !currentIds.has(r.sectorId))
+  if (stale.length > 0) {
+    const update = db.prepare<[string, string, string, string]>(
+      `UPDATE ticker_sectors SET sectorId = ?, source = ?
+        WHERE symbol = ? AND sectorId = ?`
+    )
+    const tx = db.transaction(() => {
+      let remapped = 0
+      let dropped = 0
+      for (const row of stale) {
+        const newId = legacyMap.get(row.sectorId)
+        if (!newId) {
+          dropped += 1
+          continue
+        }
+        const newSource = row.source.endsWith('_v3legacy')
+          ? row.source
+          : `${row.source}_v3legacy`
+        update.run(newId, newSource, row.symbol, row.sectorId)
+        remapped += 1
+      }
+      console.log(
+        `[sectors] v3 migration: remapped ${remapped} ticker_sectors row(s), ` +
+          `${dropped} unmapped (will classify on next pass)`
+      )
+    })
+    tx()
+    // Any row that couldn't be remapped would violate the FK if we tried
+    // to delete the orphan sector rows below. Leave the orphans; they're
+    // harmless except taking up a handful of bytes.
+  }
+
+  // graph_node_overrides.sectorId (no FK, plain TEXT). Same remap logic,
+  // minus the source annotation — these rows carry an override source
+  // (e.g. chain_gen_AMD) that we don't want to rewrite.
+  const staleNodes = db
+    .prepare<[], { symbol: string; sectorId: string }>(
+      `SELECT symbol, sectorId FROM graph_node_overrides WHERE sectorId IS NOT NULL`
+    )
+    .all()
+    .filter((r) => !currentIds.has(r.sectorId))
+  if (staleNodes.length > 0) {
+    const upd = db.prepare<[string, string]>(
+      `UPDATE graph_node_overrides SET sectorId = ? WHERE symbol = ?`
+    )
+    let count = 0
+    for (const r of staleNodes) {
+      const newId = legacyMap.get(r.sectorId)
+      if (!newId) continue
+      upd.run(newId, r.symbol)
+      count += 1
+    }
+    if (count > 0) {
+      console.log(`[sectors] v3 migration: remapped ${count} graph_node_overrides sectorId(s)`)
+    }
+  }
+
+  // graph_edge_overrides.sectorId (plain TEXT, same treatment). Unique on
+  // (fromSymbol, toSymbol, relationship).
+  const staleEdges = db
+    .prepare<
+      [],
+      { fromSymbol: string; toSymbol: string; relationship: string; sectorId: string }
+    >(
+      `SELECT fromSymbol, toSymbol, relationship, sectorId
+         FROM graph_edge_overrides WHERE sectorId IS NOT NULL`
+    )
+    .all()
+    .filter((r) => !currentIds.has(r.sectorId))
+  if (staleEdges.length > 0) {
+    const upd = db.prepare<[string, string, string, string]>(
+      `UPDATE graph_edge_overrides SET sectorId = ?
+        WHERE fromSymbol = ? AND toSymbol = ? AND relationship = ?`
+    )
+    let count = 0
+    for (const r of staleEdges) {
+      const newId = legacyMap.get(r.sectorId)
+      if (!newId) continue
+      upd.run(newId, r.fromSymbol, r.toSymbol, r.relationship)
+      count += 1
+    }
+    if (count > 0) {
+      console.log(`[sectors] v3 migration: remapped ${count} graph_edge_overrides sectorId(s)`)
+    }
+  }
+}
+
 export function bootstrapSectorCatalog(): void {
   syncSectorCatalog()
+  // Remap before backfill so any existing rows pointing at retired v2 ids
+  // land on their v3 replacements first; backfill then only fills the
+  // never-populated rows.
+  migrateStaleSectorIdsToV3()
   const seeded = backfillTickerSectorsFromStaticGraph()
   if (seeded > 0) {
     console.log(`[sectors] seeded ${seeded} ticker_sectors rows from static graph`)
