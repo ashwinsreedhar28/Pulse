@@ -1331,6 +1331,247 @@ export async function getExtendedQuotes(symbols: string[]): Promise<ExtendedQuot
   return settled.filter((q): q is ExtendedQuote => q !== null)
 }
 
+// ---- Primary regular-hours + extended quotes -------------------------------
+// Returns the full StockQuote shape (same fields the Stooq path produces) so
+// stocksScheduler can consume it without a second overlay call. One chart
+// request per symbol — same shape fetchExtendedOne already uses — parsed
+// for every field the rolling bar + detail pages need.
+//
+// Yahoo batches well with parallelism rather than CSV joining, but piling on
+// 300+ concurrent requests is asking for 429s. We cap at 12 in flight at
+// once, which gets a 300-ticker sweep done in 5–8 s and stays well within
+// Yahoo's informal tolerance.
+
+const YAHOO_QUOTES_CONCURRENCY = 12
+
+// Widened chart-response type covering the meta fields we need for a full
+// regular-hours snapshot. `fetchExtendedOne` already uses a narrower view
+// of the same payload; this one adds the OHLCV + previousClose slice.
+interface QuoteChartResponse {
+  chart: {
+    result:
+      | Array<{
+          meta?: {
+            symbol?: string
+            regularMarketPrice?: number
+            regularMarketTime?: number
+            chartPreviousClose?: number
+            previousClose?: number
+            regularMarketDayHigh?: number
+            regularMarketDayLow?: number
+            regularMarketVolume?: number
+            regularMarketOpen?: number
+            currentTradingPeriod?: {
+              pre?: { start?: number; end?: number }
+              regular?: { start?: number; end?: number }
+              post?: { start?: number; end?: number }
+            }
+          }
+          timestamp?: number[]
+          indicators?: { quote?: Array<{ close?: Array<number | null> }> }
+        }>
+      | null
+    error: { code?: string; description?: string } | null
+  }
+}
+
+// The StockQuote shape is defined in stooqService so the scheduler can pass
+// either provider's output through the same broadcast. We inline the shape
+// here (rather than importing) because importing from stooqService across
+// the codebase would create a doubtful dependency direction.
+export interface StockQuote {
+  symbol: string
+  price: number | null
+  open: number | null
+  high: number | null
+  low: number | null
+  change: number | null
+  changePct: number | null
+  volume: number | null
+  time: string | null
+  postMarketPrice: number | null
+  postMarketChange: number | null
+  postMarketChangePct: number | null
+  preMarketPrice: number | null
+  preMarketChange: number | null
+  preMarketChangePct: number | null
+  marketState: MarketState | null
+}
+
+function emptyQuote(symbol: string): StockQuote {
+  return {
+    symbol,
+    price: null,
+    open: null,
+    high: null,
+    low: null,
+    change: null,
+    changePct: null,
+    volume: null,
+    time: null,
+    postMarketPrice: null,
+    postMarketChange: null,
+    postMarketChangePct: null,
+    preMarketPrice: null,
+    preMarketChange: null,
+    preMarketChangePct: null,
+    marketState: null
+  }
+}
+
+// Format a unix-seconds timestamp to the same "YYYY-MM-DD HH:MM:SS" shape
+// Stooq gives us, so the renderer's time-pill formatting doesn't need to
+// branch on the source. Uses local time to match Stooq's convention — the
+// UI treats `time` as an opaque display string anyway.
+function formatSecsToStooqTime(sec: number): string {
+  const d = new Date(sec * 1000)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  )
+}
+
+async function fetchQuoteOne(symbol: string): Promise<StockQuote> {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return emptyQuote(symbol)
+  const url = `${YAHOO_BASE}${encodeURIComponent(sym)}?interval=1m&range=1d&includePrePost=true`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+      signal: controller.signal
+    })
+    if (!res.ok) return emptyQuote(sym)
+    const json = (await res.json()) as QuoteChartResponse
+    const result = json.chart.result?.[0]
+    if (!result?.meta) return emptyQuote(sym)
+    const meta = result.meta
+
+    const nowSec = Math.floor(Date.now() / 1000)
+    const marketState = classifyMarketState(nowSec, meta.currentTradingPeriod ?? undefined)
+
+    const price = typeof meta.regularMarketPrice === 'number' ? meta.regularMarketPrice : null
+    const open = typeof meta.regularMarketOpen === 'number' ? meta.regularMarketOpen : null
+    const high = typeof meta.regularMarketDayHigh === 'number' ? meta.regularMarketDayHigh : null
+    const low = typeof meta.regularMarketDayLow === 'number' ? meta.regularMarketDayLow : null
+    const volume = typeof meta.regularMarketVolume === 'number' ? meta.regularMarketVolume : null
+    // Stooq defines change as close - open (intraday). Yahoo's convention is
+    // close - previousClose (overnight + intraday). We match Stooq so the
+    // rolling-bar display stays semantically consistent across providers.
+    // Previous-close-based change is reconstructable from price - chartPrev
+    // if we ever want it.
+    const change = price !== null && open !== null ? price - open : null
+    const changePct = change !== null && open !== null && open > 0 ? (change / open) * 100 : null
+    const time =
+      typeof meta.regularMarketTime === 'number'
+        ? formatSecsToStooqTime(meta.regularMarketTime)
+        : null
+
+    // Walk minute bars for pre/post prints — same logic as fetchExtendedOne,
+    // so any improvements land in both paths. Kept inline rather than
+    // extracted because the two functions have subtly different return
+    // shapes (ExtendedQuote vs StockQuote) and a shared helper would just
+    // swap one indirection for another.
+    let postMarketPrice: number | null = null
+    let postTimeSec: number | null = null
+    let preMarketPrice: number | null = null
+    const ts = result.timestamp ?? []
+    const closes = result.indicators?.quote?.[0]?.close ?? []
+    const periods = meta.currentTradingPeriod
+    const regularStart = periods?.regular?.start
+    const regularEnd = periods?.regular?.end
+    for (let i = 0; i < ts.length; i++) {
+      const t = ts[i]
+      const c = closes[i]
+      if (c === null || c === undefined || !Number.isFinite(c)) continue
+      if (regularStart && t < regularStart) {
+        preMarketPrice = c // last pre-session print wins
+      } else if (regularEnd && t >= regularEnd) {
+        postMarketPrice = c
+        postTimeSec = t
+      }
+    }
+    void postTimeSec // kept for symmetry with fetchExtendedOne; not surfaced.
+
+    // Delta baseline for extended-session is the regular-session close —
+    // matches the Stooq-overlay convention. If we don't have a baseline we
+    // leave deltas null rather than compute bogus percentages.
+    const baseline = price
+    const postMarketChange =
+      postMarketPrice !== null && baseline !== null ? postMarketPrice - baseline : null
+    const postMarketChangePct =
+      postMarketChange !== null && baseline !== null && baseline > 0
+        ? (postMarketChange / baseline) * 100
+        : null
+    const preMarketChange =
+      preMarketPrice !== null && baseline !== null ? preMarketPrice - baseline : null
+    const preMarketChangePct =
+      preMarketChange !== null && baseline !== null && baseline > 0
+        ? (preMarketChange / baseline) * 100
+        : null
+
+    return {
+      symbol: sym,
+      price,
+      open,
+      high,
+      low,
+      change,
+      changePct,
+      volume,
+      time,
+      postMarketPrice,
+      postMarketChange,
+      postMarketChangePct,
+      preMarketPrice,
+      preMarketChange,
+      preMarketChangePct,
+      marketState
+    }
+  } catch {
+    return emptyQuote(sym)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Simple bounded-parallelism runner. Walks the symbol list in waves of
+// YAHOO_QUOTES_CONCURRENCY promises so we never have more than that many
+// chart requests outstanding at once.
+async function runBounded<T, R>(
+  items: T[],
+  worker: (item: T) => Promise<R>,
+  concurrency: number
+): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let cursor = 0
+  async function pump(): Promise<void> {
+    while (true) {
+      const i = cursor++
+      if (i >= items.length) return
+      out[i] = await worker(items[i])
+    }
+  }
+  const runners: Promise<void>[] = []
+  const n = Math.min(concurrency, items.length)
+  for (let i = 0; i < n; i++) runners.push(pump())
+  await Promise.all(runners)
+  return out
+}
+
+// Primary quote fan-out. One chart call per symbol (batched v7/quote has
+// been crumb-gated since 2024 and the chart endpoint is the only reliably
+// anonymous batched-adjacent path). Returns one StockQuote per input symbol
+// in the same order, with `price === null` for anything Yahoo couldn't
+// serve — callers inspect the null-rate to decide whether to fall back.
+export async function getYahooQuotes(symbols: string[]): Promise<StockQuote[]> {
+  const unique = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))]
+  if (unique.length === 0) return []
+  return runBounded(unique, fetchQuoteOne, YAHOO_QUOTES_CONCURRENCY)
+}
+
 // ---- Ticker search --------------------------------------------------------
 // Yahoo's public /v1/finance/search endpoint doubles as a ticker autocomplete.
 // Results include symbol, display name, exchange, and sector/industry when

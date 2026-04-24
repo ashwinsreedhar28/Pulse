@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { listTickers } from '../database/tickers'
-import { getQuotes, type StockQuote } from './stooqService'
-import { getExtendedQuotes } from './yahooFinanceService'
+import { getQuotes as getStooqQuotes, type StockQuote } from './stooqService'
+import { getExtendedQuotes, getYahooQuotes } from './yahooFinanceService'
 
 // Three cadences, picked to match when Stooq data is actually changing:
 //  - Active: weekday 04:00–20:00 ET (pre-market + regular + after-hours)
@@ -60,45 +60,57 @@ async function tick(): Promise<void> {
     return
   }
   try {
-    // Stooq gives us the regular-session OHLC in a single batched CSV.
-    // Yahoo's chart endpoint provides the extended-session overlay —
-    // pre-market and after-hours prints that Stooq doesn't publish. We
-    // apply the overlay to every ticker (including passive graph nodes
-    // shown in the marquee's sector groups) so the rolling bar doesn't
-    // mix stale 4pm closes alongside live AH prices. Gated to the
-    // extended-hours windows (pre-market 4-10am ET, after-hours 4-8pm ET)
-    // so we don't burn Yahoo requests during regular hours or overnight.
-    const quotesPromise = getQuotes(symbols)
-    const overlayPromise = shouldOverlayExtended()
-      ? getExtendedQuotes(symbols).catch(() => [])
-      : Promise.resolve([])
-    const [quotes, overlay] = await Promise.all([quotesPromise, overlayPromise])
+    // Yahoo is the primary quote source — one chart request per symbol,
+    // bounded-concurrency, returns regular-session OHLCV plus pre/post
+    // prints and marketState in a single response. Stooq is kept as a
+    // fallback because Yahoo's unofficial API has been known to shift
+    // schema or throttle; when Yahoo comes back mostly-null we treat it
+    // as a partial outage and try Stooq's batched CSV.
+    //
+    // "Mostly-null" threshold: if fewer than half the symbols have a
+    // non-null price, the wave is failed-looking. Picking 50% because a
+    // handful of delisted / placeholder tickers in the graph always come
+    // back null and we don't want those to force a fallback on an
+    // otherwise-healthy response.
+    let quotes = await getYahooQuotes(symbols).catch(() => [] as StockQuote[])
+    const yahooHits = quotes.filter((q) => q.price !== null).length
+    const yahooOk = quotes.length > 0 && yahooHits >= quotes.length / 2
 
-    if (overlay.length > 0) {
-      const overlayBySymbol = new Map(overlay.map((x) => [x.symbol.toUpperCase(), x]))
-      for (const q of quotes) {
-        const ext = overlayBySymbol.get(q.symbol.toUpperCase())
-        if (!ext) continue
-        q.marketState = ext.marketState
-        // Delta baseline: Stooq's close is the regular-session close, which
-        // matches what Yahoo calls regularMarketPrice — so post-market
-        // deltas measured against it read naturally ("AH +0.42 from close").
-        const baseline = q.price ?? ext.regularPrice
-        if (ext.postPrice !== null) {
-          q.postMarketPrice = ext.postPrice
-          if (baseline !== null && baseline > 0) {
-            q.postMarketChange = ext.postPrice - baseline
-            q.postMarketChangePct = (q.postMarketChange / baseline) * 100
+    if (!yahooOk) {
+      console.warn(
+        `[stocks] Yahoo returned ${yahooHits}/${quotes.length} priced quotes — falling back to Stooq`
+      )
+      const stooqQuotes = await getStooqQuotes(symbols)
+      const overlay = shouldOverlayExtended()
+        ? await getExtendedQuotes(symbols).catch(() => [])
+        : []
+      if (overlay.length > 0) {
+        const overlayBySymbol = new Map(overlay.map((x) => [x.symbol.toUpperCase(), x]))
+        for (const q of stooqQuotes) {
+          const ext = overlayBySymbol.get(q.symbol.toUpperCase())
+          if (!ext) continue
+          q.marketState = ext.marketState
+          // Delta baseline: Stooq's close is the regular-session close, which
+          // matches what Yahoo calls regularMarketPrice — so post-market
+          // deltas measured against it read naturally ("AH +0.42 from close").
+          const baseline = q.price ?? ext.regularPrice
+          if (ext.postPrice !== null) {
+            q.postMarketPrice = ext.postPrice
+            if (baseline !== null && baseline > 0) {
+              q.postMarketChange = ext.postPrice - baseline
+              q.postMarketChangePct = (q.postMarketChange / baseline) * 100
+            }
           }
-        }
-        if (ext.prePrice !== null) {
-          q.preMarketPrice = ext.prePrice
-          if (baseline !== null && baseline > 0) {
-            q.preMarketChange = ext.prePrice - baseline
-            q.preMarketChangePct = (q.preMarketChange / baseline) * 100
+          if (ext.prePrice !== null) {
+            q.preMarketPrice = ext.prePrice
+            if (baseline !== null && baseline > 0) {
+              q.preMarketChange = ext.prePrice - baseline
+              q.preMarketChangePct = (q.preMarketChange / baseline) * 100
+            }
           }
         }
       }
+      quotes = stooqQuotes
     }
 
     lastQuotes = quotes
