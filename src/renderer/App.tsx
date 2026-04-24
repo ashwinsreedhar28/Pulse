@@ -2914,6 +2914,7 @@ function StocksPage({
           onOpenURL={onOpenURL}
           onOpenIpoBrief={onOpenIpoBrief}
         />
+        <MacroPanel />
         <div className="px-6 pt-4">
           <CollapsibleSection title="Explore tickers" meta="Yahoo search · any US symbol" defaultOpen={false}>
             <TickerSearchBox
