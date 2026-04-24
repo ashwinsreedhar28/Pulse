@@ -9,6 +9,13 @@ import { CalendarStrip } from './components/CalendarStrip'
 import { ExternalReader } from './components/ExternalReader'
 import { ValueChain } from './components/ValueChain'
 import { UnifiedValueChainCard } from './components/UnifiedValueChainCard'
+import { FcfSparkline } from './components/FcfSparkline'
+import {
+  fcfMarginTone,
+  formatMoneyCompact,
+  formatPctDelta,
+  formatPctValue
+} from './components/financialsFormat'
 import { SecFilingsSection } from './components/SecFilingsSection'
 import { OptionsSnapshotSection } from './components/OptionsSnapshotSection'
 import { EarningsReleaseSection } from './components/EarningsReleaseSection'
@@ -30,6 +37,7 @@ import type {
   Domain,
   FavoriteTeam,
   FavoriteAthlete,
+  FinancialsSnapshot,
   Fundamentals,
   Game,
   GameDetail,
@@ -3087,6 +3095,81 @@ function FundamentalCell({ label, value }: { label: string; value: string }): JS
   )
 }
 
+// Quarterly-statement-driven KPIs paired with the 8-quarter FCF strip. Same
+// data source (ticker_financials + computeSnapshot) that the peer-compare
+// modal + Value Chain tiles use, so numbers stay consistent across surfaces.
+// Null financials renders a pending placeholder — the scheduler broadcast
+// will flip us to populated state without a remount.
+function FinancialsDetailSection({
+  financials
+}: {
+  financials: FinancialsSnapshot | null
+}): JSX.Element {
+  const ttm = financials?.ttm
+  const yoyRev = financials?.yoy?.revenue ?? null
+  const margin = ttm?.fcfMargin ?? null
+  const marginStyling = fcfMarginTone(margin)
+  const yoyTone =
+    yoyRev === null
+      ? 'text-zinc-300'
+      : yoyRev > 0
+        ? 'text-emerald-300'
+        : yoyRev < 0
+          ? 'text-red-300'
+          : 'text-zinc-300'
+  return (
+    <CollapsibleSection title="Financial performance" meta="Last 8 quarters" defaultOpen>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4 items-center">
+        <FinancialsCell
+          label="Revenue TTM"
+          value={formatMoneyCompact(ttm?.revenue ?? null) ?? '—'}
+          tone="text-zinc-100"
+        />
+        <FinancialsCell
+          label="Revenue YoY"
+          value={formatPctDelta(yoyRev) ?? '—'}
+          tone={yoyTone}
+        />
+        <FinancialsCell
+          label="FCF TTM"
+          value={formatMoneyCompact(ttm?.freeCashFlow ?? null) ?? '—'}
+          tone="text-zinc-100"
+        />
+        <FinancialsCell
+          label="FCF margin"
+          value={formatPctValue(margin) ?? '—'}
+          tone={marginStyling.color}
+        />
+      </div>
+      <div className="mt-5">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-2">
+          Free cash flow · last 8 quarters
+        </div>
+        <FcfSparkline financials={financials ?? undefined} variant="card" />
+      </div>
+    </CollapsibleSection>
+  )
+}
+
+function FinancialsCell({
+  label,
+  value,
+  tone
+}: {
+  label: string
+  value: string
+  tone: string
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-1 min-w-0">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
+        {label}
+      </span>
+      <span className={`text-[17px] font-semibold tabular-nums truncate ${tone}`}>{value}</span>
+    </div>
+  )
+}
+
 function currencySymbol(code: string | null): string {
   if (!code) return ''
   if (code === 'USD') return '$'
@@ -3211,6 +3294,7 @@ function StockDetail({
     'loading' | 'ready' | 'offline' | 'empty' | 'no-material'
   >('loading')
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null)
+  const [financials, setFinancials] = useState<FinancialsSnapshot | null>(null)
   const [profile, setProfile] = useState<CompanyProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
 
@@ -3221,6 +3305,38 @@ function StockDetail({
     })
     return () => {
       cancelled = true
+    }
+  }, [ticker.symbol])
+
+  // Quarterly financials (TTM revenue, FCF margin, YoY deltas, 8Q FCF strip).
+  // Batched fetch on the stocks page already populates most tickers; this
+  // per-symbol call ensures the detail page is never blocked waiting on the
+  // batch and also picks up live updates when the scheduler re-broadcasts.
+  useEffect(() => {
+    let cancelled = false
+    setFinancials(null)
+    void window.api.stocks
+      .getFinancials(ticker.symbol)
+      .then((snap) => {
+        if (!cancelled) setFinancials(snap)
+      })
+      .catch(() => {
+        /* swallow — section renders a pending state when null */
+      })
+    const unsub = window.api.stocks.onFinancialsUpdated((sym) => {
+      if (sym.toUpperCase() !== ticker.symbol.toUpperCase()) return
+      void window.api.stocks
+        .getFinancials(ticker.symbol)
+        .then((snap) => {
+          if (!cancelled) setFinancials(snap)
+        })
+        .catch(() => {
+          /* ignore */
+        })
+    })
+    return () => {
+      cancelled = true
+      unsub()
     }
   }, [ticker.symbol])
 
@@ -3520,6 +3636,8 @@ function StockDetail({
               </div>
             </CollapsibleSection>
           )}
+
+          <FinancialsDetailSection financials={financials} />
 
           <UnifiedValueChainCard
             symbol={ticker.symbol}

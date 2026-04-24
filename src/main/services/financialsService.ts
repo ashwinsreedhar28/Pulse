@@ -37,15 +37,23 @@ const REFRESH_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000
 // hammer Yahoo on cold boots with many tickers.
 const TICK_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6h
 
-// Max symbols refreshed per tick. Each call is a quoteSummary hit against
-// Yahoo; bursting them risks the 401 handshake path. Staggered over
-// multiple ticks rather than all at once.
-const SYMBOLS_PER_TICK = 8
+// Max symbols refreshed per maintenance tick. With ~300 tickers on a
+// 6h cadence we need ~50 refreshes/tick to fully cycle every 36h; 30
+// keeps each sweep under 15s of wall-clock and leaves headroom.
+const SYMBOLS_PER_TICK = 30
 
-// Minimum gap between two Yahoo calls during a sweep. Yahoo's unauthenticated
-// quoteSummary endpoint tolerates a few calls per second; 350ms keeps us
-// below any rate flag while still finishing a 10-symbol sweep in <4s.
+// Minimum gap between two Yahoo calls. Yahoo's unauthenticated timeseries
+// endpoint tolerates a few calls per second; 350ms keeps us comfortably
+// below any rate flag. Used by both the maintenance sweep and the boot
+// backfill.
 const INTRA_TICK_DELAY_MS = 350
+
+// Boot-time backfill runs through every ticker that's missing financials
+// entirely or has the old cashflow-degraded rows. ~300 symbols × 350ms is
+// ~2 minutes total, which is acceptable for the "first few minutes after
+// launch, all tiles light up" feel. Bounded so a runaway list doesn't
+// infinite-loop; in practice we'll never hit this ceiling.
+const BACKFILL_MAX_SYMBOLS = 500
 
 export interface FinancialQuarter {
   periodEnd: number
@@ -209,13 +217,12 @@ function sleep(ms: number): Promise<void> {
 // long interval so we're not fighting the minute-cadence price scheduler
 // for the Yahoo crumb+cookie pair.
 async function sweep(): Promise<void> {
-  // Only sweep active (watchlist) tickers. Passive graph-seeded rows back
-  // non-watchlist value-chain tiles — we don't proactively fetch those to
-  // avoid burning Yahoo quoteSummary calls on ~65 symbols the user doesn't
-  // actively follow. If a passive ticker gets promoted to the watchlist,
-  // `db:tickers:activate` will pick it up on the next sweep; a user can
-  // also force a single-symbol refresh via `forceRefreshFinancials`.
-  const tickers = listTickers().filter((t) => t.isActive)
+  // Sweep the full ticker list — watchlist and passive graph nodes alike.
+  // Passive tiles (Value Chain + peer-compare peers) consume these rows
+  // just as aggressively as the watchlist does, so only fetching the
+  // watchlist left 80% of the graph blank. Yahoo's timeseries endpoint is
+  // anonymous and cheap; 30 symbols per tick over 6h leaves headroom.
+  const tickers = listTickers()
   if (tickers.length === 0) return
   const lastFetched = getAllLastFetched()
   const missingCashflow = getSymbolsMissingCashflow()
@@ -252,17 +259,70 @@ async function sweep(): Promise<void> {
   }
 }
 
+// Boot-time backfill. Processes every ticker that has no financials rows
+// yet plus everyone still stuck with the old cashflow-degraded rows,
+// throttled to INTRA_TICK_DELAY_MS between Yahoo calls. Unlike sweep(),
+// this isn't bounded by SYMBOLS_PER_TICK — the idea is that within a
+// couple minutes of launch every tile has its FCF / YoY data ready
+// instead of backfilling one sweep (30 symbols) at a time over weeks.
+// Idempotent: safe to re-run, skips symbols that are already fresh.
+async function runInitialBackfill(): Promise<void> {
+  const tickers = listTickers()
+  if (tickers.length === 0) return
+  const lastFetched = getAllLastFetched()
+  const missingCashflow = getSymbolsMissingCashflow()
+  const queue: string[] = []
+  for (const t of tickers) {
+    const sym = t.symbol.toUpperCase()
+    if (!lastFetched.has(sym)) {
+      queue.push(sym)
+    } else if (missingCashflow.has(sym)) {
+      queue.push(sym)
+    }
+    if (queue.length >= BACKFILL_MAX_SYMBOLS) break
+  }
+  if (queue.length === 0) return
+  console.log(
+    `[financials] initial backfill: ${queue.length} symbol(s) (empty or cashflow-missing)`
+  )
+  let done = 0
+  for (const sym of queue) {
+    try {
+      await refreshFinancials(sym)
+    } catch (err) {
+      console.warn(
+        `[financials] backfill refresh failed for ${sym}:`,
+        err instanceof Error ? err.message : err
+      )
+    }
+    done += 1
+    if (done % 25 === 0) {
+      console.log(`[financials] backfill progress: ${done}/${queue.length}`)
+    }
+    await sleep(INTRA_TICK_DELAY_MS)
+  }
+  console.log(`[financials] initial backfill complete (${done} symbols)`)
+}
+
 let timer: NodeJS.Timeout | null = null
 let started = false
 
 export function startFinancialsScheduler(): void {
   if (started) return
   started = true
-  // Initial kick after a short delay so the boot storm (first feeds poll,
-  // first stocks tick, profile warm-ups) clears before we add Yahoo traffic.
+  // First kick after the boot storm clears: aggressive backfill that
+  // processes every ticker missing data in one go (~2 min for 300
+  // symbols), so Value Chain + peer-compare tiles light up quickly
+  // instead of waiting days for the 6h sweep cadence to get around to
+  // each passive ticker.
   setTimeout(() => {
-    void sweep()
+    void runInitialBackfill()
   }, 20_000)
+  // Maintenance sweep: catches earnings-print refreshes + anyone who
+  // aged past the 3-day staleness window. Fires on the normal interval
+  // regardless of backfill state — the two coexist safely since refresh
+  // is idempotent and the "already fresh" filter short-circuits redundant
+  // work.
   timer = setInterval(() => {
     void sweep()
   }, TICK_INTERVAL_MS)

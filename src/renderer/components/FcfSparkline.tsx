@@ -14,9 +14,12 @@ interface Variant {
   gap: number
 }
 
-const VARIANTS: Record<'tile' | 'strip', Variant> = {
+const VARIANTS: Record<'tile' | 'strip' | 'card', Variant> = {
   tile: { width: 60, height: 14, gap: 1 },
-  strip: { width: 140, height: 22, gap: 1.5 }
+  strip: { width: 140, height: 22, gap: 1.5 },
+  // Full-width card on the stock detail page: bigger target with room for
+  // each quarter to read as its own bar.
+  card: { width: 360, height: 64, gap: 3 }
 }
 
 export function FcfSparkline({
@@ -24,7 +27,7 @@ export function FcfSparkline({
   variant = 'tile'
 }: {
   financials: FinancialsSnapshot | undefined
-  variant?: 'tile' | 'strip'
+  variant?: 'tile' | 'strip' | 'card'
 }): JSX.Element | null {
   if (!financials || financials.quarters.length === 0) return null
   // Oldest → newest. Snapshot stores most-recent first to match TTM math.
