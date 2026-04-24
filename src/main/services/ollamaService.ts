@@ -1166,11 +1166,19 @@ export interface GeneratedValueChainNode {
   isTicker: boolean
 }
 
+// Attribution for a claimed relationship. Lets the UI show a provenance
+// pill ("10-K", "news", "profile", "model") next to the edge note so the
+// user can judge how grounded the claim is at a glance. 'model' means the
+// LLM produced the edge from its training-time knowledge rather than any
+// of the grounding material we supplied.
+export type GeneratedValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'model'
+
 export interface GeneratedValueChainEdge {
   from: string
   to: string
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
+  source: GeneratedValueChainEdgeSource | null
 }
 
 export interface GeneratedValueChainStage {
@@ -1254,7 +1262,8 @@ export async function generateCompanyValueChain(input: {
     `      "from": "node symbol",\n` +
     `      "to": "node symbol",\n` +
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
-    `      "note": "one short sentence, <120 chars"\n` +
+    `      "note": "one short sentence, <120 chars",\n` +
+    `      "source": "filings" | "news" | "profile" | "model"\n` +
     `    }\n` +
     `  ]\n` +
     `}\n\n` +
@@ -1295,6 +1304,16 @@ export async function generateCompanyValueChain(input: {
     `\n` +
     `- blurbs and notes must stay short (<140 / <120 chars), factual, no ` +
     `marketing language.\n` +
+    `\n` +
+    `Edge "source" field — cite where each edge claim comes from so users ` +
+    `can judge how grounded it is:\n` +
+    `- "filings" if the relationship is in the 10-K excerpt above.\n` +
+    `- "news" if it's in one of the recent news snippets above.\n` +
+    `- "profile" if it's from the company profile text above but not the 10-K.\n` +
+    `- "model" if the relationship comes from your general training knowledge ` +
+    `rather than any supplied context above. Be honest — over-claiming ` +
+    `grounding degrades user trust.\n` +
+    `\n` +
     `- If the company's value chain is genuinely unclear from the context, ` +
     `return {"focus": "SYMBOL", "stages": [], "nodes": [], "edges": []}.`
 
@@ -1482,6 +1501,7 @@ export async function generateCompanyValueChain(input: {
     const validNodeSymbols = new Set(nodes.map((n) => n.symbol))
 
     const validRelationships = ['supplier', 'customer', 'competitor', 'partner']
+    const validSources = ['filings', 'news', 'profile', 'model']
     const rawEdges = Array.isArray(parsed.edges)
       ? parsed.edges
           .map(
@@ -1491,6 +1511,7 @@ export async function generateCompanyValueChain(input: {
                 to?: unknown
                 relationship?: unknown
                 note?: unknown
+                source?: unknown
               }
           )
           .filter(
@@ -1500,12 +1521,20 @@ export async function generateCompanyValueChain(input: {
               typeof e.relationship === 'string' &&
               validRelationships.includes(e.relationship)
           )
-          .map((e) => ({
-            from: (e.from as string).trim().toUpperCase().replace(/\s+/g, '_'),
-            to: (e.to as string).trim().toUpperCase().replace(/\s+/g, '_'),
-            relationship: e.relationship as GeneratedValueChainEdge['relationship'],
-            note: typeof e.note === 'string' ? (e.note as string).trim().slice(0, 180) : null
-          }))
+          .map((e) => {
+            const sourceRaw =
+              typeof e.source === 'string' ? (e.source as string).trim().toLowerCase() : ''
+            const source = validSources.includes(sourceRaw)
+              ? (sourceRaw as GeneratedValueChainEdgeSource)
+              : null
+            return {
+              from: (e.from as string).trim().toUpperCase().replace(/\s+/g, '_'),
+              to: (e.to as string).trim().toUpperCase().replace(/\s+/g, '_'),
+              relationship: e.relationship as GeneratedValueChainEdge['relationship'],
+              note: typeof e.note === 'string' ? (e.note as string).trim().slice(0, 180) : null,
+              source
+            }
+          })
           .filter((e) => e.from !== e.to)
       : []
 

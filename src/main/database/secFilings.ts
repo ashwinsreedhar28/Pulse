@@ -196,3 +196,61 @@ export function getAllFilingsLastFetched(): Map<string, number> {
   for (const r of rows) m.set(r.symbol, r.fetchedAt)
   return m
 }
+
+// ---- Former names ----------------------------------------------------------
+
+export interface SecFormerName {
+  cik: string
+  originalName: string
+  normalizedName: string
+  fromDate: string | null
+  toDate: string | null
+}
+
+// Replace the set of former-names we have for a CIK. SEC may revise an
+// issuer's history (corrections, dates added), and because the PK is
+// (cik, normalizedName) a clean replace is simpler than diffing — the
+// table is tiny (thousands of rows at most) so the delete+insert cost is
+// negligible.
+export function replaceFormerNames(cik: string, names: SecFormerName[]): number {
+  const padded = cik.padStart(10, '0')
+  const now = Date.now()
+  const del = getDb().prepare(`DELETE FROM sec_former_names WHERE cik = ?`)
+  const ins = getDb().prepare(
+    `INSERT OR IGNORE INTO sec_former_names
+       (cik, normalizedName, originalName, fromDate, toDate, fetchedAt)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  )
+  const tx = getDb().transaction((rows: SecFormerName[]) => {
+    del.run(padded)
+    let count = 0
+    for (const n of rows) {
+      if (!n.normalizedName) continue
+      ins.run(padded, n.normalizedName, n.originalName, n.fromDate, n.toDate, now)
+      count++
+    }
+    return count
+  })
+  return tx(names)
+}
+
+// Every (cik, normalizedName) row joined back to the current ticker via
+// sec_cik_map.cik. Returned as flat rows so the resolver can extend its
+// name index without additional joins. Only includes entries whose CIK
+// still maps to at least one ticker — rows for delisted issuers are
+// skipped since the resolver has no live symbol to return.
+export function listFormerNamesJoinedToSymbols(): Array<{
+  symbol: string
+  originalName: string
+  normalizedName: string
+}> {
+  return getDb()
+    .prepare<[], { symbol: string; originalName: string; normalizedName: string }>(
+      `SELECT m.symbol AS symbol,
+              f.originalName AS originalName,
+              f.normalizedName AS normalizedName
+         FROM sec_former_names f
+         JOIN sec_cik_map m ON m.cik = f.cik`
+    )
+    .all()
+}

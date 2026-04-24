@@ -519,11 +519,18 @@ export interface CompanyValueChainNode {
   kind: 'ticker' | 'unverified'
 }
 
+// Provenance for the edge claim. 'filings' = from the 10-K excerpt,
+// 'news' = from a recent news snippet, 'profile' = from the company
+// profile description, 'model' = the LLM's general knowledge. Null on
+// legacy chains generated before this field was added.
+export type CompanyValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'model'
+
 export interface CompanyValueChainEdge {
   from: string
   to: string
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
+  source: CompanyValueChainEdgeSource | null
 }
 
 export interface CompanyValueChain {

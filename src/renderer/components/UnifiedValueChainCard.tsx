@@ -9,7 +9,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type { CompanyValueChainRow, Ticker } from '../../preload'
+import type {
+  CompanyValueChainEdgeSource,
+  CompanyValueChainRow,
+  Ticker
+} from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
 import { CollapsibleSection } from './CollapsibleSection'
 import {
@@ -329,7 +333,11 @@ function prepareFromGenerated(
   const focusNode = nodeBySymbol.get(focus)
   if (!focusNode) return null
 
-  const toCounterparty = (sym: string, note: string | null): Counterparty => {
+  const toCounterparty = (
+    sym: string,
+    note: string | null,
+    source: CompanyValueChainEdgeSource | null
+  ): Counterparty => {
     const n = nodeBySymbol.get(sym)
     const stage = n?.stage ?? ''
     return {
@@ -337,7 +345,8 @@ function prepareFromGenerated(
       stage,
       stageLabel: stage ? stageLabelById.get(stage) ?? humanize(stage) : '—',
       companyName: nameBySymbol.get(sym) ?? n?.name ?? sym,
-      note
+      note,
+      source
     }
   }
 
@@ -357,12 +366,13 @@ function prepareFromGenerated(
     const to = e.to.toUpperCase()
     const rel = e.relationship
     const note = e.note ?? null
+    const source = e.source ?? null
     if (rel === 'competitor') {
       if (from === focus && !seenCompetitors.has(to)) {
-        competitors.push(toCounterparty(to, note))
+        competitors.push(toCounterparty(to, note, source))
         seenCompetitors.add(to)
       } else if (to === focus && !seenCompetitors.has(from)) {
-        competitors.push(toCounterparty(from, note))
+        competitors.push(toCounterparty(from, note, source))
         seenCompetitors.add(from)
       }
       continue
@@ -370,10 +380,10 @@ function prepareFromGenerated(
     if (rel === 'supplier') {
       // from supplies to.
       if (to === focus && !seenSuppliers.has(from)) {
-        suppliers.push(toCounterparty(from, note))
+        suppliers.push(toCounterparty(from, note, source))
         seenSuppliers.add(from)
       } else if (from === focus && !seenCustomers.has(to)) {
-        customers.push(toCounterparty(to, note))
+        customers.push(toCounterparty(to, note, source))
         seenCustomers.add(to)
       }
       continue
@@ -381,10 +391,10 @@ function prepareFromGenerated(
     if (rel === 'customer') {
       // from is customer of to (so to supplies from).
       if (from === focus && !seenSuppliers.has(to)) {
-        suppliers.push(toCounterparty(to, note))
+        suppliers.push(toCounterparty(to, note, source))
         seenSuppliers.add(to)
       } else if (to === focus && !seenCustomers.has(from)) {
-        customers.push(toCounterparty(from, note))
+        customers.push(toCounterparty(from, note, source))
         seenCustomers.add(from)
       }
       continue
@@ -393,10 +403,10 @@ function prepareFromGenerated(
       // Symmetric — fold into customers when focus is `from`, suppliers
       // otherwise. This matches ValueChain's logic.
       if (from === focus && !seenCustomers.has(to)) {
-        customers.push(toCounterparty(to, note))
+        customers.push(toCounterparty(to, note, source))
         seenCustomers.add(to)
       } else if (to === focus && !seenSuppliers.has(from)) {
-        suppliers.push(toCounterparty(from, note))
+        suppliers.push(toCounterparty(from, note, source))
         seenSuppliers.add(from)
       }
     }

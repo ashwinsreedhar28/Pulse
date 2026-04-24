@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { Ticker } from '../../preload'
+import type { CompanyValueChainEdgeSource, Ticker } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
 import { CollapsibleSection } from './CollapsibleSection'
 
@@ -45,6 +45,41 @@ export interface Counterparty {
   // → AWS shows "Technology" on the AWS row when viewed from a financials
   // focus).
   crossSectorLabel?: string | null
+  // Provenance for the note, populated by generated chains only. Curated
+  // or legacy edges leave this null and no badge renders. 'filings' / 'news'
+  // / 'profile' are real groundings; 'model' means the LLM claimed the
+  // relationship from training knowledge without any supplied context.
+  source?: CompanyValueChainEdgeSource | null
+}
+
+// Short label + styling per provenance kind. Tooltip spells out the
+// full explanation so the condensed pill stays compact. Kept near the
+// Counterparty definition so new provenance values can't drift.
+export const SOURCE_BADGE: Record<
+  CompanyValueChainEdgeSource,
+  { label: string; className: string; title: string }
+> = {
+  filings: {
+    label: '10-K',
+    className: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200',
+    title: 'Cited in the company’s 10-K filing excerpt'
+  },
+  news: {
+    label: 'News',
+    className: 'border-sky-500/40 bg-sky-500/10 text-sky-200',
+    title: 'Cited in a recent news article fed into the generator'
+  },
+  profile: {
+    label: 'Profile',
+    className: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
+    title: 'Cited in the company profile description'
+  },
+  model: {
+    label: 'Model',
+    className: 'border-violet-500/40 bg-violet-500/10 text-violet-200',
+    title:
+      'From the model’s training knowledge — not grounded in any supplied filing or article'
+  }
 }
 
 // Palette maps to the three relationship categories used throughout the value
@@ -368,8 +403,16 @@ export function TransactionCluster({
                         )}
                       </div>
                       {item.note && (
-                        <div className="text-[11px] leading-snug text-zinc-400 mt-0.5">
-                          {item.note}
+                        <div className="text-[11px] leading-snug text-zinc-400 mt-0.5 flex items-start gap-1.5">
+                          <span className="flex-1 min-w-0">{item.note}</span>
+                          {item.source && SOURCE_BADGE[item.source] && (
+                            <span
+                              className={`shrink-0 inline-flex items-center px-1.5 py-[1px] rounded-full border text-[8.5px] font-semibold uppercase tracking-[0.16em] ${SOURCE_BADGE[item.source].className}`}
+                              title={SOURCE_BADGE[item.source].title}
+                            >
+                              {SOURCE_BADGE[item.source].label}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>

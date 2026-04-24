@@ -25,11 +25,17 @@ export interface CompanyValueChainNode {
   kind: 'ticker' | 'unverified'
 }
 
+// Provenance for the edge claim — mirrors GeneratedValueChainEdgeSource
+// in ollamaService. Null on legacy chains generated before this field was
+// added. See that module for the label glossary.
+export type CompanyValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'model'
+
 export interface CompanyValueChainEdge {
   from: string
   to: string
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
+  source: CompanyValueChainEdgeSource | null
 }
 
 export interface CompanyValueChain {

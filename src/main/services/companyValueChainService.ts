@@ -246,6 +246,7 @@ type ChainEdge = {
   to: string
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
+  source: 'filings' | 'news' | 'profile' | 'model' | null
 }
 
 function canonicalizeEdges(
@@ -300,7 +301,8 @@ function canonicalizeEdges(
       from: canonicalFrom,
       to: canonicalTo,
       relationship: edge.relationship,
-      note: edge.note
+      note: edge.note,
+      source: edge.source
     })
   }
   if (dropped > 0) {

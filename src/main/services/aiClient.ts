@@ -11,7 +11,11 @@
 //             than fail the user's click.
 // - 'ollama': force local. Useful for privacy-conscious users or offline.
 
-import { getPreferences } from '../database/preferences'
+import {
+  getPreferences,
+  getClaudeUsageState,
+  setClaudeUsageState
+} from '../database/preferences'
 import {
   generateCompanyValueChain as claudeChain,
   classifyTickerSectors as claudeClassify,
@@ -34,11 +38,11 @@ export type AiProviderResolved = 'claude' | 'ollama'
 // (e.g., a chat that retries on every error, a regenerate-all that fires
 // twice). Counts EVERY routed Claude call across all paths — chain
 // generation, classifier, answerQuestion — into one bucket. When
-// exceeded, routed calls fall back to Ollama with a warning. Counter is
-// in-memory; resets on app restart and at UTC day rollover. Persisting
-// across restarts would be safer in theory but adds DB write churn for
-// limited additional protection — a runaway across multiple restarts is
-// already a bigger system problem the user would notice.
+// exceeded, routed calls fall back to Ollama with a warning.
+//
+// Persisted to the preferences KV store so the cap survives restarts — a
+// crash loop that restarts the app cannot bypass the ceiling by zeroing
+// the counter. Rolls over at UTC midnight.
 //
 // Default ceiling: 100 calls/day. At Haiku 4.5 pricing (~$0.015/call) that
 // caps the worst case around $1.50/day = $45/month. At Sonnet 4.6
@@ -48,45 +52,81 @@ export type AiProviderResolved = 'claude' | 'ollama'
 
 const DAILY_CLAUDE_CAP = 100
 
-let claudeCounter = { date: utcDateKey(), count: 0 }
+// Lazy-loaded from DB on first access. Module-level `getDb()` cannot run at
+// import time because the database connection isn't open yet when services
+// are imported during main-process boot.
+let claudeCounter: { date: string; count: number } | null = null
 
 function utcDateKey(): string {
   const d = new Date()
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
 }
 
-function rollCounterIfNewDay(): void {
+function ensureCounterLoaded(): { date: string; count: number } {
+  if (claudeCounter !== null) return claudeCounter
   const today = utcDateKey()
-  if (claudeCounter.date !== today) {
+  try {
+    const persisted = getClaudeUsageState()
+    if (persisted && persisted.date === today) {
+      claudeCounter = { date: persisted.date, count: persisted.count }
+    } else {
+      // Either no persisted state yet, or the persisted date is stale —
+      // start a fresh bucket for today. We don't bother to persist the
+      // zero; `recordClaudeCall()` will write on the first real increment.
+      claudeCounter = { date: today, count: 0 }
+    }
+  } catch (err) {
+    console.warn('[aiClient] Failed to load Claude usage counter from DB:', err)
     claudeCounter = { date: today, count: 0 }
+  }
+  return claudeCounter
+}
+
+function rollCounterIfNewDay(): void {
+  const counter = ensureCounterLoaded()
+  const today = utcDateKey()
+  if (counter.date !== today) {
+    claudeCounter = { date: today, count: 0 }
+    try {
+      setClaudeUsageState(claudeCounter)
+    } catch (err) {
+      console.warn('[aiClient] Failed to persist Claude usage rollover:', err)
+    }
   }
 }
 
 export function canCallClaude(): boolean {
   rollCounterIfNewDay()
-  return claudeCounter.count < DAILY_CLAUDE_CAP
+  return ensureCounterLoaded().count < DAILY_CLAUDE_CAP
 }
 
 export function recordClaudeCall(): void {
   rollCounterIfNewDay()
-  claudeCounter.count += 1
+  const counter = ensureCounterLoaded()
+  counter.count += 1
+  try {
+    setClaudeUsageState(counter)
+  } catch (err) {
+    console.warn('[aiClient] Failed to persist Claude usage increment:', err)
+  }
   // Soft warning at 50% of cap so the user has a chance to throttle their
   // own usage before the hard ceiling kicks in.
-  if (claudeCounter.count === Math.floor(DAILY_CLAUDE_CAP / 2)) {
+  if (counter.count === Math.floor(DAILY_CLAUDE_CAP / 2)) {
     console.warn(
-      `[aiClient] Claude usage at ${claudeCounter.count}/${DAILY_CLAUDE_CAP} for ${claudeCounter.date} — about halfway to today's safety cap.`
+      `[aiClient] Claude usage at ${counter.count}/${DAILY_CLAUDE_CAP} for ${counter.date} — about halfway to today's safety cap.`
     )
   }
-  if (claudeCounter.count === DAILY_CLAUDE_CAP) {
+  if (counter.count === DAILY_CLAUDE_CAP) {
     console.warn(
-      `[aiClient] Claude daily cap (${DAILY_CLAUDE_CAP}) reached for ${claudeCounter.date}. Subsequent routed calls fall back to Ollama until UTC midnight.`
+      `[aiClient] Claude daily cap (${DAILY_CLAUDE_CAP}) reached for ${counter.date}. Subsequent routed calls fall back to Ollama until UTC midnight.`
     )
   }
 }
 
 export function getClaudeUsage(): { date: string; count: number; cap: number } {
   rollCounterIfNewDay()
-  return { date: claudeCounter.date, count: claudeCounter.count, cap: DAILY_CLAUDE_CAP }
+  const counter = ensureCounterLoaded()
+  return { date: counter.date, count: counter.count, cap: DAILY_CLAUDE_CAP }
 }
 
 export function resolveProvider(): AiProviderResolved {

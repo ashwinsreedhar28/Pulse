@@ -1037,5 +1037,33 @@ export const migrations: Migration[] = [
         db.exec(`ALTER TABLE graph_node_overrides ADD COLUMN sectorId TEXT`)
       }
     }
+  },
+  {
+    version: 36,
+    name: 'create sec_former_names for rebrand-aware name resolution',
+    // SEC's submissions JSON for each issuer includes a `formerNames` array
+    // listing every legal name the CIK has traded under (e.g. META's CIK
+    // shows "FACEBOOK INC" and the dates it was in force). Storing these
+    // keyed by CIK + name lets the company-name resolver map old names to
+    // the current ticker without hand-curated NAME_ALIASES entries.
+    //
+    // Keyed by (cik, normalizedName) so the same former name recorded with
+    // trivial punctuation differences collapses to one row. fromDate/toDate
+    // are the raw strings SEC provides ("2012-05-01") — we don't parse
+    // them; the resolver only cares about the current→symbol mapping.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sec_former_names (
+          cik TEXT NOT NULL,
+          normalizedName TEXT NOT NULL,
+          originalName TEXT NOT NULL,
+          fromDate TEXT,
+          toDate TEXT,
+          fetchedAt INTEGER NOT NULL,
+          PRIMARY KEY (cik, normalizedName)
+        );
+        CREATE INDEX IF NOT EXISTS idx_sec_former_names_cik ON sec_former_names(cik);
+      `)
+    }
   }
 ]

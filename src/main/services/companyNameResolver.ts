@@ -7,6 +7,7 @@
 // 2+ tickers) rather than guessing.
 
 import { getDb } from '../database/connection'
+import { listFormerNamesJoinedToSymbols } from '../database/secFilings'
 import { listTickers } from '../database/tickers'
 
 interface NameEntry {
@@ -16,8 +17,11 @@ interface NameEntry {
   // Normalized form used for matching.
   normalized: string
   // Where this mapping came from — affects tiebreaks when the same name
-  // surfaces in multiple sources (tickers table wins, it's curated).
-  source: 'tickers' | 'sec'
+  // surfaces in multiple sources. Order of preference: tickers (curated) →
+  // sec (current legal name) → sec_former (prior legal names from SEC's
+  // submissions JSON). Former names are last-resort because a rebrand that
+  // passed a name to a different issuer would otherwise mis-resolve.
+  source: 'tickers' | 'sec' | 'sec_former'
 }
 
 // Stop-words to strip from company names before matching. Legal suffixes
@@ -196,6 +200,19 @@ function loadIndex(): NameEntry[] {
       source: 'sec'
     })
   }
+  // SEC's per-issuer submissions JSON also includes formerNames — every
+  // legal name the CIK has traded under. Indexing these lets rebrands
+  // ("Facebook" → META, "Square" → SQ/XYZ) resolve without a hand-curated
+  // alias. Populated lazily by secFilingsService on each filings refresh.
+  for (const row of listFormerNamesJoinedToSymbols()) {
+    if (!row.normalizedName) continue
+    entries.push({
+      symbol: row.symbol.toUpperCase(),
+      original: row.originalName,
+      normalized: row.normalizedName,
+      source: 'sec_former'
+    })
+  }
   return entries
 }
 
@@ -263,10 +280,17 @@ export function resolveCompanyName(rawName: string): ResolveResult | null {
         score: 0.95
       }
     }
+    // Multiple SEC rows with same name. Prefer current legal names over
+    // former-name history — a rebrand could otherwise resolve to two
+    // different symbols when the old name is still registered elsewhere.
+    // Fall back to the full set (including former) only when no current
+    // entry matched.
+    const preferred = exact.filter((e) => e.source !== 'sec_former')
+    const pool = preferred.length > 0 ? preferred : exact
     // Multiple SEC rows with same name — usually one common-stock ticker
     // plus several preferred-stock classes (JPM + JPM-PC/PD/PJ/PK, etc.).
     // Pick the common-stock entry.
-    const common = pickCommonStock(exact)
+    const common = pickCommonStock(pool)
     if (common) {
       return { symbol: common.symbol, matchedName: common.original, score: 0.95 }
     }
@@ -369,7 +393,9 @@ export function resolveCompanyNames(names: string[]): Map<string, ResolveResult>
         })
         continue
       }
-      const common = pickCommonStock(exact)
+      const preferred = exact.filter((e) => e.source !== 'sec_former')
+      const pool = preferred.length > 0 ? preferred : exact
+      const common = pickCommonStock(pool)
       if (common) {
         out.set(raw, { symbol: common.symbol, matchedName: common.original, score: 0.95 })
       }

@@ -18,12 +18,14 @@ import {
   getAllFilingsLastFetched,
   getCikMapLastFetched,
   lookupCik,
+  replaceFormerNames,
   upsertCikMap,
   upsertFilings
 } from '../database/secFilings'
 import { listTickers } from '../database/tickers'
+import { normalizeCompanyName } from './companyNameResolver'
 import { processRecentEarnings } from './earningsReleasesService'
-import { fetchFilings, fetchTickerMap } from './secService'
+import { fetchSubmissions, fetchTickerMap } from './secService'
 import { processRecentTenKs } from './tenKConcentrationService'
 
 // CIK map refreshes monthly — new listings are rare enough that a stale
@@ -67,9 +69,23 @@ export async function refreshFilings(symbol: string): Promise<number | null> {
   const cik = lookupCik(sym)
   if (!cik) return null
   try {
-    const rows = await fetchFilings(cik)
-    if (rows.length === 0) return 0
-    const count = upsertFilings(sym, rows)
+    const { filings, formerNames } = await fetchSubmissions(cik)
+    // Persist former names before filings so a concurrent resolver call on
+    // a rebrand sees the alias even if upsertFilings fails later.
+    if (formerNames.length > 0) {
+      replaceFormerNames(
+        cik,
+        formerNames.map((f) => ({
+          cik,
+          originalName: f.name,
+          normalizedName: normalizeCompanyName(f.name),
+          fromDate: f.fromDate,
+          toDate: f.toDate
+        }))
+      )
+    }
+    if (filings.length === 0) return 0
+    const count = upsertFilings(sym, filings)
     broadcastUpdated(sym)
     // Kick the earnings-release summary pipeline for any newly-landed 8-K
     // 2.02s, and the 10-K customer-concentration extractor for any newly-

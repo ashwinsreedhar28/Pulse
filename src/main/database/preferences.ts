@@ -100,6 +100,41 @@ export function setPreference(key: keyof Preferences, value: string | number | b
     .run(key, String(value))
 }
 
+// Claude daily-call counter persistence. Kept out of the Preferences interface
+// because it's internal usage-tracking state, not a user-tunable setting.
+// Uses the same key-value `preferences` table so no schema migration is
+// needed. Date format: 'YYYY-MM-DD' (UTC).
+export interface ClaudeUsageState {
+  date: string
+  count: number
+}
+
+export function getClaudeUsageState(): ClaudeUsageState | null {
+  const db = getDb()
+  const rows = db
+    .prepare<[], { key: string; value: string }>(
+      `SELECT key, value FROM preferences WHERE key IN ('_claudeUsageDate', '_claudeUsageCount')`
+    )
+    .all()
+  const map = new Map(rows.map((r) => [r.key, r.value]))
+  const date = map.get('_claudeUsageDate')
+  const countRaw = map.get('_claudeUsageCount')
+  if (!date || countRaw === undefined) return null
+  const count = Number(countRaw)
+  if (!Number.isFinite(count) || count < 0) return null
+  return { date, count: Math.floor(count) }
+}
+
+export function setClaudeUsageState(state: ClaudeUsageState): void {
+  const db = getDb()
+  const stmt = db.prepare(`INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)`)
+  const tx = db.transaction(() => {
+    stmt.run('_claudeUsageDate', state.date)
+    stmt.run('_claudeUsageCount', String(state.count))
+  })
+  tx()
+}
+
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Number.isFinite(n) ? n : min))
 }

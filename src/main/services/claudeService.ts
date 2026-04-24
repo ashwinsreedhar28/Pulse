@@ -245,7 +245,8 @@ export async function generateCompanyValueChain(input: {
     `      "from": "node symbol",\n` +
     `      "to": "node symbol",\n` +
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
-    `      "note": "one sentence, <120 chars, grounded in facts"\n` +
+    `      "note": "one sentence, <120 chars, grounded in facts",\n` +
+    `      "source": "filings" | "news" | "profile" | "model"\n` +
     `    }\n` +
     `  ]\n` +
     `}\n\n` +
@@ -285,6 +286,19 @@ export async function generateCompanyValueChain(input: {
     `- Only include well-documented relationships. No speculation.\n` +
     `\n` +
     `- blurbs <140 chars, notes <120 chars, factual, no marketing language.\n` +
+    `\n` +
+    `Edge "source" field — cite where the claim comes from so users can ` +
+    `judge how grounded it is:\n` +
+    `- "filings" if the relationship is stated or clearly implied in the ` +
+    `10-K excerpt above (customers named in Item 1, risk factors citing ` +
+    `suppliers, etc.).\n` +
+    `- "news" if the relationship is stated in one of the recent news ` +
+    `snippets above.\n` +
+    `- "profile" if it comes from the company profile text above but not the 10-K.\n` +
+    `- "model" if you know the relationship from your general training but ` +
+    `none of the supplied context mentions it. Use this honestly — over-` +
+    `claiming grounding degrades user trust.\n` +
+    `\n` +
     `- If the value chain is genuinely unclear from the context, return ` +
     `{"focus":"${input.symbol}","stages":[],"nodes":[],"edges":[]}.`
 
@@ -399,6 +413,7 @@ export async function generateCompanyValueChain(input: {
         to?: unknown
         relationship?: unknown
         note?: unknown
+        source?: unknown
       }
       const from = typeof row.from === 'string' ? row.from.trim().toUpperCase() : ''
       const to = typeof row.to === 'string' ? row.to.trim().toUpperCase() : ''
@@ -430,11 +445,20 @@ export async function generateCompanyValueChain(input: {
       const validRel =
         rel === 'supplier' || rel === 'customer' || rel === 'competitor' || rel === 'partner'
       if (!validRel) continue
+      const rawSource = typeof row.source === 'string' ? row.source.trim().toLowerCase() : ''
+      const source =
+        rawSource === 'filings' ||
+        rawSource === 'news' ||
+        rawSource === 'profile' ||
+        rawSource === 'model'
+          ? rawSource
+          : null
       edgesOut.push({
         from,
         to,
         relationship: rel,
-        note: typeof row.note === 'string' ? row.note.trim().slice(0, 200) : null
+        note: typeof row.note === 'string' ? row.note.trim().slice(0, 200) : null,
+        source
       })
     }
   }

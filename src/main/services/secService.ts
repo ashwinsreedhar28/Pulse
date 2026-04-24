@@ -62,6 +62,24 @@ export interface SecFilingRaw {
   items: string | null
 }
 
+// Former legal name a CIK has previously filed under. Populated from the
+// submissions JSON's `formerNames` array. Feeds the company-name resolver
+// so rebrands ("Facebook" → META, "Square" → Block) resolve without
+// hand-curated aliases.
+export interface SecFormerNameRaw {
+  name: string
+  fromDate: string | null
+  toDate: string | null
+}
+
+// Submissions endpoint returns filings + issuer metadata in one response.
+// Keeping both returns from a single fetch avoids double-taxing SEC's
+// rate limit when we want former names alongside the usual filings pull.
+export interface SubmissionsData {
+  filings: SecFilingRaw[]
+  formerNames: SecFormerNameRaw[]
+}
+
 interface TickerMapResponse {
   [key: string]: {
     cik_str: number
@@ -106,6 +124,11 @@ export async function fetchTickerMap(): Promise<CikEntry[]> {
 
 interface SubmissionsResponse {
   cik?: string
+  formerNames?: Array<{
+    name?: string
+    from?: string
+    to?: string
+  }>
   filings?: {
     recent?: {
       accessionNumber?: string[]
@@ -121,8 +144,11 @@ interface SubmissionsResponse {
 
 // Fetch the recent filings page for one issuer. SEC returns 12-15 fields as
 // parallel arrays — an unusual shape, but their own convention. We zip them
-// into row objects.
-export async function fetchFilings(cik: string): Promise<SecFilingRaw[]> {
+// into row objects. Also returns the issuer's `formerNames` list so the
+// resolver can index prior legal names — same fetch, no extra rate-limit
+// budget.
+export async function fetchSubmissions(cik: string): Promise<SubmissionsData> {
+  const empty: SubmissionsData = { filings: [], formerNames: [] }
   const padded = padCik(cik)
   const url = `${SUBMISSIONS_BASE}CIK${padded}.json`
   const controller = new AbortController()
@@ -133,36 +159,59 @@ export async function fetchFilings(cik: string): Promise<SecFilingRaw[]> {
       signal: controller.signal
     })
     if (!res.ok) {
-      if (res.status === 404) return []
+      if (res.status === 404) return empty
       throw new Error(`HTTP ${res.status}`)
     }
     const json = (await res.json()) as SubmissionsResponse
+
+    const filings: SecFilingRaw[] = []
     const recent = json.filings?.recent
-    if (!recent?.accessionNumber) return []
-    const len = recent.accessionNumber.length
-    const out: SecFilingRaw[] = []
-    for (let i = 0; i < len; i++) {
-      const acc = recent.accessionNumber[i]
-      const form = recent.form?.[i]
-      const filed = recent.filingDate?.[i]
-      if (!acc || !form || !filed) continue
-      const filedAt = parseSecDate(filed)
-      if (filedAt === null) continue
-      out.push({
-        accessionNumber: acc,
-        cik: padded,
-        formType: form,
-        filedAt,
-        reportDate: parseSecDate(recent.reportDate?.[i]),
-        primaryDocument: recent.primaryDocument?.[i] ?? null,
-        primaryDocDescription: recent.primaryDocDescription?.[i] ?? null,
-        items: recent.items?.[i] ?? null
-      })
+    if (recent?.accessionNumber) {
+      const len = recent.accessionNumber.length
+      for (let i = 0; i < len; i++) {
+        const acc = recent.accessionNumber[i]
+        const form = recent.form?.[i]
+        const filed = recent.filingDate?.[i]
+        if (!acc || !form || !filed) continue
+        const filedAt = parseSecDate(filed)
+        if (filedAt === null) continue
+        filings.push({
+          accessionNumber: acc,
+          cik: padded,
+          formType: form,
+          filedAt,
+          reportDate: parseSecDate(recent.reportDate?.[i]),
+          primaryDocument: recent.primaryDocument?.[i] ?? null,
+          primaryDocDescription: recent.primaryDocDescription?.[i] ?? null,
+          items: recent.items?.[i] ?? null
+        })
+      }
     }
-    return out
+
+    const formerNames: SecFormerNameRaw[] = []
+    if (Array.isArray(json.formerNames)) {
+      for (const entry of json.formerNames) {
+        const name = typeof entry?.name === 'string' ? entry.name.trim() : ''
+        if (!name) continue
+        formerNames.push({
+          name,
+          fromDate: typeof entry.from === 'string' && entry.from ? entry.from : null,
+          toDate: typeof entry.to === 'string' && entry.to ? entry.to : null
+        })
+      }
+    }
+
+    return { filings, formerNames }
   } finally {
     clearTimeout(timer)
   }
+}
+
+// Backwards-compat wrapper: callers that only wanted filings can keep using
+// this. New callers should prefer fetchSubmissions so the former-names
+// field doesn't go to waste.
+export async function fetchFilings(cik: string): Promise<SecFilingRaw[]> {
+  return (await fetchSubmissions(cik)).filings
 }
 
 // SEC dates come as "YYYY-MM-DD" strings. Treat them as UTC midnight — close
