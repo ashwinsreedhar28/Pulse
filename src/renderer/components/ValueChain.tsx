@@ -231,6 +231,7 @@ export function ValueChain({
   useEffect(() => {
     if (!externalFocus) return
     const upper = externalFocus.toUpperCase()
+    console.log(`[valueChain] externalFocus received: ${upper}`)
     setLockedSymbol(upper)
     setSectorId('all')
     setPendingScroll(upper)
@@ -243,16 +244,30 @@ export function ValueChain({
 
   useEffect(() => {
     if (!pendingScroll) return
-    // Run after paint so the tile has been mounted into the sector-'all'
-    // layout. requestAnimationFrame + a small timeout together handle
-    // the case where the pending scroll arrived on the same tick as the
-    // sectorId change (React batches but the layout pass needs a frame).
+    // Two-phase scroll: the first rAF waits for the React commit that
+    // applied sectorId='all'; the inner timeout waits one more macrotask
+    // so the Value Chain's stage-grouping useMemos (which rerun on
+    // sectorId change) have time to rebuild and the tile is actually in
+    // the DOM. Without the second delay, the initial scroll could fire
+    // against a tile element that's about to be unmounted + remounted
+    // when the memos resolve.
     const raf = requestAnimationFrame(() => {
-      const el = tileRefs.current.get(pendingScroll)
-      if (el && typeof el.scrollIntoView === 'function') {
-        el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
-      }
-      setPendingScroll(null)
+      setTimeout(() => {
+        const el = tileRefs.current.get(pendingScroll)
+        const hasScrollIntoView =
+          !!el && typeof (el as HTMLElement).scrollIntoView === 'function'
+        console.log(
+          `[valueChain] pendingScroll=${pendingScroll} tile=${hasScrollIntoView ? 'found' : 'MISSING'} refs=${tileRefs.current.size}`
+        )
+        if (hasScrollIntoView) {
+          ;(el as HTMLElement).scrollIntoView({
+            block: 'center',
+            inline: 'nearest',
+            behavior: 'smooth'
+          })
+        }
+        setPendingScroll(null)
+      }, 50)
     })
     return () => cancelAnimationFrame(raf)
   }, [pendingScroll])
