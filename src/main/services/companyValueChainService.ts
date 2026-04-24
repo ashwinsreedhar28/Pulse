@@ -588,7 +588,16 @@ export function getRegenerateAllProgress(): RegenerateAllProgress {
 // so they pick them up" button. Runs sequentially — Ollama's 2-concurrent
 // cap makes parallel runs counterproductive, and keeping order stable
 // makes the progress UI easier to read.
-export async function regenerateAllChains(): Promise<RegenerateAllProgress> {
+//
+// `skipIfGeneratedWithinMs` lets callers cheapen a re-run by skipping
+// chains whose generatedAt is newer than that window. Manual button
+// callers pass 0 (regen everything). Auto-on-boot callers pass a real
+// window (e.g. 20h) so a partial run that hit the Claude cap yesterday
+// only retries the stragglers tomorrow instead of re-burning the
+// already-fresh chains.
+export async function regenerateAllChains(
+  opts: { skipIfGeneratedWithinMs?: number } = {}
+): Promise<RegenerateAllProgress> {
   if (regenRunning) return regenProgress
   regenRunning = true
   // Expanded scope: "regenerate all" now means every ticker the user has
@@ -604,7 +613,27 @@ export async function regenerateAllChains(): Promise<RegenerateAllProgress> {
     ...existingChainSymbols,
     ...watchlist.map((t) => t.symbol.toUpperCase())
   ])
-  const symbols = [...symbolSet].sort()
+  let symbols = [...symbolSet].sort()
+
+  // Skip-fresh filter: when a window is provided, drop any symbol whose
+  // stored chain was generated more recently than the window. Never-
+  // generated symbols always pass (null generatedAt), so new watchlist
+  // additions still get their first chain even under an aggressive skip.
+  if (opts.skipIfGeneratedWithinMs && opts.skipIfGeneratedWithinMs > 0) {
+    const cutoff = Date.now() - opts.skipIfGeneratedWithinMs
+    const beforeCount = symbols.length
+    symbols = symbols.filter((sym) => {
+      const row = getCompanyValueChain(sym)
+      if (!row || row.generatedAt === null) return true
+      return row.generatedAt < cutoff
+    })
+    const skipped = beforeCount - symbols.length
+    if (skipped > 0) {
+      console.log(
+        `[companyChain] regenerate-all: skipped ${skipped} chain(s) regenerated within ${Math.round(opts.skipIfGeneratedWithinMs / 3600_000)}h — ${symbols.length} to process`
+      )
+    }
+  }
   // Build a companyName lookup so every symbol in the run has a usable
   // prompt input even if it was only in the existingChainSymbols set
   // (covers the rare case where a chain exists but the tickers row was
@@ -646,4 +675,78 @@ export async function regenerateAllChains(): Promise<RegenerateAllProgress> {
   regenRunning = false
   broadcastRegenProgress()
   return regenProgress
+}
+
+// ---- on-boot auto-regeneration ---------------------------------------------
+//
+// Fires once per launch (behind a timestamp throttle) so the user doesn't
+// have to remember to click Regenerate All after every pipeline change.
+// Two guards protect against cap burn:
+//
+//   1. A throttle window: don't fire if the last auto-run completed less
+//      than AUTO_REGEN_THROTTLE_MS ago. Back-to-back restarts during
+//      active development don't re-burn Claude calls.
+//   2. A per-chain skip window inside regenerateAllChains: chains already
+//      regenerated within AUTO_REGEN_SKIP_MS are skipped. A partial run
+//      that hit yesterday's cap picks up only the stragglers today.
+//
+// The last-run timestamp lives in the preferences KV store so it survives
+// restarts.
+
+const AUTO_REGEN_THROTTLE_MS = 20 * 60 * 60 * 1000 // 20 hours
+const AUTO_REGEN_SKIP_MS = 20 * 60 * 60 * 1000 // 20 hours — matches so
+// chains from the previous auto-run age out of the skip window right as
+// the next auto-run becomes eligible. Stragglers (failed yesterday due to
+// cap) have null/stale generatedAt and always refresh.
+const AUTO_REGEN_BOOT_DELAY_MS = 3 * 60 * 1000 // 3 minutes after startup
+// — let feed polling, stocks scheduler, and financials backfill clear
+// first so they don't compete for Claude bandwidth.
+
+export async function maybeAutoRegenerateOnBoot(): Promise<void> {
+  // Late-imported to avoid circular-dependency headaches with preferences.
+  const { getDb } = await import('../database/connection')
+  const db = getDb()
+  const row = db
+    .prepare<[], { value: string }>(
+      `SELECT value FROM preferences WHERE key = '_lastAutoRegenAt'`
+    )
+    .get()
+  const lastRun = row ? Number(row.value) : 0
+  const now = Date.now()
+  if (Number.isFinite(lastRun) && now - lastRun < AUTO_REGEN_THROTTLE_MS) {
+    const hoursAgo = Math.round((now - lastRun) / 3600_000)
+    console.log(
+      `[companyChain] auto-regen skipped — last run was ${hoursAgo}h ago ` +
+        `(throttle: ${Math.round(AUTO_REGEN_THROTTLE_MS / 3600_000)}h)`
+    )
+    return
+  }
+  console.log(
+    `[companyChain] auto-regen starting — will skip chains < ${Math.round(AUTO_REGEN_SKIP_MS / 3600_000)}h old`
+  )
+  try {
+    await regenerateAllChains({ skipIfGeneratedWithinMs: AUTO_REGEN_SKIP_MS })
+  } finally {
+    // Record the stamp even if the run partially failed (Claude cap, etc.).
+    // Prevents a failing run from re-firing every restart.
+    db
+      .prepare<[string, string]>(
+        `INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)`
+      )
+      .run('_lastAutoRegenAt', String(Date.now()))
+  }
+}
+
+// Called from main/index.ts after the boot-storm window. Fire-and-forget —
+// the caller doesn't await; errors inside bubble to maybeAutoRegenerateOnBoot
+// and are caught at the timer callback.
+export function scheduleAutoRegenerateOnBoot(): void {
+  setTimeout(() => {
+    void maybeAutoRegenerateOnBoot().catch((err) => {
+      console.warn(
+        '[companyChain] auto-regen failed:',
+        err instanceof Error ? err.message : err
+      )
+    })
+  }, AUTO_REGEN_BOOT_DELAY_MS)
 }

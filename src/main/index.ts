@@ -653,6 +653,18 @@ app.whenReady().then(async () => {
   }
   startMaintenanceSchedule()
 
+  // Auto-regenerate value chains on boot, throttled so back-to-back
+  // restarts during active development don't re-burn the Claude daily
+  // cap. Fires 3 min after startup (once the feed poll + financials
+  // backfill burst clears) and skips chains generated in the last
+  // ~20h — so a partial run that hit yesterday's cap finishes its
+  // stragglers today instead of re-running the whole graph. Won't fire
+  // again until > 20h since the last stamp in preferences.
+  const { scheduleAutoRegenerateOnBoot } = await import(
+    './services/companyValueChainService'
+  )
+  scheduleAutoRegenerateOnBoot()
+
   // Hold the splash until every boot service is ready — otherwise heavy
   // background loads (SDXL, Kokoro) cause jitter the moment the main window
   // opens. A 180s watchdog caps the worst case (first-run model downloads).
