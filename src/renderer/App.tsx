@@ -2926,9 +2926,6 @@ function StocksPage({
                 // the diagram" — light up + scroll the matching tile
                 // instead of covering the graph with a detail modal. On
                 // the holdings view, the modal is still the right answer.
-                console.log(
-                  `[search] onOpenDetail ${r.symbol} view=${view}`
-                )
                 if (view === 'chain') {
                   setChainFocus(r.symbol.toUpperCase())
                 } else {

@@ -231,7 +231,6 @@ export function ValueChain({
   useEffect(() => {
     if (!externalFocus) return
     const upper = externalFocus.toUpperCase()
-    console.log(`[valueChain] externalFocus received: ${upper}`)
     setLockedSymbol(upper)
     setSectorId('all')
     setPendingScroll(upper)
@@ -254,13 +253,8 @@ export function ValueChain({
     const raf = requestAnimationFrame(() => {
       setTimeout(() => {
         const el = tileRefs.current.get(pendingScroll)
-        const hasScrollIntoView =
-          !!el && typeof (el as HTMLElement).scrollIntoView === 'function'
-        console.log(
-          `[valueChain] pendingScroll=${pendingScroll} tile=${hasScrollIntoView ? 'found' : 'MISSING'} refs=${tileRefs.current.size}`
-        )
-        if (hasScrollIntoView) {
-          ;(el as HTMLElement).scrollIntoView({
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({
             block: 'center',
             inline: 'nearest',
             behavior: 'smooth'
