@@ -1347,6 +1347,8 @@ const YAHOO_QUOTES_CONCURRENCY = 12
 // Widened chart-response type covering the meta fields we need for a full
 // regular-hours snapshot. `fetchExtendedOne` already uses a narrower view
 // of the same payload; this one adds the OHLCV + previousClose slice.
+// Yahoo's meta omits regularMarketOpen entirely — the first regular-session
+// minute bar's `open` is where today's open actually lives.
 interface QuoteChartResponse {
   chart: {
     result:
@@ -1360,7 +1362,6 @@ interface QuoteChartResponse {
             regularMarketDayHigh?: number
             regularMarketDayLow?: number
             regularMarketVolume?: number
-            regularMarketOpen?: number
             currentTradingPeriod?: {
               pre?: { start?: number; end?: number }
               regular?: { start?: number; end?: number }
@@ -1368,7 +1369,15 @@ interface QuoteChartResponse {
             }
           }
           timestamp?: number[]
-          indicators?: { quote?: Array<{ close?: Array<number | null> }> }
+          indicators?: {
+            quote?: Array<{
+              open?: Array<number | null>
+              high?: Array<number | null>
+              low?: Array<number | null>
+              close?: Array<number | null>
+              volume?: Array<number | null>
+            }>
+          }
         }>
       | null
     error: { code?: string; description?: string } | null
@@ -1453,32 +1462,33 @@ async function fetchQuoteOne(symbol: string): Promise<StockQuote> {
     const marketState = classifyMarketState(nowSec, meta.currentTradingPeriod ?? undefined)
 
     const price = typeof meta.regularMarketPrice === 'number' ? meta.regularMarketPrice : null
-    const open = typeof meta.regularMarketOpen === 'number' ? meta.regularMarketOpen : null
     const high = typeof meta.regularMarketDayHigh === 'number' ? meta.regularMarketDayHigh : null
     const low = typeof meta.regularMarketDayLow === 'number' ? meta.regularMarketDayLow : null
-    const volume = typeof meta.regularMarketVolume === 'number' ? meta.regularMarketVolume : null
-    // Stooq defines change as close - open (intraday). Yahoo's convention is
-    // close - previousClose (overnight + intraday). We match Stooq so the
-    // rolling-bar display stays semantically consistent across providers.
-    // Previous-close-based change is reconstructable from price - chartPrev
-    // if we ever want it.
-    const change = price !== null && open !== null ? price - open : null
-    const changePct = change !== null && open !== null && open > 0 ? (change / open) * 100 : null
+    const metaVolume =
+      typeof meta.regularMarketVolume === 'number' ? meta.regularMarketVolume : null
+    const previousClose =
+      typeof meta.chartPreviousClose === 'number'
+        ? meta.chartPreviousClose
+        : typeof meta.previousClose === 'number'
+          ? meta.previousClose
+          : null
     const time =
       typeof meta.regularMarketTime === 'number'
         ? formatSecsToStooqTime(meta.regularMarketTime)
         : null
 
-    // Walk minute bars for pre/post prints — same logic as fetchExtendedOne,
-    // so any improvements land in both paths. Kept inline rather than
-    // extracted because the two functions have subtly different return
-    // shapes (ExtendedQuote vs StockQuote) and a shared helper would just
-    // swap one indirection for another.
+    // Walk minute bars in a single pass for today's open (first regular-
+    // session bar's open price, since Yahoo's meta omits regularMarketOpen
+    // entirely), plus pre/post extended-session prints. Same traversal the
+    // old fetchExtendedOne did, just broadened to pick up the open too.
+    let open: number | null = null
     let postMarketPrice: number | null = null
     let postTimeSec: number | null = null
     let preMarketPrice: number | null = null
     const ts = result.timestamp ?? []
-    const closes = result.indicators?.quote?.[0]?.close ?? []
+    const quote = result.indicators?.quote?.[0]
+    const opens = quote?.open ?? []
+    const closes = quote?.close ?? []
     const periods = meta.currentTradingPeriod
     const regularStart = periods?.regular?.start
     const regularEnd = periods?.regular?.end
@@ -1491,9 +1501,50 @@ async function fetchQuoteOne(symbol: string): Promise<StockQuote> {
       } else if (regularEnd && t >= regularEnd) {
         postMarketPrice = c
         postTimeSec = t
+      } else if (regularStart && t >= regularStart && (!regularEnd || t < regularEnd)) {
+        // Regular session bar. First one with a real open price is today's
+        // open — don't overwrite on later bars.
+        if (open === null) {
+          const o = opens[i]
+          if (typeof o === 'number' && Number.isFinite(o)) open = o
+        }
       }
     }
     void postTimeSec // kept for symmetry with fetchExtendedOne; not surfaced.
+
+    // Fall back to previousClose for `open` before the regular session has
+    // started (so pre-market deltas measure vs yesterday's close, matching
+    // the UI's "+$X since close" convention). Saves us from showing a
+    // blank open column on tickers polled during overnight hours.
+    if (open === null && previousClose !== null) open = previousClose
+
+    // Stooq computes change as `close - open` (intraday move since today's
+    // open). We keep that semantic — the renderer has been consuming it for
+    // months and switching to close-vs-previous-close would visibly change
+    // every number. Uses our derived open, not a nonexistent meta field.
+    const change = price !== null && open !== null ? price - open : null
+    const changePct = change !== null && open !== null && open > 0 ? (change / open) * 100 : null
+
+    // Volume fallback: sum regular-session minute bar volumes if meta
+    // didn't carry a pre-aggregated figure. Most tickers have meta volume;
+    // the sum path catches the occasional illiquid symbol that doesn't.
+    let volume: number | null = metaVolume
+    if (volume === null) {
+      const vols = quote?.volume ?? []
+      let acc = 0
+      let any = false
+      for (let i = 0; i < ts.length; i++) {
+        const t = ts[i]
+        const v = vols[i]
+        if (regularStart && t < regularStart) continue
+        if (regularEnd && t >= regularEnd) continue
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          acc += v
+          any = true
+        }
+      }
+      volume = any ? acc : null
+    }
 
     // Delta baseline for extended-session is the regular-session close —
     // matches the Stooq-overlay convention. If we don't have a baseline we
