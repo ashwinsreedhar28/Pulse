@@ -250,10 +250,11 @@ async function sweep(): Promise<void> {
     try {
       await refreshFinancials(entry.symbol)
     } catch (err) {
-      console.warn(
-        `[financials] refresh failed for ${entry.symbol}:`,
-        err instanceof Error ? err.message : err
-      )
+      const msg = err instanceof Error ? err.message : String(err)
+      // App is shutting down — bail silently instead of spamming the log
+      // with one "Database not initialized" line per remaining symbol.
+      if (msg.includes('Database not initialized')) return
+      console.warn(`[financials] refresh failed for ${entry.symbol}:`, msg)
     }
     await sleep(INTRA_TICK_DELAY_MS)
   }
@@ -290,10 +291,13 @@ async function runInitialBackfill(): Promise<void> {
     try {
       await refreshFinancials(sym)
     } catch (err) {
-      console.warn(
-        `[financials] backfill refresh failed for ${sym}:`,
-        err instanceof Error ? err.message : err
-      )
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('Database not initialized')) {
+        // App shutdown mid-backfill. Stop silently — log-flooding the
+        // remainder of a 300-symbol queue serves no one.
+        return
+      }
+      console.warn(`[financials] backfill refresh failed for ${sym}:`, msg)
     }
     done += 1
     if (done % 25 === 0) {

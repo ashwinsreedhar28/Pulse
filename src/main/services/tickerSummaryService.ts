@@ -117,7 +117,16 @@ async function pump(force: boolean): Promise<void> {
       try {
         await refreshOne(id, force)
       } catch (err) {
-        console.warn('[tickerSummary] refresh failed:', err instanceof Error ? err.message : err)
+        const msg = err instanceof Error ? err.message : String(err)
+        // App is shutting down — `closeDatabase()` has run and every
+        // subsequent getDb() throws. Drain the queue silently instead of
+        // emitting hundreds of identical error lines for each of the
+        // concurrent workers still mid-loop.
+        if (msg.includes('Database not initialized')) {
+          queue.length = 0
+          return
+        }
+        console.warn('[tickerSummary] refresh failed:', msg)
       }
     }
   }
