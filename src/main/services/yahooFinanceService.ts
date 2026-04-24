@@ -303,39 +303,46 @@ export interface QuarterlyFinancialPoint {
   currency: string | null
 }
 
-// Yahoo's cashflow row has accreted field names over the years: the legacy
-// v10 names (totalCashFromOperatingActivities, capitalExpenditures) still
-// appear for some tickers, but many modern responses return only
-// operatingCashFlow / capitalExpenditure (singular), often alongside a
-// pre-computed freeCashFlow. We read all three and fall back in that order.
-interface QuarterlyStatementsResponse {
-  quoteSummary: {
+// Yahoo's fundamentals-timeseries endpoint returns each statement field as
+// its own series (one "quarterlyFreeCashFlow" series, one "quarterlyTotal-
+// Revenue" series, etc.) keyed by the series `type`. Each row carries an
+// asOfDate (YYYY-MM-DD) + reportedValue.raw. No crumb required — it's
+// served anonymously at query2. We moved to this from the quoteSummary
+// module dance because (a) timeseries delivers 8+ quarters of history
+// instead of the 4 quoteSummary caps at, and (b) the cashflow module was
+// intermittently returning empty rows for perfectly normal tickers (KLAC,
+// AMAT, ONTO), leaving every FCF metric blank on the peer-compare view.
+const YAHOO_TIMESERIES_BASE =
+  'https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/'
+
+interface TimeseriesCell {
+  asOfDate?: string
+  reportedValue?: { raw?: number }
+  currencyCode?: string
+}
+
+interface TimeseriesResponse {
+  timeseries: {
     result:
-      | Array<{
-          cashflowStatementHistoryQuarterly?: {
-            cashflowStatements?: Array<{
-              endDate?: RawField
-              netIncome?: RawField
-              totalCashFromOperatingActivities?: RawField
-              operatingCashFlow?: RawField
-              capitalExpenditures?: RawField
-              capitalExpenditure?: RawField
-              freeCashFlow?: RawField
-            }>
-          }
-          incomeStatementHistoryQuarterly?: {
-            incomeStatementHistory?: Array<{
-              endDate?: RawField
-              totalRevenue?: RawField
-              grossProfit?: RawField
-              netIncome?: RawField
-            }>
-          }
-          price?: { currency?: string }
-        }>
+      | Array<
+          {
+            meta?: { type?: string[]; symbol?: string[] }
+            timestamp?: number[]
+          } & Record<string, unknown>
+        >
       | null
     error: { code?: string; description?: string } | null
   }
+}
+
+// Parse "YYYY-MM-DD" into unix ms at UTC midnight. Yahoo's asOfDate is a
+// plain ISO date — safe to Date.UTC across all timezones.
+function parseIsoDate(raw: string | undefined): number | null {
+  if (!raw) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw)
+  if (!m) return null
+  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return Number.isFinite(ms) ? ms : null
 }
 
 export async function getQuarterlyFinancials(
@@ -343,97 +350,106 @@ export async function getQuarterlyFinancials(
 ): Promise<QuarterlyFinancialPoint[]> {
   const sym = symbol.trim().toUpperCase()
   if (!sym) return []
-  const modules = 'cashflowStatementHistoryQuarterly,incomeStatementHistoryQuarterly,price'
 
-  const fetchOnce = async (): Promise<QuarterlyStatementsResponse> => {
-    const ok = await ensureYahooCreds()
-    if (!ok || !yahooCrumb || !yahooCookie) throw new Error('no-creds')
-    const url = `${YAHOO_QUOTE_SUMMARY}${encodeURIComponent(sym)}?modules=${modules}&crumb=${encodeURIComponent(yahooCrumb)}`
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-    try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': UA, Cookie: yahooCookie, Accept: 'application/json' },
-        signal: controller.signal
-      })
-      if (res.status === 401) {
-        yahooCookie = null
-        yahooCrumb = null
-        throw new Error('HTTP 401')
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return (await res.json()) as QuarterlyStatementsResponse
-    } finally {
-      clearTimeout(timer)
-    }
-  }
+  const types = [
+    'quarterlyTotalRevenue',
+    'quarterlyOperatingCashFlow',
+    'quarterlyCapitalExpenditure',
+    'quarterlyFreeCashFlow',
+    'quarterlyNetIncome',
+    'quarterlyGrossProfit'
+  ].join(',')
+  const nowSec = Math.floor(Date.now() / 1000)
+  const url =
+    `${YAHOO_TIMESERIES_BASE}${encodeURIComponent(sym)}?type=${types}` +
+    `&period1=0&period2=${nowSec}`
 
-  let json: QuarterlyStatementsResponse
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  let json: TimeseriesResponse
   try {
-    json = await fetchOnce()
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+      signal: controller.signal
+    })
+    if (!res.ok) {
+      if (res.status === 404) return []
+      throw new Error(`HTTP ${res.status}`)
+    }
+    json = (await res.json()) as TimeseriesResponse
   } catch (err) {
-    if (err instanceof Error && err.message === 'HTTP 401') {
-      try {
-        await ensureYahooCreds(true)
-        json = await fetchOnce()
-      } catch (err2) {
-        console.warn(
-          '[yahoo] quarterly financials fetch failed:',
-          err2 instanceof Error ? err2.message : err2
-        )
-        return []
+    console.warn(
+      '[yahoo] quarterly timeseries fetch failed:',
+      err instanceof Error ? err.message : err
+    )
+    return []
+  } finally {
+    clearTimeout(timer)
+  }
+
+  const series = json.timeseries.result ?? []
+  if (series.length === 0) return []
+
+  // One bucket per quarter-end date. As each series streams in we patch its
+  // field onto the bucket keyed by endDate — Yahoo aligns them perfectly so
+  // a union join is enough without any fuzzy date matching.
+  const byEnd = new Map<number, QuarterlyFinancialPoint>()
+  let currency: string | null = null
+
+  const fieldMap: Record<string, keyof QuarterlyFinancialPoint> = {
+    quarterlyTotalRevenue: 'revenue',
+    quarterlyOperatingCashFlow: 'operatingCashFlow',
+    quarterlyCapitalExpenditure: 'capex',
+    quarterlyFreeCashFlow: 'freeCashFlow',
+    quarterlyNetIncome: 'netIncome',
+    quarterlyGrossProfit: 'grossProfit'
+  }
+
+  for (const s of series) {
+    const type = s.meta?.type?.[0]
+    if (!type) continue
+    const field = fieldMap[type]
+    if (!field) continue
+    const cells = (s as unknown as Record<string, TimeseriesCell[] | undefined>)[type]
+    if (!Array.isArray(cells)) continue
+    for (const cell of cells) {
+      if (!cell) continue
+      const endDate = parseIsoDate(cell.asOfDate)
+      if (endDate === null) continue
+      const value =
+        typeof cell.reportedValue?.raw === 'number' && Number.isFinite(cell.reportedValue.raw)
+          ? cell.reportedValue.raw
+          : null
+      if (cell.currencyCode && !currency) currency = cell.currencyCode
+      let point = byEnd.get(endDate)
+      if (!point) {
+        point = {
+          endDate,
+          revenue: null,
+          netIncome: null,
+          grossProfit: null,
+          operatingCashFlow: null,
+          capex: null,
+          freeCashFlow: null,
+          currency: null
+        }
+        byEnd.set(endDate, point)
       }
-    } else {
-      console.warn(
-        '[yahoo] quarterly financials fetch failed:',
-        err instanceof Error ? err.message : err
-      )
-      return []
+      ;(point as unknown as Record<string, number | null>)[field] = value
     }
   }
 
-  const result = json.quoteSummary.result?.[0]
-  if (!result) return []
-  const cfEntries = result.cashflowStatementHistoryQuarterly?.cashflowStatements ?? []
-  const isEntries = result.incomeStatementHistoryQuarterly?.incomeStatementHistory ?? []
-  const currency = result.price?.currency ?? null
-
-  // Index income statements by endDate so we can join to cashflow rows on
-  // the same quarter boundary. Yahoo sometimes returns an extra cashflow
-  // quarter that has no matching income row (or vice versa) — we keep the
-  // union and leave the missing side null.
-  const incomeByDate = new Map<number, (typeof isEntries)[number]>()
-  for (const e of isEntries) {
-    const d = e.endDate?.raw
-    if (typeof d === 'number' && Number.isFinite(d)) incomeByDate.set(d, e)
-  }
-  const cashByDate = new Map<number, (typeof cfEntries)[number]>()
-  for (const e of cfEntries) {
-    const d = e.endDate?.raw
-    if (typeof d === 'number' && Number.isFinite(d)) cashByDate.set(d, e)
+  // Derive FCF = OCF + capex when Yahoo ships one but not the other. Yahoo's
+  // convention has capex as a negative number, so adding it already subtracts
+  // the outflow from OCF — no sign flip needed.
+  for (const point of byEnd.values()) {
+    if (point.freeCashFlow === null && point.operatingCashFlow !== null && point.capex !== null) {
+      point.freeCashFlow = point.operatingCashFlow + point.capex
+    }
+    point.currency = currency
   }
 
-  const allDates = new Set<number>([...cashByDate.keys(), ...incomeByDate.keys()])
-  const out: QuarterlyFinancialPoint[] = []
-  for (const dRaw of allDates) {
-    const income = incomeByDate.get(dRaw)
-    const cash = cashByDate.get(dRaw)
-    out.push({
-      endDate: dRaw * 1000,
-      revenue: raw(income?.totalRevenue),
-      netIncome: raw(income?.netIncome) ?? raw(cash?.netIncome),
-      grossProfit: raw(income?.grossProfit),
-      // Yahoo returns either the legacy totalCashFromOperatingActivities or
-      // the newer operatingCashFlow depending on the ticker/response — accept
-      // whichever shows up.
-      operatingCashFlow:
-        raw(cash?.operatingCashFlow) ?? raw(cash?.totalCashFromOperatingActivities),
-      capex: raw(cash?.capitalExpenditures) ?? raw(cash?.capitalExpenditure),
-      freeCashFlow: raw(cash?.freeCashFlow),
-      currency
-    })
-  }
-  out.sort((a, b) => b.endDate - a.endDate)
+  const out = [...byEnd.values()].sort((a, b) => b.endDate - a.endDate)
   return out
 }
 

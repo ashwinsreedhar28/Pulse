@@ -16,6 +16,7 @@ import { listTickers } from '../database/tickers'
 import {
   getAllLastFetched,
   getQuarters,
+  getSymbolsMissingCashflow,
   upsertQuarters,
   type TickerFinancialRow
 } from '../database/tickerFinancials'
@@ -217,12 +218,23 @@ async function sweep(): Promise<void> {
   const tickers = listTickers().filter((t) => t.isActive)
   if (tickers.length === 0) return
   const lastFetched = getAllLastFetched()
+  const missingCashflow = getSymbolsMissingCashflow()
   const now = Date.now()
 
-  // Rank: never-fetched first, then oldest-first. Skip anything refreshed
-  // within REFRESH_INTERVAL_MS — nothing has changed there.
+  // Rank: never-fetched first, then rows stuck with missing cashflow data
+  // (treated as fetchedAt=0 so they jump ahead of the staleness gate), then
+  // oldest-first. Skip anything refreshed within REFRESH_INTERVAL_MS whose
+  // cashflow IS populated — that row is genuinely fresh.
   const queued = tickers
-    .map((t) => ({ symbol: t.symbol, last: lastFetched.get(t.symbol.toUpperCase()) ?? 0 }))
+    .map((t) => {
+      const sym = t.symbol.toUpperCase()
+      const rawLast = lastFetched.get(sym) ?? 0
+      // Force cashflow-missing symbols to the top of the queue regardless
+      // of when they were last fetched. Most hit this once after the
+      // timeseries-fetcher swap, then never again.
+      const last = missingCashflow.has(sym) ? 0 : rawLast
+      return { symbol: t.symbol, last }
+    })
     .filter((x) => now - x.last >= REFRESH_INTERVAL_MS)
     .sort((a, b) => a.last - b.last)
     .slice(0, SYMBOLS_PER_TICK)

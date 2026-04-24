@@ -153,6 +153,25 @@ export function getAllLastFetched(): Map<string, number> {
   return m
 }
 
+// Symbols whose most-recent rows have revenue but no cashflow data. These
+// were populated by an earlier quoteSummary path that intermittently shipped
+// empty cashflow modules, leaving FCF/OCF/capex null across every quarter.
+// The scheduler treats them as stale so the new timeseries-based fetcher
+// backfills them without waiting for the 3-day refresh interval.
+export function getSymbolsMissingCashflow(): Set<string> {
+  const rows = getDb()
+    .prepare<[], { symbol: string }>(
+      `SELECT symbol
+         FROM ticker_financials
+        GROUP BY symbol
+       HAVING SUM(CASE WHEN revenue IS NOT NULL THEN 1 ELSE 0 END) > 0
+          AND SUM(CASE WHEN freeCashFlow IS NOT NULL OR operatingCashFlow IS NOT NULL
+                       THEN 1 ELSE 0 END) = 0`
+    )
+    .all()
+  return new Set(rows.map((r) => r.symbol))
+}
+
 // { symbol -> most-recent periodEnd (quarter end ms) }. Drives the value-chain
 // "just reported" detection: a periodEnd that landed within the last ~6 weeks
 // means the company has posted earnings for that quarter.
