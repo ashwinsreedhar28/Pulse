@@ -539,6 +539,17 @@ export function registerDbIpc(): void {
     return { ok: true }
   })
 
+  // ---- FRED macro panel ----------------------------------------------------
+  ipcMain.handle('fred:getSnapshot', async () => {
+    const { getMacroSnapshot } = await import('../services/fredService')
+    return getMacroSnapshot()
+  })
+  ipcMain.handle('fred:refresh', async () => {
+    const { refreshAllFredSeries } = await import('../services/fredService')
+    void refreshAllFredSeries()
+    return { ok: true }
+  })
+
   // Value-chain growth pipeline. Renderer surfaces the audit log + overlay
   // list in Settings, lets users trigger a sweep manually, and hit Undo on
   // any auto-accepted edge they disagree with. The Undo flow deletes the

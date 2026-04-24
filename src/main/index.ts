@@ -673,6 +673,12 @@ app.whenReady().then(async () => {
   )
   scheduleMorningBriefRefresh()
 
+  // FRED macro panel — pulls a curated set of Federal Reserve indicators
+  // (rates, inflation, labor, volatility) into a local cache and refreshes
+  // every 6h. No-op if the user hasn't configured a FRED API key.
+  const { startFredScheduler } = await import('./services/fredService')
+  startFredScheduler()
+
   // Hold the splash until every boot service is ready — otherwise heavy
   // background loads (SDXL, Kokoro) cause jitter the moment the main window
   // opens. A 180s watchdog caps the worst case (first-run model downloads).

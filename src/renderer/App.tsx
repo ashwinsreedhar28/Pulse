@@ -10,6 +10,7 @@ import { ExternalReader } from './components/ExternalReader'
 import { ValueChain } from './components/ValueChain'
 import { UnifiedValueChainCard } from './components/UnifiedValueChainCard'
 import { MorningBrief } from './components/MorningBrief'
+import { MacroPanel } from './components/MacroPanel'
 import { FcfSparkline } from './components/FcfSparkline'
 import {
   fcfMarginTone,
@@ -1567,6 +1568,7 @@ function FeedView({
   return (
     <div className="h-full overflow-y-auto" data-lookup-context={lookupContext}>
       <FeedHeader heading={heading} totalCount={articles.length} urgentCount={urgentCount} unreadCount={unreadCount} />
+      <MacroPanel />
       <MorningBrief onOpenArticle={onSelect} onOpenSymbol={onOpenStock} />
       <CalendarStrip
         filter={calendarFilter}

@@ -30,6 +30,11 @@ export interface Preferences {
   // console warning.
   aiProvider: AiProvider
   anthropicApiKey: string
+  // FRED (Federal Reserve Economic Data) API key. Free tier, no charges,
+  // ~120 requests/min — plenty for our 9-series daily refresh. Empty
+  // string disables the macro panel (renders an "add key in Settings"
+  // hint instead of empty data).
+  fredApiKey: string
 }
 
 const DEFAULTS: Preferences = {
@@ -46,7 +51,8 @@ const DEFAULTS: Preferences = {
   theme: 'default',
   mediaPipelineEnabled: true,
   aiProvider: 'auto',
-  anthropicApiKey: ''
+  anthropicApiKey: '',
+  fredApiKey: ''
 }
 
 export function getPreferences(): Preferences {
@@ -75,7 +81,8 @@ export function getPreferences(): Preferences {
         ? DEFAULTS.mediaPipelineEnabled
         : map.get('mediaPipelineEnabled') === 'true',
     aiProvider: normalizeAiProvider(map.get('aiProvider')),
-    anthropicApiKey: (map.get('anthropicApiKey') ?? DEFAULTS.anthropicApiKey).trim()
+    anthropicApiKey: (map.get('anthropicApiKey') ?? DEFAULTS.anthropicApiKey).trim(),
+    fredApiKey: (map.get('fredApiKey') ?? DEFAULTS.fredApiKey).trim()
   }
 }
 

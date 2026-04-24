@@ -192,6 +192,10 @@ export interface Preferences {
   // Anthropic API key. Stored in the local pulse.db only; never logged.
   // Empty string when the user hasn't configured cloud AI.
   anthropicApiKey: string
+  // FRED API key for the macro panel (rates, inflation, labor, vol).
+  // Free, no charges. Empty string disables the panel with a "configure
+  // in Settings" hint instead of empty data.
+  fredApiKey: string
 }
 
 export interface SportsTeam {
@@ -1057,6 +1061,28 @@ export interface MorningBriefRow {
   provider: 'claude' | 'ollama' | null
 }
 
+// FRED macro panel snapshot. Mirror of FredSeriesSnapshot from the main
+// process. `format` tells the renderer how to print latestValue:
+// 'percent' → '4.50%', 'percent-change-yoy' → '+3.1%', 'index' → '14.85',
+// 'count-thousands' → '212K'. preferredDirection tints the delta:
+// 'lower' colors a negative change green ("inflation cooled"), 'higher'
+// colors positive green, 'either' stays neutral.
+export type FredFormat = 'percent' | 'percent-change-yoy' | 'index' | 'count-thousands'
+export interface FredSeriesSnapshot {
+  id: string
+  label: string
+  group: 'rates' | 'inflation' | 'labor' | 'volatility'
+  format: FredFormat
+  preferredDirection: 'higher' | 'lower' | 'either'
+  latestValue: number | null
+  latestDate: string | null
+  delta: number | null
+  series: Array<{ date: string; value: number | null }>
+  units: string | null
+  frequency: string | null
+  lastFetchedAt: number | null
+}
+
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>
 
@@ -1315,6 +1341,18 @@ const api = {
       ipcRenderer.on('morningBrief:updated', listener)
       return (): void => {
         ipcRenderer.off('morningBrief:updated', listener)
+      }
+    }
+  },
+  fred: {
+    getSnapshot: (): Promise<FredSeriesSnapshot[]> =>
+      invoke<FredSeriesSnapshot[]>('fred:getSnapshot'),
+    refresh: (): Promise<{ ok: boolean }> => invoke<{ ok: boolean }>('fred:refresh'),
+    onUpdated: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('fred:updated', listener)
+      return (): void => {
+        ipcRenderer.off('fred:updated', listener)
       }
     }
   },

@@ -1087,5 +1087,40 @@ export const migrations: Migration[] = [
         );
       `)
     }
+  },
+  {
+    version: 38,
+    name: 'create fred_observations + fred_series_meta for FRED macro panel',
+    // FRED (Federal Reserve Economic Data) cache. Each series stores the
+    // last ~24 months of observations as (seriesId, observationDate, value)
+    // rows. observationDate is the FRED-reported date (e.g. '2026-04-15'),
+    // not the fetched-at — we keep the original cadence so a daily series
+    // shows ~250 points and a monthly series shows ~24.
+    //
+    // fred_series_meta is one-row-per-series: tracks last successful fetch
+    // + the human-readable label / units pulled from the series-info
+    // endpoint. Lets the renderer label cards without re-querying FRED.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS fred_observations (
+          seriesId TEXT NOT NULL,
+          observationDate TEXT NOT NULL,
+          value REAL,
+          PRIMARY KEY (seriesId, observationDate)
+        );
+        CREATE INDEX IF NOT EXISTS idx_fred_observations_series
+          ON fred_observations(seriesId, observationDate DESC);
+
+        CREATE TABLE IF NOT EXISTS fred_series_meta (
+          seriesId TEXT PRIMARY KEY,
+          title TEXT,
+          units TEXT,
+          frequency TEXT,
+          lastFetchedAt INTEGER NOT NULL,
+          lastObservationDate TEXT,
+          fetchError TEXT
+        );
+      `)
+    }
   }
 ]
