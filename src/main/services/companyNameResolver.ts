@@ -238,8 +238,20 @@ export interface ResolveResult {
 // Prefix- or suffix-word-boundary match. Accepts either side being a
 // superset of the other, so "Shell" matches "Royal Dutch Shell" and "Apple"
 // matches "Apple Inc." all through the same check.
+//
+// Asymmetric guard: reject multi-token query matching single-token candidate
+// (e.g. "Relativity Space" matching "Relativity" after legal suffixes get
+// stripped from "Relativity Holdings"). In that direction the candidate is
+// too generic — the qualifying token the query carries ("Space") is exactly
+// what distinguishes the real company from the false match, and throwing it
+// away produces wrong resolutions. Single-token query matching multi-token
+// candidate ("Shell" → "Royal Dutch Shell") stays valid since a short
+// colloquial name matching its long legal form is the intended use case.
 function isWordBoundaryMatch(a: string, b: string): boolean {
   if (a === b) return true
+  const aTokens = a.split(' ').filter(Boolean)
+  const bTokens = b.split(' ').filter(Boolean)
+  if (aTokens.length > 1 && bTokens.length === 1) return false
   return (
     a.startsWith(b + ' ') ||
     b.startsWith(a + ' ') ||

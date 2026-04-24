@@ -251,7 +251,13 @@ type ChainEdge = {
 
 function canonicalizeEdges(
   rawEdges: ChainEdge[],
-  resolvedNodes: CompanyValueChainNode[]
+  resolvedNodes: CompanyValueChainNode[],
+  // Pre-resolver Claude/Ollama output, aligned by index with resolvedNodes.
+  // When the resolver rewrites a symbol (e.g. MMC → MRSH because SEC's
+  // current ticker for Marsh McLennan is MRSH), Claude's edges typically
+  // keep referencing the pre-rename symbol it learned from. We register
+  // those originals as aliases so the edge still lands on the resolved node.
+  originalNodes: Array<{ symbol: string; name: string }>
 ): ChainEdge[] {
   const symbolByAlias = new Map<string, string>()
   // Identity mapping for every node symbol. Even unverified nodes
@@ -260,6 +266,19 @@ function canonicalizeEdges(
   for (const n of resolvedNodes) {
     const sym = n.symbol.toUpperCase()
     symbolByAlias.set(sym, sym)
+  }
+  // Claimed-symbol aliases: when the resolver picked a different ticker
+  // than Claude emitted, map Claude's original symbol onto the resolved
+  // one. Covers the "Claude knows a company by its retired/uncommon
+  // ticker" pattern — most visible with Marsh McLennan (Claude says MMC,
+  // SEC current is MRSH), but also showed up during earlier debugging for
+  // dozens of pre-rebrand references.
+  for (let i = 0; i < resolvedNodes.length && i < originalNodes.length; i++) {
+    const resolved = resolvedNodes[i].symbol.toUpperCase()
+    const claimed = originalNodes[i].symbol.trim().toUpperCase()
+    if (claimed && claimed !== resolved && !symbolByAlias.has(claimed)) {
+      symbolByAlias.set(claimed, resolved)
+    }
   }
   // Name-derived aliases. Only for ticker-kind nodes — unverified labels
   // have non-commercial names like "End Consumers" that would create
@@ -443,7 +462,7 @@ export async function generateCompanyChain(input: {
   }
 
   const resolvedNodes = resolveNodes(generated.nodes, sym)
-  const canonicalEdges = canonicalizeEdges(generated.edges, resolvedNodes)
+  const canonicalEdges = canonicalizeEdges(generated.edges, resolvedNodes, generated.nodes)
   const graph: CompanyValueChain = {
     focus: sym,
     stages: generated.stages,
