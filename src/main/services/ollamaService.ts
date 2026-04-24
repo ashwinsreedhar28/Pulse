@@ -1289,11 +1289,20 @@ export async function generateCompanyValueChain(input: {
     `major exchange. When uncertain, set false and use a stable UPPERCASE_LABEL ` +
     `as the symbol (e.g. "SUEZ_WATER" for a private entity).\n` +
     `\n` +
-    `EDGE DIRECTION — READ CAREFULLY:\n` +
-    `- "supplier" means "from" supplies "to". The seller is "from", the buyer is "to". ` +
-    `Example: ASML supplies machines to TSMC → {"from":"ASML","to":"TSM","relationship":"supplier"}.\n` +
-    `- "customer" means "from" is a customer of "to" (from buys from to, so to supplies from). ` +
+    `EDGE DIRECTION — READ CAREFULLY. The "relationship" value ALWAYS describes ` +
+    `the role of the "from" side:\n` +
+    `- "supplier" means "from" sells/supplies/delivers to "to". The seller is "from", ` +
+    `the buyer is "to". Example: ASML supplies machines to TSMC → ` +
+    `{"from":"ASML","to":"TSM","relationship":"supplier"}.\n` +
+    `- "customer" means "from" is a customer of "to" (from buys from to). ` +
     `Example: Apple buys chips from TSMC → {"from":"AAPL","to":"TSM","relationship":"customer"}.\n` +
+    `- IP / patent licensing follows the same rule: the LICENSOR is the supplier ` +
+    `(sells access to IP), the LICENSEE is the customer (pays for access). Adeia ` +
+    `licenses patents to Apple → either {"from":"ADEA","to":"AAPL","relationship":"supplier"} ` +
+    `or equivalently {"from":"AAPL","to":"ADEA","relationship":"customer"}. NEVER ` +
+    `{"from":"ADEA","to":"AAPL","relationship":"customer"} — that would mean Adeia buys from Apple.\n` +
+    `- Sanity check: in "X provides/licenses/supplies/serves Y", X is the supplier side ` +
+    `regardless of which side is the focus company.\n` +
     `- "competitor" and "partner" are symmetric; either order is fine.\n` +
     `- Do NOT emit an edge where an automaker is a "supplier" to a bank (banks lend to car ` +
     `buyers, automakers don't supply banks). Retailers aren't suppliers to payment processors. ` +
