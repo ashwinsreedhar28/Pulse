@@ -50,6 +50,12 @@ export interface Counterparty {
   // / 'profile' are real groundings; 'model' means the LLM claimed the
   // relationship from training knowledge without any supplied context.
   source?: CompanyValueChainEdgeSource | null
+  // True when this counterparty is a Claude-named entity that didn't
+  // resolve to a real public ticker (private companies, brand labels
+  // like ROVI_LABEL, unverified placeholders). Renders as a muted, non-
+  // clickable chip so the relationship is visible without implying we
+  // can deep-link into it.
+  unverified?: boolean
 }
 
 // Short label + styling per provenance kind. Tooltip spells out the
@@ -372,9 +378,21 @@ export function TransactionCluster({
             <ul className="space-y-1.5">
               {g.items.map((item) => {
                 const chipClasses = `inline-flex items-center justify-center shrink-0 px-2 py-[3px] rounded-md border text-[11px] font-bold tabular-nums tracking-[0.04em] min-w-[58px] ${tone.chipBorder} ${tone.chipBg} ${tone.chipText} ring-1 ring-inset ${tone.chipRing}`
+                // Unverified chips: dashed border + lower opacity + no
+                // hover handlers so the user reads "present in Claude's
+                // chain but not a live ticker row." The symbol string is
+                // usually Claude's placeholder label (ROVI_LABEL, VENDING)
+                // which we truncate since it can be long.
+                const unverifiedChipClasses = `inline-flex items-center justify-center shrink-0 px-2 py-[3px] rounded-md border border-dashed text-[10px] font-semibold tabular-nums tracking-[0.04em] min-w-[58px] max-w-[120px] truncate border-zinc-600 bg-zinc-800/40 text-zinc-400 opacity-80`
+                const isUnverified = Boolean(item.unverified)
+                const nameTone = isUnverified ? 'text-zinc-400 italic' : 'text-zinc-200'
                 return (
                   <li key={item.symbol} className="flex items-start gap-2.5">
-                    {interactive ? (
+                    {isUnverified ? (
+                      <span className={unverifiedChipClasses} title="Unverified — no public ticker">
+                        {item.symbol}
+                      </span>
+                    ) : interactive ? (
                       <button
                         type="button"
                         onClick={() => onPick?.(item.symbol)}
@@ -389,7 +407,7 @@ export function TransactionCluster({
                     )}
                     <div className="min-w-0 flex-1 pt-[1px]">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <div className="text-[12px] leading-snug text-zinc-200 truncate">
+                        <div className={`text-[12px] leading-snug truncate ${nameTone}`}>
                           {item.companyName}
                         </div>
                         {item.crossSectorLabel && (

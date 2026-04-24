@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AnalystEstimates,
+  CompanyValueChain,
   EarningsBadge,
   FinancialsSnapshot,
   GraphEdgeOverride,
@@ -776,6 +777,45 @@ export function ValueChain({
     return [...peers].filter((s) => visibleSymbols.has(s)).sort()
   }, [focusSymbol, visibleSymbols, mergedCompetitorMap])
 
+  // Per-ticker generated chain for the currently-focused symbol. Only the
+  // unverified nodes feed the focus panel — verified counterparties are
+  // already in the unified graph via graph_*_overrides. Fetched lazily
+  // on focus change and refreshed on company-chain-updated broadcasts so
+  // regenerating a chain updates this panel without a view switch.
+  const [focusChain, setFocusChain] = useState<CompanyValueChain | null>(null)
+  useEffect(() => {
+    if (!focusSymbol) {
+      setFocusChain(null)
+      return
+    }
+    let cancelled = false
+    const sym = focusSymbol.toUpperCase()
+    window.api.stocks
+      .getCompanyChain(sym)
+      .then((row) => {
+        if (cancelled) return
+        setFocusChain(row?.status === 'ready' ? row.graph : null)
+      })
+      .catch(() => {
+        if (!cancelled) setFocusChain(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [focusSymbol])
+  useEffect(() => {
+    return window.api.stocks.onCompanyChainUpdated((sym) => {
+      if (!focusSymbol) return
+      if (sym.toUpperCase() !== focusSymbol.toUpperCase()) return
+      window.api.stocks
+        .getCompanyChain(focusSymbol)
+        .then((row) => setFocusChain(row?.status === 'ready' ? row.graph : null))
+        .catch(() => {
+          /* keep prior state */
+        })
+    })
+  }, [focusSymbol])
+
   const openDetail = (symbol: string): void => {
     const t = tickerBySymbol.get(symbol.toUpperCase())
     if (t) onOpenTicker(t.id)
@@ -921,10 +961,105 @@ export function ValueChain({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [focusCompetitors, nodeBySymbol, stageLabelById, tickerBySymbol]
   )
+
+  // Append unverified counterparties from the focus's per-ticker chain.
+  // The absorber drops edges that touch unverified nodes (no tickers row
+  // to link to) which leaves the unified-graph focus panel missing
+  // relationships that are visibly present on the detail-page card. Pull
+  // those edges from company_value_chains.graphJson, direction-translate
+  // to focus perspective, and fold into the existing supplier / customer
+  // / competitor arrays with `unverified: true` so the cluster renders
+  // them as muted, non-interactive chips.
+  const unverifiedExtras = useMemo(() => {
+    const empty = { suppliers: [], customers: [], competitors: [] } as {
+      suppliers: Counterparty[]
+      customers: Counterparty[]
+      competitors: Counterparty[]
+    }
+    if (!focusSymbol || !focusChain) return empty
+    const focus = focusSymbol.toUpperCase()
+    const unverifiedSymbols = new Map<string, { name: string; stage: string }>()
+    for (const n of focusChain.nodes) {
+      if (n.kind !== 'unverified') continue
+      unverifiedSymbols.set(n.symbol.toUpperCase(), {
+        name: n.name,
+        stage: n.stage
+      })
+    }
+    if (unverifiedSymbols.size === 0) return empty
+    const make = (symbol: string, note: string | null): Counterparty => {
+      const meta = unverifiedSymbols.get(symbol)
+      const stage = meta?.stage ?? ''
+      return {
+        symbol,
+        stage,
+        stageLabel: stage ? stageLabelById.get(stage) ?? stage : '—',
+        companyName: meta?.name ?? symbol,
+        note,
+        unverified: true
+      }
+    }
+    const out = { suppliers: [] as Counterparty[], customers: [] as Counterparty[], competitors: [] as Counterparty[] }
+    const seen = new Set<string>()
+    const push = (bucket: keyof typeof out, sym: string, note: string | null): void => {
+      const k = `${bucket}:${sym}`
+      if (seen.has(k)) return
+      seen.add(k)
+      out[bucket].push(make(sym, note))
+    }
+    for (const e of focusChain.edges) {
+      const from = e.from.toUpperCase()
+      const to = e.to.toUpperCase()
+      const other = from === focus ? to : from === to ? null : from
+      // Exactly one side must be the focus; the other must be unverified.
+      if (from !== focus && to !== focus) continue
+      const counter = from === focus ? to : from
+      if (!unverifiedSymbols.has(counter)) continue
+      const rel = e.relationship
+      if (rel === 'competitor') {
+        push('competitors', counter, e.note ?? null)
+        continue
+      }
+      if (rel === 'partner') {
+        // Symmetric: fold into customers when focus is `from`, suppliers
+        // otherwise — matches UnifiedValueChainCard's convention so the
+        // two surfaces agree on where partners land.
+        push(from === focus ? 'customers' : 'suppliers', counter, e.note ?? null)
+        continue
+      }
+      // supplier/customer: translate to focus perspective.
+      // rel==='supplier' means `from` supplies `to`. If focus is `from`,
+      // counter is buying from focus → customer. If focus is `to`,
+      // counter supplies focus → supplier.
+      if (rel === 'supplier') {
+        push(from === focus ? 'customers' : 'suppliers', counter, e.note ?? null)
+      } else if (rel === 'customer') {
+        // rel==='customer' means `from` buys from `to`. If focus is `from`,
+        // counter supplies focus. If focus is `to`, counter is buying from
+        // focus → customer.
+        push(from === focus ? 'suppliers' : 'customers', counter, e.note ?? null)
+      }
+      void other
+    }
+    return out
+  }, [focusSymbol, focusChain, stageLabelById])
+
+  const combinedCustomers = useMemo(
+    () => [...customerItems, ...unverifiedExtras.customers],
+    [customerItems, unverifiedExtras.customers]
+  )
+  const combinedSuppliers = useMemo(
+    () => [...supplierItems, ...unverifiedExtras.suppliers],
+    [supplierItems, unverifiedExtras.suppliers]
+  )
+  const combinedCompetitors = useMemo(
+    () => [...competitorItems, ...unverifiedExtras.competitors],
+    [competitorItems, unverifiedExtras.competitors]
+  )
   const presentCategories: Category[] = []
-  if (supplierItems.length > 0) presentCategories.push('supplier')
-  if (competitorItems.length > 0) presentCategories.push('competitor')
-  if (customerItems.length > 0) presentCategories.push('customer')
+  if (combinedSuppliers.length > 0) presentCategories.push('supplier')
+  if (combinedCompetitors.length > 0) presentCategories.push('competitor')
+  if (combinedCustomers.length > 0) presentCategories.push('customer')
   const { boxShadow: focusBoxShadow, glowBackground: focusGlow } = categoryGlow(presentCategories)
 
   return (
@@ -1166,21 +1301,21 @@ export function ValueChain({
               >
                 <TransactionCluster
                   category="supplier"
-                  items={supplierItems}
+                  items={combinedSuppliers}
                   onPick={toggleLock}
                   onHover={focusTile}
                   onLeave={scheduleClear}
                 />
                 <TransactionCluster
                   category="competitor"
-                  items={competitorItems}
+                  items={combinedCompetitors}
                   onPick={toggleLock}
                   onHover={focusTile}
                   onLeave={scheduleClear}
                 />
                 <TransactionCluster
                   category="customer"
-                  items={customerItems}
+                  items={combinedCustomers}
                   onPick={toggleLock}
                   onHover={focusTile}
                   onLeave={scheduleClear}
