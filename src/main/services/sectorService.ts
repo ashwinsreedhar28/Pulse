@@ -74,6 +74,29 @@ function buildLegacyIdMap(): Map<string, string> {
   return map
 }
 
+// Map from pre-v3 stage ids (e.g. "tier1", "hyperscalers", "dc-power") to
+// their v3 namespaced equivalents (autos.tier1, cloud.hyperscalers,
+// indelec.dc-power). Built from every stage's legacyIds field across the
+// catalog. Used to remap graph_node_overrides.stage and older stored-chain
+// stage IDs so the Value Chain grid renders v3 columns rather than a
+// mixed bag of old and new labels.
+function buildLegacyStageMap(): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const entry of catalog.sectors) {
+    if (!entry.stages) continue
+    for (const stage of entry.stages) {
+      if (!stage.legacyIds) continue
+      for (const legacy of stage.legacyIds) {
+        // First entry wins on collision — legacy stage names are supposed
+        // to be globally unique across the old catalog so this rarely
+        // matters, but deterministic fallback beats non-determinism.
+        if (!map.has(legacy)) map.set(legacy, stage.id)
+      }
+    }
+  }
+  return map
+}
+
 // Upsert every catalog entry into the sectors table. Idempotent — reruns on
 // every boot, but only writes rows that changed (version bump or new entry).
 // Top-level sectors must be inserted before their children to satisfy the
@@ -314,6 +337,98 @@ export function migrateStaleSectorIdsToV3(): void {
     }
     if (count > 0) {
       console.log(`[sectors] v3 migration: remapped ${count} graph_edge_overrides sectorId(s)`)
+    }
+  }
+
+  // Stage-ID migration. graph_node_overrides.stage stores the string
+  // that drives which column a tile renders in on the Value Chain grid.
+  // Pre-v3 entries like "tier1", "hyperscalers", "dc-power" need to
+  // become "autos.tier1", "cloud.hyperscalers", "indelec.dc-power" so
+  // the "all sectors" view groups them under the v3 column rather than
+  // a legacy bin collision with other sub-sectors' same-named stages.
+  const stageMap = buildLegacyStageMap()
+  if (stageMap.size > 0) {
+    const allNewStageIds = new Set<string>()
+    for (const entry of catalog.sectors) {
+      if (!entry.stages) continue
+      for (const s of entry.stages) allNewStageIds.add(s.id)
+    }
+    const staleStageRows = db
+      .prepare<[], { symbol: string; stage: string }>(
+        `SELECT symbol, stage FROM graph_node_overrides WHERE stage IS NOT NULL`
+      )
+      .all()
+      .filter((r) => !allNewStageIds.has(r.stage))
+    if (staleStageRows.length > 0) {
+      const upd = db.prepare<[string, string]>(
+        `UPDATE graph_node_overrides SET stage = ? WHERE symbol = ?`
+      )
+      let count = 0
+      for (const r of staleStageRows) {
+        const newStage = stageMap.get(r.stage)
+        if (!newStage) continue
+        upd.run(newStage, r.symbol)
+        count += 1
+      }
+      if (count > 0) {
+        console.log(
+          `[sectors] v3 migration: remapped ${count} graph_node_overrides stage(s) to namespaced form`
+        )
+      }
+    }
+
+    // Stored per-ticker chains (company_value_chains.graphJson) carry a
+    // stages[] array + every node's stage field. Rewrite each stage id
+    // that's still in legacy form so the per-ticker detail view renders
+    // v3 columns without the user having to regenerate every chain.
+    // Edge cases (stage id the model invented that isn't in legacyIds)
+    // stay as-is; regeneration fixes those individually.
+    const chainRows = db
+      .prepare<[], { symbol: string; graphJson: string }>(
+        `SELECT symbol, graphJson FROM company_value_chains WHERE graphJson IS NOT NULL`
+      )
+      .all()
+    const updChain = db.prepare<[string, string]>(
+      `UPDATE company_value_chains SET graphJson = ? WHERE symbol = ?`
+    )
+    let chainCount = 0
+    for (const row of chainRows) {
+      try {
+        const g = JSON.parse(row.graphJson) as {
+          stages?: Array<{ id: string; label: string }>
+          nodes?: Array<{ stage: string }>
+        }
+        let touched = false
+        if (Array.isArray(g.stages)) {
+          for (const s of g.stages) {
+            const mapped = stageMap.get(s.id)
+            if (mapped && mapped !== s.id) {
+              s.id = mapped
+              touched = true
+            }
+          }
+        }
+        if (Array.isArray(g.nodes)) {
+          for (const n of g.nodes) {
+            const mapped = stageMap.get(n.stage)
+            if (mapped && mapped !== n.stage) {
+              n.stage = mapped
+              touched = true
+            }
+          }
+        }
+        if (touched) {
+          updChain.run(JSON.stringify(g), row.symbol)
+          chainCount += 1
+        }
+      } catch {
+        // Malformed JSON — skip; regeneration will produce fresh output.
+      }
+    }
+    if (chainCount > 0) {
+      console.log(
+        `[sectors] v3 migration: rewrote stage ids in ${chainCount} stored chain(s)`
+      )
     }
   }
 }
