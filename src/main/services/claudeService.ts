@@ -560,3 +560,53 @@ export async function classifyTickerSectors(input: {
 
   return { primary, secondary }
 }
+
+// ---- answerQuestion (hyperintelligence Q&A) ---------------------------------
+
+// Concise, grounded answer for the hyperintelligence chat. Mirrors the
+// shape of ollamaService.answerQuestion so the aiClient router can swap
+// providers transparently. Routed to Haiku 4.5 — fast and cheap, plenty
+// strong for short factual answers from a 600-char context window.
+export async function answerQuestion(
+  question: string,
+  context?: string
+): Promise<{ answer: string; confident: boolean } | null> {
+  if (!question.trim()) return null
+  if (!(await checkClaudeHealth())) return null
+
+  const system =
+    `You are a concise explainer for a private news-reader app. Answer the ` +
+    `user's question in 2-4 sentences of plain text. If you are not ` +
+    `confident — e.g. the question needs current data you don't have, or ` +
+    `you'd be guessing — set "confident" to false and say so briefly. No ` +
+    `hedging, no filler, no "as an AI". Output STRICT JSON only:\n` +
+    `{"answer":"<text>","confident":true|false}`
+
+  const userMsg =
+    context && context.trim().length > 0
+      ? `Question: ${question}\nContext: ${context.slice(0, 1500)}`
+      : `Question: ${question}`
+
+  const raw = await callClaude({
+    model: MODELS.classifier,
+    system,
+    user: userMsg,
+    maxTokens: 400
+  })
+  if (!raw) return null
+
+  const jsonText = extractJsonObject(raw)
+  if (!jsonText) return null
+
+  let parsed: { answer?: unknown; confident?: unknown }
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch {
+    return null
+  }
+
+  const answer = typeof parsed.answer === 'string' ? parsed.answer.trim() : ''
+  const confident = parsed.confident !== false
+  if (!answer) return null
+  return { answer, confident }
+}

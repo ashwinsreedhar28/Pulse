@@ -608,7 +608,7 @@ function QAAnswerCard({
           </>
         ) : (
           <>
-            <span>Local AI</span>
+            <span>{qa.provider === 'claude' ? 'Claude' : 'Local AI'}</span>
             {!qa.confident && (
               <>
                 <span className="text-zinc-700">·</span>

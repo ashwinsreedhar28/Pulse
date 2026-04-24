@@ -858,15 +858,22 @@ export function ValueChainDiagram({
 
   const handleNodeClick = (symbol: string): void => {
     if (focusSet.has(symbol)) {
+      // Clicking an existing focus promotes IT to primary — useful when
+      // the user wants to flip perspective and see the graph through the
+      // second focus's eyes.
       if (symbol !== primarySymbol) setPrimarySymbol(symbol)
       return
     }
+    // Adding a NEW focus keeps the original primary. Otherwise the focus-
+    // to-focus edge tone flips (the user's "original" ticker suddenly
+    // renders as the new focus's supplier/customer rather than the other
+    // way around), which fights the user's mental model: "I'm looking at
+    // X; I added Y to see how Y relates to X."
     setFocusSet((prev) => {
       const next = new Set(prev)
       next.add(symbol)
       return next
     })
-    setPrimarySymbol(symbol)
   }
 
   // Keep a ref to the latest click handler so the global mouseup listener
@@ -964,18 +971,13 @@ export function ValueChainDiagram({
   const addedCount = focusSet.size - 1
 
   const edgePath = (e: LaidOutEdge): string => {
-    // Focus→focus edges: ff routing now exits supplier.right and enters
-    // customer.left (same direction convention as supplier/customer arrows
-    // elsewhere). For focuses stacked in the same center column, the arrow
-    // needs to bridge ~180px of horizontal space, so we route with a
-    // right-side loop — out and back — so the arrow clearly enters the
-    // customer focus's LEFT face. Detected by same-y-range endpoints with
-    // reversed-direction x delta (supplier.right > customer.left).
-    if (e.id.startsWith('ff-') && e.fromX > e.toX) {
-      const loopOffset = 160
-      const midX = e.fromX + loopOffset
-      return `M ${e.fromX} ${e.fromY} C ${midX} ${e.fromY}, ${midX} ${e.toY}, ${e.toX} ${e.toY}`
-    }
+    // Unified S-curve for every edge shape. Control points sit on the
+    // straight segment between from and to, biased to 45% / 55% so the
+    // tangents at both ends leave/enter horizontally and the curve
+    // swoops through the vertical gap. Works for left→right supplier
+    // arrows, focus→customer arrows, and focus→focus arrows regardless
+    // of whether fromX < toX or fromX > toX — the bezier naturally
+    // produces an S rather than a loop.
     const dx = e.toX - e.fromX
     const c1x = e.fromX + dx * 0.45
     const c2x = e.fromX + dx * 0.55

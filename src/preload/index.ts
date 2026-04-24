@@ -861,10 +861,13 @@ export interface InspectSettingsResult {
 
 export interface HyperQaResult {
   answer: string
+  // 'ollama' covers either local Ollama or cloud Claude (renderer reads
+  // `provider` for the actual badge).
   source: 'wikipedia' | 'ollama' | 'none'
   sourceTitle: string | null
   sourceURL: string | null
   confident: boolean
+  provider?: 'claude' | 'ollama'
 }
 
 // Settings write path — the Hyperintelligence dispatcher can propose a

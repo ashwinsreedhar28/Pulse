@@ -5,14 +5,21 @@
 // and a per-term cache; questions are longer, less cacheable, and want a
 // different prompt shape.
 
-import { answerQuestion, resolveCanonicalTitle } from './ollamaService'
+import { answerQuestion as routedAnswer } from './aiClient'
+import { isClaudeConfigured } from './claudeService'
+import { resolveCanonicalTitle } from './ollamaService'
 
 export interface HyperQaResult {
   answer: string
+  // 'ollama' is kept for backwards compat with renderer matchers but now
+  // covers either local Ollama or cloud Claude — whichever the router
+  // picked. The actual provider is reflected in `provider` for telemetry
+  // / UI hints without breaking existing code paths.
   source: 'wikipedia' | 'ollama' | 'none'
   sourceTitle: string | null
   sourceURL: string | null
   confident: boolean
+  provider?: 'claude' | 'ollama'
 }
 
 const FETCH_TIMEOUT_MS = 8_000
@@ -58,32 +65,67 @@ export async function answerHyperQuestion(question: string): Promise<HyperQaResu
     }
   }
 
-  // Ask Ollama to extract the canonical Wikipedia title from the question
-  // ("how does CHIPS Act work" → "CHIPS and Science Act"). If we have a
-  // confident title, try Wikipedia first — extracts are much more reliable
-  // than local-model answers.
-  const canonical = await resolveCanonicalTitle(trimmed, trimmed)
-  if (canonical && canonical.length > 0) {
-    const wiki = await fetchWiki(canonical)
-    if (wiki && wiki.extract) {
+  const aiCapable = isClaudeConfigured()
+
+  // When Claude is configured, prefer the AI for the first pass — it
+  // handles synthesis questions ("what's the relationship between X and Y")
+  // far better than Wikipedia's article-summary endpoint, which would
+  // just return the lead paragraph of whichever entity the title-resolver
+  // picked. Wikipedia stays as a fallback when the AI returns nothing or
+  // signals low confidence on a single-entity factual lookup it didn't
+  // know. With local Ollama only (Mistral 7B), Wikipedia stays first
+  // because the model's factual recall is weaker than the encyclopedia.
+  if (aiCapable) {
+    const { result: llm, provider } = await routedAnswer(trimmed)
+    if (llm && llm.confident && llm.answer.length > 0) {
       return {
-        answer: wiki.extract.trim(),
-        source: 'wikipedia',
-        sourceTitle: wiki.title ?? canonical,
-        sourceURL: wiki.content_urls?.desktop?.page ?? null,
-        confident: true
+        answer: llm.answer,
+        source: 'ollama',
+        sourceTitle: null,
+        sourceURL: null,
+        confident: true,
+        provider
       }
+    }
+    // AI not confident — try Wikipedia as a fallback for factual lookups
+    // the model wouldn't know (specific stats, dates, lesser-known entities).
+    const wiki = await tryWikipedia(trimmed)
+    if (wiki) return wiki
+    // Last resort: return whatever the AI gave us, even if not confident.
+    if (llm && llm.answer.length > 0) {
+      return {
+        answer: llm.answer,
+        source: 'ollama',
+        sourceTitle: null,
+        sourceURL: null,
+        confident: false,
+        provider
+      }
+    }
+    return {
+      answer: '',
+      source: 'none',
+      sourceTitle: null,
+      sourceURL: null,
+      confident: false
     }
   }
 
-  const llm = await answerQuestion(trimmed)
+  // Ollama-only path: Wikipedia first (more reliable than Mistral 7B for
+  // factual questions), AI fallback for things the encyclopedia doesn't
+  // cover.
+  const wiki = await tryWikipedia(trimmed)
+  if (wiki) return wiki
+
+  const { result: llm, provider } = await routedAnswer(trimmed)
   if (llm) {
     return {
       answer: llm.answer,
       source: 'ollama',
       sourceTitle: null,
       sourceURL: null,
-      confident: llm.confident
+      confident: llm.confident,
+      provider
     }
   }
 
@@ -93,5 +135,19 @@ export async function answerHyperQuestion(question: string): Promise<HyperQaResu
     sourceTitle: null,
     sourceURL: null,
     confident: false
+  }
+}
+
+async function tryWikipedia(question: string): Promise<HyperQaResult | null> {
+  const canonical = await resolveCanonicalTitle(question, question)
+  if (!canonical || canonical.length === 0) return null
+  const wiki = await fetchWiki(canonical)
+  if (!wiki || !wiki.extract) return null
+  return {
+    answer: wiki.extract.trim(),
+    source: 'wikipedia',
+    sourceTitle: wiki.title ?? canonical,
+    sourceURL: wiki.content_urls?.desktop?.page ?? null,
+    confident: true
   }
 }
