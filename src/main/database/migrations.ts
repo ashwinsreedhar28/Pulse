@@ -1065,5 +1065,27 @@ export const migrations: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_sec_former_names_cik ON sec_former_names(cik);
       `)
     }
+  },
+  {
+    version: 37,
+    name: 'create morning_briefs for daily Claude-authored watchlist digest',
+    // Single-row-pattern: we only ever care about the most recent brief.
+    // Keyed by `id` not date so we can use INSERT-OR-REPLACE on a fixed
+    // singleton id (1) — saves a DELETE FROM + INSERT round-trip on
+    // each daily refresh and keeps the row count bounded at 1 forever.
+    // payloadJson stores the structured sections (headlines / earnings /
+    // filings / iv) so the renderer doesn't have to re-parse Claude's
+    // markdown. provider records 'claude' vs 'ollama' for telemetry.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS morning_briefs (
+          id INTEGER PRIMARY KEY,
+          generatedAt INTEGER NOT NULL,
+          payloadJson TEXT NOT NULL,
+          watchlistSize INTEGER NOT NULL,
+          provider TEXT
+        );
+      `)
+    }
   }
 ]

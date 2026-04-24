@@ -524,6 +524,21 @@ export function registerDbIpc(): void {
     return getRegenerateAllProgress()
   })
 
+  // ---- Daily morning brief --------------------------------------------------
+  // Read the cached brief (returns null when nothing's been generated yet),
+  // or trigger a forced refresh that bypasses the staleness gate. The
+  // 'morningBrief:updated' broadcast fires when refreshMorningBrief writes
+  // a new row, so the renderer can subscribe and re-fetch.
+  ipcMain.handle('brief:getCurrent', async () => {
+    const { getCurrentMorningBrief } = await import('../services/morningBriefService')
+    return getCurrentMorningBrief()
+  })
+  ipcMain.handle('brief:refresh', async () => {
+    const { refreshMorningBrief } = await import('../services/morningBriefService')
+    void refreshMorningBrief({ force: true })
+    return { ok: true }
+  })
+
   // Value-chain growth pipeline. Renderer surfaces the audit log + overlay
   // list in Settings, lets users trigger a sweep manually, and hit Undo on
   // any auto-accepted edge they disagree with. The Undo flow deletes the

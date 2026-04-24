@@ -665,6 +665,14 @@ app.whenReady().then(async () => {
   )
   scheduleAutoRegenerateOnBoot()
 
+  // Daily Claude-authored morning brief. Fires 5 min after boot. The
+  // staleness gate inside the service short-circuits if the cached
+  // brief is < 4h old, so casual restarts during the day cost nothing.
+  const { scheduleMorningBriefRefresh } = await import(
+    './services/morningBriefService'
+  )
+  scheduleMorningBriefRefresh()
+
   // Hold the splash until every boot service is ready — otherwise heavy
   // background loads (SDXL, Kokoro) cause jitter the moment the main window
   // opens. A 180s watchdog caps the worst case (first-run model downloads).

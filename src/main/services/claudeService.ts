@@ -698,3 +698,198 @@ export async function answerQuestion(
   if (!answer) return null
   return { answer, confident }
 }
+
+// ---- generateMorningBrief --------------------------------------------------
+//
+// Cross-ticker pre-market digest. Caller hands us pre-assembled inputs
+// (overnight news, upcoming earnings, recent filings, IV movers); we write
+// the prompt + parse Claude's structured output into BriefPayload.
+//
+// Sonnet 4.6 — the brief is the highest-judgment Claude call we make, and
+// readability + cross-ticker insights matter more here than anywhere else.
+// Haiku output reads like a list; Sonnet output reads like an analyst note.
+
+export interface BriefPromptInput {
+  watchlistSize: number
+  // Pre-formatted lines per category, ranked-by-importance by the caller.
+  // The service pre-truncates so this function doesn't have to know
+  // about Claude's context window — it just stitches the prompt.
+  newsLines: string[]
+  earningsLines: string[]
+  filingsLines: string[]
+  ivLines: string[]
+  // Local-time string ('Friday morning, April 25 2026') so Claude can
+  // anchor copy in the user's frame ("yesterday", "this week", etc.).
+  localDateLabel: string
+}
+
+import type { BriefPayload, BriefSection } from '../database/morningBriefs'
+
+export async function generateMorningBrief(
+  input: BriefPromptInput
+): Promise<BriefPayload | null> {
+  if (!(await checkClaudeHealth())) return null
+  const totalLines =
+    input.newsLines.length +
+    input.earningsLines.length +
+    input.filingsLines.length +
+    input.ivLines.length
+  if (totalLines === 0) return null
+
+  const system =
+    `You write a pre-market briefing for a self-directed investor with the ` +
+    `following watchlist size (${input.watchlistSize} tickers). Output STRICT ` +
+    `JSON only matching:\n` +
+    `{\n` +
+    `  "headline": "one-sentence summary, <120 chars, lead with the most ` +
+    `material thing across all sections",\n` +
+    `  "sections": [\n` +
+    `    {\n` +
+    `      "kind": "headlines" | "earnings" | "filings" | "iv",\n` +
+    `      "title": "Section header (max ~32 chars)",\n` +
+    `      "bullets": [\n` +
+    `        {\n` +
+    `          "text": "1-2 short sentences. NO em-dashes, NO bullet symbols, ` +
+    `NO 'As of' framing, NO market commentary cliches.",\n` +
+    `          "citations": [\n` +
+    `            { "type": "article" | "filing" | "symbol", "ref": "<id-or-ticker>" }\n` +
+    `          ]\n` +
+    `        }\n` +
+    `      ]\n` +
+    `    }\n` +
+    `  ]\n` +
+    `}\n\n` +
+    `Rules:\n` +
+    `- Include only sections where you have material to discuss. Skip empty ones.\n` +
+    `- 3-5 bullets per section maximum. Quality over quantity.\n` +
+    `- Citations are MANDATORY for any specific claim that came from one of ` +
+    `the input lines. Use the bracketed id in each input line as ref:\n` +
+    `  * News inputs are tagged [article:N] -> use {"type":"article","ref":"N"}\n` +
+    `  * Filings are tagged [filing:ACCESSION] -> {"type":"filing","ref":"ACCESSION"}\n` +
+    `  * Tickers in citations -> {"type":"symbol","ref":"AAPL"}\n` +
+    `- Cross-ticker synthesis is the goal. Don't just list one bullet per news ` +
+    `item — group related stories ("AAPL and MSFT both report Tuesday") or ` +
+    `flag patterns ("three semiconductor names broke out of consolidation").\n` +
+    `- Headline must be the single most actionable / newsworthy item the ` +
+    `reader needs to see at a glance. Lead with severity, not chronology.\n` +
+    `- Tone: confident analyst, no hedging language, no "may", "could", ` +
+    `"appears to" unless genuinely uncertain. Plain English, no jargon ` +
+    `unless the ticker context demands it.\n`
+
+  const sectionParts: string[] = []
+  if (input.newsLines.length > 0) {
+    sectionParts.push(
+      `News from the last 16 hours (${input.newsLines.length} stories):\n` +
+        input.newsLines.slice(0, 40).join('\n')
+    )
+  }
+  if (input.earningsLines.length > 0) {
+    sectionParts.push(
+      `Earnings calendar (next 7 days, ${input.earningsLines.length} reporters):\n` +
+        input.earningsLines.slice(0, 25).join('\n')
+    )
+  }
+  if (input.filingsLines.length > 0) {
+    sectionParts.push(
+      `SEC filings landed in the last 24 hours (${input.filingsLines.length}):\n` +
+        input.filingsLines.slice(0, 25).join('\n')
+    )
+  }
+  if (input.ivLines.length > 0) {
+    sectionParts.push(
+      `Implied-volatility movers (${input.ivLines.length}):\n` +
+        input.ivLines.slice(0, 15).join('\n')
+    )
+  }
+
+  const userMsg =
+    `Today: ${input.localDateLabel}\n\n` + sectionParts.join('\n\n')
+
+  console.log(
+    `[claude] generateMorningBrief: ${totalLines} input lines (news=${input.newsLines.length}, earnings=${input.earningsLines.length}, filings=${input.filingsLines.length}, iv=${input.ivLines.length})`
+  )
+
+  const raw = await callClaude({
+    model: MODELS.chainGen,
+    system,
+    user: userMsg,
+    maxTokens: 3000
+  })
+  if (!raw) return null
+
+  const jsonText = extractJsonObject(raw)
+  if (!jsonText) {
+    console.warn('[claude] generateMorningBrief: could not extract JSON from response')
+    return null
+  }
+
+  let parsed: { headline?: unknown; sections?: unknown }
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch (err) {
+    console.warn(
+      '[claude] generateMorningBrief: JSON parse failed:',
+      err instanceof Error ? err.message : err
+    )
+    return null
+  }
+
+  const headline = typeof parsed.headline === 'string' ? parsed.headline.trim() : ''
+  if (!headline) return null
+
+  const sections: BriefSection[] = []
+  if (Array.isArray(parsed.sections)) {
+    for (const s of parsed.sections) {
+      if (!s || typeof s !== 'object') continue
+      const sec = s as { kind?: unknown; title?: unknown; bullets?: unknown }
+      const kind = typeof sec.kind === 'string' ? sec.kind.trim() : ''
+      const title = typeof sec.title === 'string' ? sec.title.trim() : ''
+      if (!kind || !title || !Array.isArray(sec.bullets)) continue
+      const bullets: BriefSection['bullets'] = []
+      for (const b of sec.bullets) {
+        if (!b || typeof b !== 'object') continue
+        const bullet = b as { text?: unknown; citations?: unknown }
+        const text = typeof bullet.text === 'string' ? bullet.text.trim() : ''
+        if (!text) continue
+        const citations: BriefSection['bullets'][number]['citations'] = []
+        if (Array.isArray(bullet.citations)) {
+          for (const c of bullet.citations) {
+            if (!c || typeof c !== 'object') continue
+            const cite = c as { type?: unknown; ref?: unknown; label?: unknown }
+            const type = typeof cite.type === 'string' ? cite.type : ''
+            const ref = typeof cite.ref === 'string' ? cite.ref.trim() : ''
+            if (!ref) continue
+            if (type !== 'article' && type !== 'filing' && type !== 'symbol') continue
+            const label =
+              typeof cite.label === 'string' && cite.label.trim()
+                ? cite.label.trim()
+                : undefined
+            citations.push({ type, ref, label })
+          }
+        }
+        bullets.push({ text, citations: citations.length > 0 ? citations : undefined })
+      }
+      if (bullets.length === 0) continue
+      sections.push({ kind, title, bullets })
+    }
+  }
+  if (sections.length === 0) return null
+
+  console.log(
+    `[claude] generateMorningBrief: produced ${sections.length} section(s), ` +
+      `${sections.reduce((acc, s) => acc + s.bullets.length, 0)} bullet(s)`
+  )
+
+  return {
+    headline,
+    generatedAtIso: new Date().toISOString(),
+    sections,
+    inputs: {
+      watchlistSize: input.watchlistSize,
+      articleCount: input.newsLines.length,
+      earningsCount: input.earningsLines.length,
+      filingsCount: input.filingsLines.length,
+      ivMoverCount: input.ivLines.length
+    }
+  }
+}

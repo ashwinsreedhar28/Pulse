@@ -1018,6 +1018,45 @@ export interface RegenerateAllProgress {
   running: boolean
 }
 
+// Daily Claude-authored watchlist digest. Mirror of BriefPayload from
+// the main process so the renderer can lay out sections without re-
+// parsing markdown. Citations resolve client-side: 'article' → in-app
+// reader, 'filing' → SEC archive URL, 'symbol' → ticker detail page.
+export type BriefCitationType = 'article' | 'filing' | 'symbol'
+export interface BriefCitation {
+  type: BriefCitationType
+  ref: string
+  url?: string
+  label?: string
+}
+export interface BriefBullet {
+  text: string
+  citations?: BriefCitation[]
+}
+export interface BriefSection {
+  kind: string
+  title: string
+  bullets: BriefBullet[]
+}
+export interface BriefPayload {
+  headline: string
+  generatedAtIso: string
+  sections: BriefSection[]
+  inputs: {
+    watchlistSize: number
+    articleCount: number
+    earningsCount: number
+    filingsCount: number
+    ivMoverCount: number
+  }
+}
+export interface MorningBriefRow {
+  generatedAt: number
+  payload: BriefPayload
+  watchlistSize: number
+  provider: 'claude' | 'ollama' | null
+}
+
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>
 
@@ -1264,6 +1303,18 @@ const api = {
       ipcRenderer.on('estimates:updated', listener)
       return (): void => {
         ipcRenderer.off('estimates:updated', listener)
+      }
+    }
+  },
+  brief: {
+    getCurrent: (): Promise<MorningBriefRow | null> =>
+      invoke<MorningBriefRow | null>('brief:getCurrent'),
+    refresh: (): Promise<{ ok: boolean }> => invoke<{ ok: boolean }>('brief:refresh'),
+    onUpdated: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('morningBrief:updated', listener)
+      return (): void => {
+        ipcRenderer.off('morningBrief:updated', listener)
       }
     }
   },
