@@ -2803,6 +2803,10 @@ function StocksPage({
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
   const [selectedTickerId, setSelectedTickerId] = useState<number | null>(null)
   const [view, setView] = useState<'holdings' | 'chain'>('holdings')
+  // Symbol handed to ValueChain when the user searches while the chain
+  // view is active. Cleared by ValueChain once it accepts the request
+  // (via onExternalFocusHandled) so subsequent searches fire cleanly.
+  const [chainFocus, setChainFocus] = useState<string | null>(null)
 
   useEffect(() => {
     if (!initialTickerSymbol || tickers.length === 0) return
@@ -2918,7 +2922,15 @@ function StocksPage({
                 })
                 const updated = await window.api.tickers.list()
                 setTickers(updated)
-                setSelectedTickerId(t.id)
+                // On the chain view, searching means "find this ticker in
+                // the diagram" — light up + scroll the matching tile
+                // instead of covering the graph with a detail modal. On
+                // the holdings view, the modal is still the right answer.
+                if (view === 'chain') {
+                  setChainFocus(r.symbol.toUpperCase())
+                } else {
+                  setSelectedTickerId(t.id)
+                }
               }}
               onAddToWatchlist={async (r) => {
                 const t = await window.api.tickers.create({
@@ -2929,7 +2941,11 @@ function StocksPage({
                 })
                 const updated = await window.api.tickers.list()
                 setTickers(updated)
-                setSelectedTickerId(t.id)
+                if (view === 'chain') {
+                  setChainFocus(r.symbol.toUpperCase())
+                } else {
+                  setSelectedTickerId(t.id)
+                }
               }}
             />
           </CollapsibleSection>
@@ -2944,6 +2960,8 @@ function StocksPage({
               const updated = await window.api.tickers.list()
               setTickers(updated)
             }}
+            externalFocus={chainFocus}
+            onExternalFocusHandled={() => setChainFocus(null)}
           />
         ) : tickers.filter((t) => t.isActive).length === 0 ? (
           <div className="px-6 py-20 text-center text-sm text-zinc-500">

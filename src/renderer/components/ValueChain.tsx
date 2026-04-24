@@ -158,12 +158,22 @@ export function ValueChain({
   tickers,
   quotes,
   onOpenTicker,
-  onActivateTicker
+  onActivateTicker,
+  externalFocus,
+  onExternalFocusHandled
 }: {
   tickers: Ticker[]
   quotes: StockQuote[]
   onOpenTicker: (tickerId: number) => void
   onActivateTicker: (tickerId: number) => void
+  // Symbol to lock + scroll into view, driven by a parent-level ticker
+  // search. Nullable; when the parent hands us a non-null value we treat
+  // it as a request that resets internal state (sector filter → "all",
+  // lockedSymbol → symbol) and scrolls the matching tile. `onExternalFocusHandled`
+  // fires after the component accepts the focus so the parent can clear
+  // its request state (prevents re-focusing on every re-render).
+  externalFocus?: string | null
+  onExternalFocusHandled?: () => void
 }): JSX.Element {
   // Two focus sources: hover (transient) and lock (sticky, click-driven).
   // `lockedSymbol` wins when set — hover changes are silently recorded but
@@ -175,6 +185,15 @@ export function ValueChain({
   const [diagramSymbol, setDiagramSymbol] = useState<string | null>(null)
   const [peerCompareSymbol, setPeerCompareSymbol] = useState<string | null>(null)
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Per-symbol tile element refs, keyed on the uppercased symbol. Populated
+  // by the tile map below via ref callbacks. Used when an external focus
+  // request lands, so we can scrollIntoView the matching tile rather than
+  // leaving the user to hunt for a highlighted node in a grid of hundreds.
+  const tileRefs = useRef<Map<string, HTMLElement | null>>(new Map())
+  // Symbol whose tile we still owe a scroll-into-view pass — deferred by
+  // one render so React has applied the sectorId='all' swap and the tile
+  // actually exists in the DOM by the time we call scrollIntoView.
+  const [pendingScroll, setPendingScroll] = useState<string | null>(null)
   // Single/double-click discrimination. The first click starts a timer; a
   // second click inside the window cancels the timer and runs the
   // double-click action (open detail). Otherwise the timer fires and runs
@@ -203,6 +222,40 @@ export function ValueChain({
       if (clickTimer.current) clearTimeout(clickTimer.current)
     }
   }, [])
+
+  // Accept external focus requests (search-box driven). Lock the symbol,
+  // snap the sector filter back to "all" so the tile is guaranteed to
+  // render regardless of which sector tab the user had selected, and
+  // mark a pending scroll — the actual scrollIntoView runs in a separate
+  // effect that fires after the render commits.
+  useEffect(() => {
+    if (!externalFocus) return
+    const upper = externalFocus.toUpperCase()
+    setLockedSymbol(upper)
+    setSectorId('all')
+    setPendingScroll(upper)
+    onExternalFocusHandled?.()
+    // onExternalFocusHandled is intentionally called synchronously — once
+    // we've recorded the request the parent can clear its state so a
+    // stable identity isn't required. pendingScroll clears in the
+    // scroll-effect below after the DOM catches up.
+  }, [externalFocus, onExternalFocusHandled])
+
+  useEffect(() => {
+    if (!pendingScroll) return
+    // Run after paint so the tile has been mounted into the sector-'all'
+    // layout. requestAnimationFrame + a small timeout together handle
+    // the case where the pending scroll arrived on the same tick as the
+    // sectorId change (React batches but the layout pass needs a frame).
+    const raf = requestAnimationFrame(() => {
+      const el = tileRefs.current.get(pendingScroll)
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+      }
+      setPendingScroll(null)
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [pendingScroll])
 
   const quoteBySymbol = useMemo(() => {
     const m = new Map<string, StockQuote>()
@@ -1164,25 +1217,37 @@ export function ValueChain({
                 const dim = related ? role === null : false
                 const isFocus = focusSymbol === n.symbol
                 const isLocked = lockedSymbol === n.symbol
+                const upperSym = n.symbol.toUpperCase()
                 return (
-                  <ValueChainTile
+                  <div
                     key={n.symbol}
-                    symbol={n.symbol}
-                    companyName={t?.companyName ?? n.name ?? n.symbol}
-                    quote={q}
-                    financials={fin}
-                    earnings={earnings}
-                    recentFilings={recentFilings}
-                    hasTickerRow={hasTickerRow}
-                    inWatchlist={inWatchlist}
-                    focus={isFocus}
-                    locked={isLocked}
-                    role={isFocus ? null : role}
-                    dim={dim}
-                    onHover={() => focusTile(n.symbol)}
-                    onLeave={scheduleClear}
-                    onClick={() => handleTileClick(n.symbol, hasTickerRow)}
-                  />
+                    ref={(el) => {
+                      // Register the outer wrapper so external-focus scroll
+                      // requests can find it. ValueChainTile itself stays
+                      // ref-free — the wrapper is enough for scrollIntoView
+                      // and keeps the inner component refactor-light.
+                      if (el) tileRefs.current.set(upperSym, el)
+                      else tileRefs.current.delete(upperSym)
+                    }}
+                  >
+                    <ValueChainTile
+                      symbol={n.symbol}
+                      companyName={t?.companyName ?? n.name ?? n.symbol}
+                      quote={q}
+                      financials={fin}
+                      earnings={earnings}
+                      recentFilings={recentFilings}
+                      hasTickerRow={hasTickerRow}
+                      inWatchlist={inWatchlist}
+                      focus={isFocus}
+                      locked={isLocked}
+                      role={isFocus ? null : role}
+                      dim={dim}
+                      onHover={() => focusTile(n.symbol)}
+                      onLeave={scheduleClear}
+                      onClick={() => handleTileClick(n.symbol, hasTickerRow)}
+                    />
+                  </div>
                 )
               })}
             </div>
