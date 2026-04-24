@@ -11,6 +11,7 @@ import { JSDOM, VirtualConsole } from 'jsdom'
 import { getDb } from '../database/connection'
 import {
   getCompanyValueChain,
+  getEdgesMentioningSymbol,
   listCompanyValueChainSymbols,
   setCompanyValueChain,
   type CompanyValueChain,
@@ -249,6 +250,29 @@ type ChainEdge = {
   source: 'filings' | 'news' | 'profile' | 'model' | null
 }
 
+// Re-frame a foreign edge relative to a specific focus. The source chain
+// stored the edge as "from does X to to"; the generator prompt wants
+// "counterparty does X to/from focus" so it doesn't have to back-compute.
+// supplier/customer flip when the focus is on the `to` side of the source
+// edge; competitor/partner are symmetric and pass through unchanged.
+function relToFocus(
+  focusIsFromSide: boolean,
+  rel: 'supplier' | 'customer' | 'competitor' | 'partner'
+): 'supplies-focus' | 'buys-from-focus' | 'competes-with-focus' | 'partners-with-focus' {
+  if (rel === 'competitor') return 'competes-with-focus'
+  if (rel === 'partner') return 'partners-with-focus'
+  // supplier: source-chain says "from supplies to". If focus is `to`, then
+  // the counterparty (`from`) supplies focus. If focus is `from`, then
+  // counterparty (`to`) BUYS FROM focus.
+  if (rel === 'supplier') {
+    return focusIsFromSide ? 'buys-from-focus' : 'supplies-focus'
+  }
+  // customer: source-chain says "from is customer of to". If focus is
+  // `from`, counterparty (`to`) supplies focus. If focus is `to`,
+  // counterparty (`from`) buys from focus.
+  return focusIsFromSide ? 'supplies-focus' : 'buys-from-focus'
+}
+
 function canonicalizeEdges(
   rawEdges: ChainEdge[],
   resolvedNodes: CompanyValueChainNode[],
@@ -434,6 +458,24 @@ export async function generateCompanyChain(input: {
       ? sectorCatalogEntry.stages
       : undefined
 
+  // Cross-chain corroboration: every edge in OTHER stored chains that
+  // mentions this symbol on either side. Feeds the generator a "here's
+  // what neighboring chains already claim about you" context block so
+  // regens converge toward graph-wide consistency instead of re-deriving
+  // edges in isolation. We DON'T pass the focus's own prior chain — that
+  // would anchor Claude on any mistakes in the previous output (e.g. the
+  // IP-licensing inversions we just fixed would have been self-reinforced).
+  const crossChain = getEdgesMentioningSymbol(sym, 30).map((m) => ({
+    sourceFocus: m.sourceFocus,
+    counterparty: m.from === sym ? m.to : m.from,
+    // Normalize direction relative to the focus so the prompt can describe
+    // it as "Y supplies/buys-from [focus]" without the model having to
+    // back-compute the perspective. Supplier/customer flip depending on
+    // whether the focus is the from or to side of the source edge.
+    relationshipTowardFocus: relToFocus(m.from === sym, m.relationship),
+    note: m.note
+  }))
+
   const { result: generated, provider } = await routedGenerate({
     symbol: sym,
     companyName: input.companyName,
@@ -441,7 +483,8 @@ export async function generateCompanyChain(input: {
     tenKExcerpt,
     newsSnippets: news,
     canonicalStages,
-    sectorName: sectorCatalogEntry?.name
+    sectorName: sectorCatalogEntry?.name,
+    crossChainMentions: crossChain
   })
 
   // Stamp the generated-by provider into the provenance string so the

@@ -1206,6 +1206,19 @@ export async function generateCompanyValueChain(input: {
   // prevented regardless of which provider ran.
   canonicalStages?: Array<{ id: string; name: string }>
   sectorName?: string
+  // Edges from other chains that mention the focus, formatted so the
+  // model can corroborate relationships across the graph. Mirrors the
+  // claudeService input for identical provider behavior.
+  crossChainMentions?: Array<{
+    sourceFocus: string
+    counterparty: string
+    relationshipTowardFocus:
+      | 'supplies-focus'
+      | 'buys-from-focus'
+      | 'competes-with-focus'
+      | 'partners-with-focus'
+    note: string | null
+  }>
 }): Promise<GeneratedValueChain | null> {
   if (!input.companyName.trim()) {
     console.warn('[ollama] generateCompanyValueChain: empty companyName')
@@ -1234,6 +1247,26 @@ export async function generateCompanyValueChain(input: {
       })
       .join('\n')
     contextParts.push(`Recent news:\n${bullets}`)
+  }
+  if (input.crossChainMentions && input.crossChainMentions.length > 0) {
+    const bullets = input.crossChainMentions
+      .slice(0, 20)
+      .map((m, i) => {
+        const verb =
+          m.relationshipTowardFocus === 'supplies-focus'
+            ? 'supplies'
+            : m.relationshipTowardFocus === 'buys-from-focus'
+              ? 'buys from'
+              : m.relationshipTowardFocus === 'competes-with-focus'
+                ? 'competes with'
+                : 'partners with'
+        const noteSuffix = m.note ? ` — "${m.note.slice(0, 140)}"` : ''
+        return `${i + 1}. [${m.sourceFocus}'s chain] ${m.counterparty} ${verb} ${input.symbol}${noteSuffix}`
+      })
+      .join('\n')
+    contextParts.push(
+      `Cross-chain mentions (edges from other tickers' chains that reference ${input.symbol}):\n${bullets}`
+    )
   }
   const groundingContext = contextParts.join('\n\n')
 
@@ -1313,6 +1346,18 @@ export async function generateCompanyValueChain(input: {
     `\n` +
     `- blurbs and notes must stay short (<140 / <120 chars), factual, no ` +
     `marketing language.\n` +
+    `\n` +
+    `Cross-chain corroboration — when "Cross-chain mentions" appears in the ` +
+    `context above, those are edges from OTHER tickers' chains that reference ` +
+    `${input.symbol}:\n` +
+    `- Prefer including edges that appear in cross-chain mentions; multiple ` +
+    `source chains corroborating the same relationship is a strong signal.\n` +
+    `- The mentions already encode direction toward ${input.symbol}: ` +
+    `"supplies-focus" → other side is a supplier, "buys-from-focus" → other ` +
+    `side is a customer, "competes-with-focus" → competitor, "partners-with-` +
+    `focus" → partner. Translate faithfully.\n` +
+    `- Reject a cross-chain mention only if you have stronger grounding ` +
+    `(10-K, news snippet) that contradicts it.\n` +
     `\n` +
     `Edge "source" field — cite where each edge claim comes from so users ` +
     `can judge how grounded it is:\n` +

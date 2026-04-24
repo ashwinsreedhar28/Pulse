@@ -140,3 +140,65 @@ export function listCompanyValueChainSymbols(): string[] {
     .all()
     .map((r) => r.symbol)
 }
+
+// Edges from OTHER chains that mention the focus symbol on either side.
+// Feeds the generator's "cross-chain context" block so regens can
+// corroborate relationships already claimed by neighboring chains instead
+// of re-deriving every edge in isolation.
+export interface CrossChainEdgeMention {
+  // The chain this edge came from (its focus symbol). Never equal to the
+  // query symbol — self-mentions are filtered out at the SQL level.
+  sourceFocus: string
+  from: string
+  to: string
+  relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
+  note: string | null
+}
+
+export function getEdgesMentioningSymbol(
+  symbol: string,
+  limit = 30
+): CrossChainEdgeMention[] {
+  const sym = symbol.toUpperCase()
+  // json_each unpacks the edges array into rows. The outer SELECT pulls the
+  // chain's focus symbol alongside each edge. We include both from= and to=
+  // matches so mentions land regardless of edge direction.
+  const rows = getDb()
+    .prepare<
+      [string, string, string, number],
+      {
+        sourceFocus: string
+        fromSym: string
+        toSym: string
+        rel: string
+        note: string | null
+      }
+    >(
+      `SELECT c.symbol                                        AS sourceFocus,
+              json_extract(e.value, '$.from')                 AS fromSym,
+              json_extract(e.value, '$.to')                   AS toSym,
+              json_extract(e.value, '$.relationship')         AS rel,
+              json_extract(e.value, '$.note')                 AS note
+         FROM company_value_chains c, json_each(c.graphJson, '$.edges') AS e
+        WHERE c.status = 'ready'
+          AND c.symbol != ?
+          AND (json_extract(e.value, '$.from') = ?
+            OR json_extract(e.value, '$.to')   = ?)
+        LIMIT ?`
+    )
+    .all(sym, sym, sym, limit)
+  const out: CrossChainEdgeMention[] = []
+  for (const r of rows) {
+    if (r.rel !== 'supplier' && r.rel !== 'customer' && r.rel !== 'competitor' && r.rel !== 'partner') {
+      continue
+    }
+    out.push({
+      sourceFocus: r.sourceFocus,
+      from: r.fromSym,
+      to: r.toSym,
+      relationship: r.rel,
+      note: r.note
+    })
+  }
+  return out
+}

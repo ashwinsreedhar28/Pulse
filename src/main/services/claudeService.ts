@@ -201,6 +201,21 @@ export async function generateCompanyValueChain(input: {
   // and another "retail-lending" for overlapping concepts.
   canonicalStages?: Array<{ id: string; name: string }>
   sectorName?: string
+  // Edges from OTHER chains that mention the focus. Fed as corroborating
+  // context so regens converge toward graph-wide consistency — "TSM's
+  // chain already claims it supplies you at 3nm, factor that in." We
+  // deliberately do NOT pass the focus's OWN prior chain, which would
+  // anchor on any mistakes in the previous output.
+  crossChainMentions?: Array<{
+    sourceFocus: string
+    counterparty: string
+    relationshipTowardFocus:
+      | 'supplies-focus'
+      | 'buys-from-focus'
+      | 'competes-with-focus'
+      | 'partners-with-focus'
+    note: string | null
+  }>
 }): Promise<GeneratedValueChain | null> {
   if (!input.companyName.trim()) return null
   if (!(await checkClaudeHealth())) return null
@@ -222,7 +237,31 @@ export async function generateCompanyValueChain(input: {
           )
           .join('\n')
       : ''
-  const groundingContext = (profileBlock + tenKBlock + newsBlock).trim()
+  // Cross-chain corroboration block. Translates each neighboring-chain
+  // mention into a human-readable "[counterparty] [role] [focus]" line
+  // with the origin chain cited so Claude can weight corroborating
+  // mentions (multiple chains agreeing on the same edge) more heavily.
+  const crossChainBlock =
+    input.crossChainMentions && input.crossChainMentions.length > 0
+      ? '\n\nCross-chain mentions — edges from other tickers\' generated ' +
+        `chains that reference ${input.symbol}:\n` +
+        input.crossChainMentions
+          .slice(0, 20)
+          .map((m, i) => {
+            const verb =
+              m.relationshipTowardFocus === 'supplies-focus'
+                ? 'supplies'
+                : m.relationshipTowardFocus === 'buys-from-focus'
+                  ? 'buys from'
+                  : m.relationshipTowardFocus === 'competes-with-focus'
+                    ? 'competes with'
+                    : 'partners with'
+            const noteSuffix = m.note ? ` — "${m.note.slice(0, 140)}"` : ''
+            return `${i + 1}. [${m.sourceFocus}'s chain] ${m.counterparty} ${verb} ${input.symbol}${noteSuffix}`
+          })
+          .join('\n')
+      : ''
+  const groundingContext = (profileBlock + tenKBlock + newsBlock + crossChainBlock).trim()
 
   const system =
     `You map a public company's value chain: the stages of its industry, ` +
@@ -296,6 +335,21 @@ export async function generateCompanyValueChain(input: {
     `- Only include well-documented relationships. No speculation.\n` +
     `\n` +
     `- blurbs <140 chars, notes <120 chars, factual, no marketing language.\n` +
+    `\n` +
+    `Cross-chain corroboration — when a "Cross-chain mentions" block is ` +
+    `provided, treat it as prior art from other tickers' chains:\n` +
+    `- Prefer INCLUDING edges that appear in cross-chain mentions, especially ` +
+    `when multiple source chains corroborate the same relationship. Consistency ` +
+    `across the graph is a real quality signal for users.\n` +
+    `- Reject a cross-chain mention only when you have stronger grounding ` +
+    `(10-K excerpt, recent news snippet, or direct product knowledge) that ` +
+    `contradicts it. Don't silently drop corroborated edges.\n` +
+    `- The mentions already encode direction relative to ${input.symbol} ` +
+    `("[X] supplies ${input.symbol}" means X is a supplier to the focus). ` +
+    `Translate faithfully: "supplies-focus" → an edge into the focus as a ` +
+    `supplier, "buys-from-focus" → focus supplies them, "competes-with-focus" ` +
+    `→ competitor, "partners-with-focus" → partner.\n` +
+    `\n` +
     `\n` +
     `Edge "source" field — cite where the claim comes from so users can ` +
     `judge how grounded it is:\n` +
