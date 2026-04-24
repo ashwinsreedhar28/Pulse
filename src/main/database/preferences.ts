@@ -2,8 +2,13 @@ import { getDb } from './connection'
 
 export type TtsEngine = 'kokoro' | 'piper' | 'say'
 export type Theme = 'system' | 'default' | 'light' | 'fiesta' | 'zazu' | 'ocean' | 'casino'
+// AI provider for the Ollama-style prompts. "auto" prefers Claude when an
+// API key is set, falls back to local Ollama. "ollama" / "claude" force a
+// specific provider — useful for A/B comparison while debugging.
+export type AiProvider = 'auto' | 'ollama' | 'claude'
 
 export const THEME_CHOICES: Theme[] = ['system', 'default', 'light', 'fiesta', 'zazu', 'ocean', 'casino']
+export const AI_PROVIDER_CHOICES: AiProvider[] = ['auto', 'ollama', 'claude']
 
 export interface Preferences {
   pollIntervalMin: number
@@ -18,6 +23,13 @@ export interface Preferences {
   ttsVoice: string
   theme: Theme
   mediaPipelineEnabled: boolean
+  // Cloud AI routing. aiProvider drives which model family handles
+  // value-chain generation + sector classification; anthropicApiKey stores
+  // the user's own key (never shipped, never logged, lives in the local
+  // pulse.db). Empty key + provider=claude falls back to ollama with a
+  // console warning.
+  aiProvider: AiProvider
+  anthropicApiKey: string
 }
 
 const DEFAULTS: Preferences = {
@@ -32,7 +44,9 @@ const DEFAULTS: Preferences = {
   ttsEngine: 'kokoro',
   ttsVoice: 'am_michael',
   theme: 'default',
-  mediaPipelineEnabled: true
+  mediaPipelineEnabled: true,
+  aiProvider: 'auto',
+  anthropicApiKey: ''
 }
 
 export function getPreferences(): Preferences {
@@ -59,8 +73,15 @@ export function getPreferences(): Preferences {
     mediaPipelineEnabled:
       map.get('mediaPipelineEnabled') === undefined
         ? DEFAULTS.mediaPipelineEnabled
-        : map.get('mediaPipelineEnabled') === 'true'
+        : map.get('mediaPipelineEnabled') === 'true',
+    aiProvider: normalizeAiProvider(map.get('aiProvider')),
+    anthropicApiKey: (map.get('anthropicApiKey') ?? DEFAULTS.anthropicApiKey).trim()
   }
+}
+
+function normalizeAiProvider(raw: string | undefined): AiProvider {
+  if (raw === 'auto' || raw === 'ollama' || raw === 'claude') return raw
+  return DEFAULTS.aiProvider
 }
 
 function normalizeEngine(raw: string | undefined): TtsEngine {

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { Ticker } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
+import { CollapsibleSection } from './CollapsibleSection'
 
 interface ChainStage {
   id: string
@@ -38,6 +39,12 @@ export interface Counterparty {
   stageLabel: string
   companyName: string
   note: string | null
+  // Name of the counterparty's top-level GICS sector when it differs from
+  // the focus ticker's top-level sector. Rendered as a small pill next to
+  // the company name to badge cross-sector relationships (e.g. Capital One
+  // → AWS shows "Technology" on the AWS row when viewed from a financials
+  // focus).
+  crossSectorLabel?: string | null
 }
 
 // Palette maps to the three relationship categories used throughout the value
@@ -180,42 +187,40 @@ export function StockValueChainCard({
         ? 'md:grid-cols-2'
         : ''
 
+  const linkCount = customers.length + suppliers.length + competitors.length
+  const meta = (
+    <span className="flex items-center gap-2">
+      <span className="px-2 py-0.5 rounded-full bg-surface-2 text-zinc-300 ring-1 ring-inset ring-edge/80 normal-case tracking-[0.22em]">
+        {stageLabel}
+      </span>
+      <span className="tabular-nums text-zinc-500">{linkCount} links</span>
+    </span>
+  )
+
   return (
-    <section
-      className="mt-6 rounded-2xl border border-edge bg-gradient-to-br from-surface-1 to-surface-0 p-5 relative overflow-hidden"
-      style={{ boxShadow }}
+    <CollapsibleSection
+      title="Value chain"
+      meta={meta}
+      defaultOpen
+      gradient
+      // Role-based backlight covers the ENTIRE section (header + body),
+      // not just the collapsed content area — passing it as backdropStyle
+      // lets CollapsibleSection position it absolutely at section level.
+      // Without this the gradient/glow stopped at the collapsible's
+      // content container and the header sat on plain surface-1.
+      backdropStyle={{ backgroundImage: glowBackground, boxShadow }}
     >
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{ backgroundImage: glowBackground }}
-      />
-
-      <div className="relative flex items-center gap-3 mb-4">
-        <span className="text-[12px] leading-none text-emerald-400">◆</span>
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-200">
-          Value chain
-        </h2>
-        <span className="h-px flex-1 bg-edge/60" />
-        <span className="text-[9px] uppercase tracking-[0.22em] px-2 py-0.5 rounded-full bg-surface-2 text-zinc-300 ring-1 ring-inset ring-edge/80">
-          {stageLabel}
-        </span>
-        <span className="text-[9px] uppercase tracking-[0.22em] text-zinc-500 tabular-nums">
-          {customers.length + suppliers.length + competitors.length} links
-        </span>
-      </div>
-
       {node.blurb && (
-        <p className="relative text-[12.5px] leading-snug text-zinc-300 mb-5 max-w-[720px]">
+        <p className="text-[12.5px] leading-snug text-zinc-300 mb-5 max-w-[720px]">
           {node.blurb}
         </p>
       )}
-
-      <div className={`relative grid grid-cols-1 gap-6 items-start ${gridColsClass}`}>
+      <div className={`grid grid-cols-1 gap-6 items-start ${gridColsClass}`}>
         <TransactionCluster category="supplier" items={suppliers} />
         <TransactionCluster category="competitor" items={competitors} />
         <TransactionCluster category="customer" items={customers} />
       </div>
-    </section>
+    </CollapsibleSection>
   )
 }
 
@@ -250,14 +255,35 @@ function useStageGroups(items: Counterparty[]): {
       if (!byStage.has(item.stage)) byStage.set(item.stage, [])
       byStage.get(item.stage)!.push(item)
     }
-    const stageOrder = CHAIN.stages.map((s) => s.id)
-    return stageOrder
-      .filter((id) => byStage.has(id))
-      .map((id) => ({
-        stage: id,
-        label: CHAIN.stages.find((s) => s.id === id)?.label ?? id,
-        items: (byStage.get(id) ?? []).sort((a, b) => a.symbol.localeCompare(b.symbol))
-      }))
+    // Order: curated supplyChainGraph stages first (stable ordering for
+    // tech-focused views) + any novel stages found in `items` appended at
+    // the end. Without appending, counterparties with stages from generated
+    // chains (e.g. "refining" for XOM) would be silently dropped — their
+    // stage ids aren't in the curated tech pipeline, so the filter would
+    // reject them even though the cluster header's count showed them.
+    const curatedIds = CHAIN.stages.map((s) => s.id)
+    const curatedSet = new Set(curatedIds)
+    const sortSym = (xs: Counterparty[]): Counterparty[] =>
+      [...xs].sort((a, b) => a.symbol.localeCompare(b.symbol))
+    // Items already carry their stageLabel (populated by the caller's
+    // buildCounterparty / toCounterparty helpers, which consult a
+    // stageLabelById map that includes both CHAIN.stages and any
+    // activeStages in scope). Fall back to curated label or humanized id.
+    const labelFor = (id: string): string => {
+      const first = byStage.get(id)?.[0]
+      if (first?.stageLabel && first.stageLabel !== '—') return first.stageLabel
+      return CHAIN.stages.find((s) => s.id === id)?.label ?? id
+    }
+    const out: Array<{ stage: string; label: string; items: Counterparty[] }> = []
+    for (const id of curatedIds) {
+      if (!byStage.has(id)) continue
+      out.push({ stage: id, label: labelFor(id), items: sortSym(byStage.get(id)!) })
+    }
+    for (const [id, bucket] of byStage) {
+      if (curatedSet.has(id)) continue
+      out.push({ stage: id, label: labelFor(id), items: sortSym(bucket) })
+    }
+    return out
   }, [items])
 }
 
@@ -327,8 +353,19 @@ export function TransactionCluster({
                       <span className={chipClasses}>{item.symbol}</span>
                     )}
                     <div className="min-w-0 flex-1 pt-[1px]">
-                      <div className="text-[12px] leading-snug text-zinc-200 truncate">
-                        {item.companyName}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="text-[12px] leading-snug text-zinc-200 truncate">
+                          {item.companyName}
+                        </div>
+                        {item.crossSectorLabel && (
+                          <span
+                            className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-200 text-[9px] font-semibold uppercase tracking-[0.18em]"
+                            title={`Cross-sector: ${item.crossSectorLabel}`}
+                          >
+                            <span className="text-[8px]">↗</span>
+                            {item.crossSectorLabel}
+                          </span>
+                        )}
                       </div>
                       {item.note && (
                         <div className="text-[11px] leading-snug text-zinc-400 mt-0.5">

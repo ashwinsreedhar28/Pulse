@@ -39,8 +39,28 @@ async function fetchNasdaq<T>(url: string): Promise<T | null> {
       },
       signal: controller.signal
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return (await res.json()) as T
+    if (!res.ok) {
+      console.warn('[nasdaq] fetch failed:', url, `HTTP ${res.status}`)
+      return null
+    }
+    // Nasdaq sometimes returns empty / partial bodies for days with no data
+    // (e.g. a future weekend's economic events). `res.json()` throws loudly on
+    // these — read as text first, short-circuit the empty case silently, and
+    // only log when we get something that looks like valid JSON but fails to
+    // parse (a real API shift worth noticing).
+    const text = (await res.text()).trim()
+    if (!text) return null
+    if (!text.startsWith('{') && !text.startsWith('[')) return null
+    try {
+      return JSON.parse(text) as T
+    } catch (err) {
+      console.warn(
+        '[nasdaq] parse failed:',
+        url,
+        err instanceof Error ? err.message : err
+      )
+      return null
+    }
   } catch (err) {
     console.warn('[nasdaq] fetch failed:', url, err instanceof Error ? err.message : err)
     return null

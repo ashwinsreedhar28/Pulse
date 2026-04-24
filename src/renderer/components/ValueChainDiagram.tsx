@@ -53,6 +53,19 @@ const COMPETITOR_MAP: Map<string, Set<string>> = (() => {
   return m
 })()
 
+// Turn a kebab-case stage id ("retail-banking") into a display title
+// ("Retail Banking") when a generated chain surfaces a stage that's not
+// in the curated supplyChainGraph pipeline. Mirrors the same helper in
+// ValueChain.tsx — kept local to the diagram so neither component has to
+// depend on the other.
+function humanizeStageId(id: string): string {
+  return id
+    .split('-')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
 // Layout constants — SVG user units. The viewBox maps the entire content
 // rectangle into the canvas, and pan/zoom just mutate the viewBox, so node
 // placements never move in their own coordinate system.
@@ -219,6 +232,9 @@ export function ValueChainDiagram({
   // the competitor map. weight + source ride along so the renderer can
   // scale edge thickness / opacity by confidence (D1).
   const mergedEdges = useMemo<ChainEdge[]>(() => {
+    // Absorber normalizes customer edges to supplier form at write time;
+    // the swap branch below catches any legacy pre-normalization rows.
+    // Dedupe by (from, to) so cross-chain duplicates draw one arrow.
     const out: ChainEdge[] = CHAIN.edges.map((e) => ({ ...e, weight: null, source: null }))
     for (const o of edgeOverrides) {
       if (o.relationship === 'supplier' || o.relationship === 'partner') {
@@ -229,9 +245,25 @@ export function ValueChainDiagram({
           weight: o.weight,
           source: o.source
         })
+      } else if (o.relationship === 'customer') {
+        out.push({
+          from: o.toSymbol.toUpperCase(),
+          to: o.fromSymbol.toUpperCase(),
+          note: o.note ?? undefined,
+          weight: o.weight,
+          source: o.source
+        })
       }
     }
-    return out
+    const seen = new Set<string>()
+    const deduped: ChainEdge[] = []
+    for (const edge of out) {
+      const key = `${edge.from}→${edge.to}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      deduped.push(edge)
+    }
+    return deduped
   }, [edgeOverrides])
 
   const mergedCompetitorMap = useMemo<Map<string, Set<string>>>(() => {
@@ -282,17 +314,34 @@ export function ValueChainDiagram({
     return m
   }, [nodeOverrides])
 
+  // Stages the diagram lays nodes into. Start with the curated pipeline,
+  // then append any novel stages that appear on absorbed overrides (COF
+  // chains use "retail-banking", "credit-services"; XOM chains use
+  // "refining", "marketing" — none of which exist in the tech pipeline).
+  // Without this, absorbed nodes would fall through with stage index
+  // undefined and get clustered at x=0 alongside the raw-materials column.
+  const activeStages = useMemo<ChainStage[]>(() => {
+    const seen = new Set<string>(CHAIN.stages.map((s) => s.id))
+    const out: ChainStage[] = [...CHAIN.stages]
+    for (const o of nodeOverrides) {
+      if (!o.stage || seen.has(o.stage)) continue
+      seen.add(o.stage)
+      out.push({ id: o.stage, label: humanizeStageId(o.stage) })
+    }
+    return out
+  }, [nodeOverrides])
+
   const stageLabelById = useMemo(() => {
     const m = new Map<string, string>()
-    for (const s of CHAIN.stages) m.set(s.id, s.label)
+    for (const s of activeStages) m.set(s.id, s.label)
     return m
-  }, [])
+  }, [activeStages])
 
   const stageIdx = useMemo(() => {
     const m = new Map<string, number>()
-    CHAIN.stages.forEach((s, i) => m.set(s.id, i))
+    activeStages.forEach((s, i) => m.set(s.id, i))
     return m
-  }, [])
+  }, [activeStages])
 
   // Full layout: focuses in the center column, unioned suppliers on the left,
   // unioned customers on the right. Competitors are NOT drawn in the SVG —
@@ -594,21 +643,39 @@ export function ValueChainDiagram({
       })
     }
 
-    // Focus → focus edges: route outside the center column so they don't
-    // collide with the stack. A shallow "C" curve on the right works for both
-    // directions; we include an arrow so direction stays visible.
+    // Focus → focus edges. mergedEdges is canonicalized to supplier-form
+    // at absorption, so every entry here means "from supplies to".
+    // - Exit the supplier focus's RIGHT side, enter the customer focus's
+    //   LEFT side — matches how supplier/customer arrows render for
+    //   single-focus layouts, so the visual semantic ("flows enter on the
+    //   left, exit on the right") stays consistent as users add focuses.
+    // - Color follows the PRIMARY focus's perspective:
+    //     * primary = supplier end → the other focus is primary's customer
+    //       → emerald (customer tone)
+    //     * primary = customer end → the other focus is primary's supplier
+    //       → indigo (supplier tone)
+    //     * primary = neither (rare, 3+ focuses) → default to supplier tone
+    //   This way adding MSFT to an NVDA-focused view renders the NVDA→MSFT
+    //   arrow in emerald (MSFT is NVDA's customer), while a user viewing
+    //   from MSFT's side sees the same edge in indigo.
     for (const ff of focusToFocus) {
       const from = laidBySymbol.get(ff.fromSym)
       const to = laidBySymbol.get(ff.toSym)
       if (!from || !to) continue
+      const tone: EdgeTone =
+        primarySymbol === ff.fromSym
+          ? 'customer'
+          : primarySymbol === ff.toSym
+            ? 'supplier'
+            : 'supplier'
       laidEdges.push({
         id: `ff-${ff.fromSym}-${ff.toSym}`,
         fromX: from.x + NODE_W / 2,
         fromY: from.y,
-        toX: to.x + NODE_W / 2,
+        toX: to.x - NODE_W / 2,
         toY: to.y,
         note: ff.note,
-        tone: 'customer',
+        tone,
         weight: null,
         source: null
       })
@@ -897,11 +964,16 @@ export function ValueChainDiagram({
   const addedCount = focusSet.size - 1
 
   const edgePath = (e: LaidOutEdge): string => {
-    // Focus→focus edges share an X coordinate; route them out to the right of
-    // the center column as a C-curve instead of a straight vertical line.
-    if (e.id.startsWith('ff-')) {
-      const loopOffset = 120
-      const midX = Math.max(e.fromX, e.toX) + loopOffset
+    // Focus→focus edges: ff routing now exits supplier.right and enters
+    // customer.left (same direction convention as supplier/customer arrows
+    // elsewhere). For focuses stacked in the same center column, the arrow
+    // needs to bridge ~180px of horizontal space, so we route with a
+    // right-side loop — out and back — so the arrow clearly enters the
+    // customer focus's LEFT face. Detected by same-y-range endpoints with
+    // reversed-direction x delta (supplier.right > customer.left).
+    if (e.id.startsWith('ff-') && e.fromX > e.toX) {
+      const loopOffset = 160
+      const midX = e.fromX + loopOffset
       return `M ${e.fromX} ${e.fromY} C ${midX} ${e.fromY}, ${midX} ${e.toY}, ${e.toX} ${e.toY}`
     }
     const dx = e.toX - e.fromX

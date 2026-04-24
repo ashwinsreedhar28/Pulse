@@ -171,6 +171,9 @@ export interface ProbeFeedResult {
 export type TtsEngine = 'kokoro' | 'piper' | 'say'
 export type Theme = 'system' | 'default' | 'light' | 'fiesta' | 'zazu' | 'ocean' | 'casino'
 export type ResolvedTheme = Exclude<Theme, 'system'>
+// Cloud AI routing for value-chain generation + sector classification.
+// 'auto' picks Claude when a key is configured, else Ollama.
+export type AiProvider = 'auto' | 'ollama' | 'claude'
 
 export interface Preferences {
   pollIntervalMin: number
@@ -185,6 +188,10 @@ export interface Preferences {
   ttsVoice: string
   theme: Theme
   mediaPipelineEnabled: boolean
+  aiProvider: AiProvider
+  // Anthropic API key. Stored in the local pulse.db only; never logged.
+  // Empty string when the user hasn't configured cloud AI.
+  anthropicApiKey: string
 }
 
 export interface SportsTeam {
@@ -459,6 +466,10 @@ export interface GraphEdgeOverride {
   weight: number | null
   source: string
   acceptedAt: number
+  // Unified-graph sector tag. Identifies which sector's value-chain view
+  // this edge naturally lives in. Nullable on pre-v35 rows until the
+  // bootstrap service backfills.
+  sectorId?: string | null
 }
 
 // Auto-discovered node. Rendered as a first-class tile alongside the hand-
@@ -472,6 +483,10 @@ export interface GraphNodeOverride {
   blurb: string | null
   source: string
   acceptedAt: number
+  // Unified-graph sector FK. Nullable on pre-v35 rows; set by the
+  // bootstrap backfill (legacy sector → sectorId via catalog legacyIds)
+  // and by future writers (chain absorber, classifier).
+  sectorId?: string | null
 }
 
 export interface GraphSweepSummary {
@@ -952,6 +967,47 @@ export type ConfigImportResult =
   | { ok: true; config: PulseConfig }
   | { ok: false; canceled?: true; error?: string }
 
+// Unified multi-sector graph types. `Sector` mirrors the sector catalog
+// entry; `SectorWithContent` adds direct + rolled-up ticker counts so the
+// UI can hide empty sectors. `TickerSector` is the many-to-many row
+// between a symbol and a sector (one isPrimary=true per symbol, up to 5
+// secondaries with confidence ≥ 0.6).
+export interface SectorStage {
+  id: string
+  name: string
+}
+export interface Sector {
+  id: string
+  parentId: string | null
+  name: string
+  description: string | null
+  stages: SectorStage[]
+}
+export interface SectorWithContent extends Sector {
+  tickerCount: number
+  descendantTickerCount: number
+}
+export interface TickerSector {
+  symbol: string
+  sectorId: string
+  isPrimary: boolean
+  confidence: number | null
+  source: string
+  assignedAt: number
+}
+
+// Progress snapshot emitted by the bulk regenerate-all-chains run.
+// Broadcast on 'chainRegen:progress' after each symbol finishes so the
+// Settings UI can show a live counter without polling.
+export interface RegenerateAllProgress {
+  total: number
+  completed: number
+  currentSymbol: string | null
+  succeeded: number
+  failed: number
+  running: boolean
+}
+
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>
 
@@ -1161,6 +1217,17 @@ const api = {
       ),
     getCompanyChain: (symbol: string) =>
       invoke<CompanyValueChainRow | null>('stocks:getCompanyChain', symbol),
+    regenerateAllChains: (): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('stocks:regenerateAllChains'),
+    getRegenerateAllProgress: (): Promise<RegenerateAllProgress> =>
+      invoke<RegenerateAllProgress>('stocks:getRegenerateAllProgress'),
+    onRegenerateAllProgress: (cb: (p: RegenerateAllProgress) => void): (() => void) => {
+      const listener = (_e: unknown, p: RegenerateAllProgress): void => cb(p)
+      ipcRenderer.on('chainRegen:progress', listener)
+      return (): void => {
+        ipcRenderer.off('chainRegen:progress', listener)
+      }
+    },
     onCompanyChainUpdated: (cb: (symbol: string) => void): (() => void) => {
       const listener = (_e: unknown, symbol: string): void => cb(symbol)
       ipcRenderer.on('companyChain:updated', listener)
@@ -1272,6 +1339,19 @@ const api = {
         ipcRenderer.off('graph:updated', listener)
       }
     }
+  },
+  sectors: {
+    list: (): Promise<Sector[]> => invoke<Sector[]>('sectors:list'),
+    listWithContent: (): Promise<SectorWithContent[]> =>
+      invoke<SectorWithContent[]>('sectors:listWithContent'),
+    forSymbol: (symbol: string): Promise<TickerSector[]> =>
+      invoke<TickerSector[]>('sectors:forSymbol', symbol),
+    // Map of symbol → primary sectorId. Useful for bulk cross-sector edge
+    // detection in the value-chain renderer without N round-trips.
+    primaryIndex: (): Promise<Record<string, string>> =>
+      invoke<Record<string, string>>('sectors:primaryIndex'),
+    topLevelAncestor: (sectorId: string): Promise<string | null> =>
+      invoke<string | null>('sectors:topLevelAncestor', sectorId)
   },
   sports: {
     listLeagues: () => invoke<SportsLeague[]>('sports:listLeagues'),

@@ -8,7 +8,7 @@ import { Reels } from './components/Reels'
 import { CalendarStrip } from './components/CalendarStrip'
 import { ExternalReader } from './components/ExternalReader'
 import { ValueChain } from './components/ValueChain'
-import { StockValueChainCard } from './components/StockValueChainCard'
+import { UnifiedValueChainCard } from './components/UnifiedValueChainCard'
 import { SecFilingsSection } from './components/SecFilingsSection'
 import { OptionsSnapshotSection } from './components/OptionsSnapshotSection'
 import { EarningsReleaseSection } from './components/EarningsReleaseSection'
@@ -16,7 +16,6 @@ import { CollapsibleSection } from './components/CollapsibleSection'
 import { WhyThisMatters } from './components/WhyThisMatters'
 import { resolveDisplayQuote } from './components/quoteDisplay'
 import { TickerSearchBox } from './components/TickerSearchBox'
-import { CompanyValueChainSection } from './components/CompanyValueChainSection'
 import {
   ScoreFlourish,
   sportForLeagueId,
@@ -3522,17 +3521,15 @@ function StockDetail({
             </CollapsibleSection>
           )}
 
-          <StockValueChainCard symbol={ticker.symbol} tickers={tickers} />
-
-          <CompanyValueChainSection
+          <UnifiedValueChainCard
             symbol={ticker.symbol}
             companyName={ticker.companyName ?? ticker.symbol}
+            tickers={tickers}
             onOpenTicker={async (sym) => {
               // Ensure a passive ticker row exists for the clicked node,
               // then navigate to its detail page. Falls back to companyName
-              // = symbol when we can't find a richer label in the generated
-              // chain's nodes (the SecFilingsSection / ValueChain bridge
-              // that came from).
+              // = symbol when we can't find a richer label in the merged
+              // chain's nodes.
               const existing = tickers.find(
                 (t) => t.symbol.toUpperCase() === sym.toUpperCase()
               )

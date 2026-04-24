@@ -14,6 +14,11 @@ import {
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { initDatabase, closeDatabase } from './database/connection'
+import { bootstrapSectorCatalog } from './services/sectorService'
+import {
+  backfillPassiveTickersForAbsorbedNodes,
+  repopulateAbsorbedSectorIds
+} from './services/chainAbsorberService'
 import { registerDbIpc } from './ipc/handlers'
 import {
   startPolling,
@@ -505,6 +510,34 @@ app.whenReady().then(async () => {
 
   initDatabase()
   splashUpdate('db', 'ok')
+
+  // Sector catalog sync + ticker_sectors backfill runs immediately after
+  // migrations. Idempotent — re-syncs on every boot, but the backfill only
+  // fires when ticker_sectors is empty.
+  bootstrapSectorCatalog()
+
+  // One-time fix for chain-absorbed tickers created before the absorber
+  // started calling ensurePassiveTicker. Without this, the stocks scheduler
+  // has no tickers-table row for those symbols and their tiles render as
+  // EXT with no quote. Idempotent — skips symbols that already have rows.
+  const passiveBackfilled = backfillPassiveTickersForAbsorbedNodes()
+  if (passiveBackfilled > 0) {
+    console.log(
+      `[boot] created ${passiveBackfilled} passive ticker row(s) for absorbed nodes`
+    )
+  }
+
+  // Populate sectorId on absorbed non-focus nodes that were written with
+  // a null tag by an earlier, more conservative absorber. With Claude's
+  // chain quality, counterparties in a focus's chain are almost always in
+  // the focus's sector (banks in COF's chain are financials, payments
+  // networks in MA's chain are fin-payments). Making them inheritable
+  // lights up the unified Value Chain tabs + Diagram so the graph grows
+  // dynamically as the user generates each focus.
+  const reseeded = repopulateAbsorbedSectorIds()
+  if (reseeded > 0) {
+    console.log(`[boot] repopulated sectorId on ${reseeded} absorbed override row(s)`)
+  }
 
   registerReelProtocol()
   registerIpc()

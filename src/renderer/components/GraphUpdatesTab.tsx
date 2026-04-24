@@ -16,7 +16,8 @@ import type {
   GraphCandidateStatus,
   GraphEdgeOverride,
   GraphNodeOverride,
-  GraphSweepSummary
+  GraphSweepSummary,
+  RegenerateAllProgress
 } from '../../preload'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -96,6 +97,7 @@ export function GraphUpdatesTab(): JSX.Element {
     rejected: number
     skipped: number
   } | null>(null)
+  const [regenProgress, setRegenProgress] = useState<RegenerateAllProgress | null>(null)
 
   const reload = useCallback(async (): Promise<void> => {
     const [overrideRows, nodeRows, auditRows, weekCounts] = await Promise.all([
@@ -120,6 +122,15 @@ export function GraphUpdatesTab(): JSX.Element {
     })
   }, [reload])
 
+  // Subscribe to bulk-regenerate progress + hydrate the current snapshot on
+  // mount so refreshing the Settings panel mid-run doesn't reset the meter.
+  useEffect(() => {
+    void window.api.stocks.getRegenerateAllProgress().then((p) => {
+      if (p.total > 0) setRegenProgress(p)
+    })
+    return window.api.stocks.onRegenerateAllProgress((p) => setRegenProgress(p))
+  }, [])
+
   const onRunSweep = async (): Promise<void> => {
     setSweeping(true)
     try {
@@ -140,6 +151,11 @@ export function GraphUpdatesTab(): JSX.Element {
     } finally {
       setTenKScanning(false)
     }
+  }
+
+  const onRegenerateAll = async (): Promise<void> => {
+    if (regenProgress?.running) return
+    await window.api.stocks.regenerateAllChains()
   }
 
   const onUndo = async (
@@ -229,8 +245,37 @@ export function GraphUpdatesTab(): JSX.Element {
             >
               {tenKScanning ? 'Scanning…' : '10-K scan'}
             </button>
+            <button
+              onClick={onRegenerateAll}
+              disabled={regenProgress?.running ?? false}
+              title="Generate a fresh value chain for every watchlist ticker plus every ticker with an existing chain. Sequential — 30-60s per ticker. Costs a few cents per ticker when Claude is configured."
+              className={`text-[10.5px] font-semibold uppercase tracking-[0.18em] px-3 py-1.5 rounded-full ring-1 ring-inset transition-colors ${
+                regenProgress?.running
+                  ? 'bg-zinc-800 text-zinc-500 ring-zinc-700 cursor-wait'
+                  : 'bg-violet-500/15 text-violet-200 ring-violet-500/40 hover:bg-violet-500/25'
+              }`}
+            >
+              {regenProgress?.running
+                ? `Generating ${regenProgress.completed + 1}/${regenProgress.total}…`
+                : 'Regenerate all chains'}
+            </button>
           </div>
         </div>
+        {regenProgress && regenProgress.total > 0 && (
+          <div className="mt-2 text-[11px] text-zinc-500">
+            {regenProgress.running ? (
+              <>
+                Regenerating {regenProgress.currentSymbol ?? '…'} ·{' '}
+                {regenProgress.completed}/{regenProgress.total} complete
+              </>
+            ) : (
+              <>
+                Last regenerate-all — {regenProgress.succeeded} succeeded ·{' '}
+                {regenProgress.failed} failed · {regenProgress.total} total
+              </>
+            )}
+          </div>
+        )}
         {lastSummary && (
           <div className="mt-2 text-[11px] text-zinc-500">
             Last news sweep — {lastSummary.proposed} proposed · {lastSummary.accepted}{' '}

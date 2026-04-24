@@ -121,3 +121,16 @@ export function deleteCompanyValueChain(symbol: string): void {
     .prepare(`DELETE FROM company_value_chains WHERE symbol = ?`)
     .run(symbol.toUpperCase())
 }
+
+// List every symbol that currently has a chain row. Used by the bulk
+// regenerate flow to find "every ticker the user has already generated for"
+// — the natural target set for a one-click refresh when the generator or
+// absorber evolves.
+export function listCompanyValueChainSymbols(): string[] {
+  return getDb()
+    .prepare<[], { symbol: string }>(
+      `SELECT symbol FROM company_value_chains ORDER BY symbol`
+    )
+    .all()
+    .map((r) => r.symbol)
+}

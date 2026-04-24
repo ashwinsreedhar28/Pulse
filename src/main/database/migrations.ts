@@ -972,5 +972,70 @@ export const migrations: Migration[] = [
         );
       `)
     }
+  },
+  {
+    version: 35,
+    name: 'unified multi-sector graph — sectors, ticker_sectors, sectorId columns',
+    // Lays the data model for the unified multi-sector ecosystem graph. The
+    // sector catalog (src/data/sectorCatalog.json) is the source of truth;
+    // `sectors` mirrors it into SQL so override rows can FK by id. parentId
+    // is nullable for top-level (GICS-11-inspired) sectors and set for
+    // sub-sectors like `tech-semi` under `technology`. stagesJson is a JSON
+    // array of { id, name } only on leaf sub-sectors that actually carry
+    // value-chain nodes — top-level sectors are organizational.
+    //
+    // ticker_sectors is many-to-many. One row per (symbol, sectorId); the
+    // row with isPrimary=1 is the ticker's dominant sector. Confidence is
+    // the Ollama classifier's score (0..1); source identifies who assigned
+    // the row (e.g. 'legacy_json' for the backfill, 'ollama_classify' for
+    // future classification calls).
+    //
+    // Existing graph_edge_overrides + graph_node_overrides get a sectorId
+    // column so the unified renderer can partition them by sector without
+    // re-walking endpoints. The legacy graph_node_overrides.sector text
+    // column stays — the bootstrap service maps it to sectorId on first
+    // boot and future writes populate both until Phase 2 drops the old
+    // column.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sectors (
+          id TEXT PRIMARY KEY,
+          parentId TEXT,
+          name TEXT NOT NULL,
+          description TEXT,
+          stagesJson TEXT,
+          catalogVersion INTEGER NOT NULL DEFAULT 0,
+          updatedAt INTEGER NOT NULL,
+          FOREIGN KEY (parentId) REFERENCES sectors(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_sectors_parent ON sectors(parentId);
+
+        CREATE TABLE IF NOT EXISTS ticker_sectors (
+          symbol TEXT NOT NULL,
+          sectorId TEXT NOT NULL,
+          isPrimary INTEGER NOT NULL DEFAULT 0,
+          confidence REAL,
+          source TEXT NOT NULL,
+          assignedAt INTEGER NOT NULL,
+          PRIMARY KEY (symbol, sectorId),
+          FOREIGN KEY (sectorId) REFERENCES sectors(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ticker_sectors_sector
+          ON ticker_sectors(sectorId);
+        CREATE INDEX IF NOT EXISTS idx_ticker_sectors_primary
+          ON ticker_sectors(symbol, isPrimary);
+      `)
+
+      // Add sectorId to existing override tables. SQLite ALTER TABLE ADD
+      // COLUMN is safe (nullable, no default needed).
+      const edgeCols = db.prepare(`PRAGMA table_info(graph_edge_overrides)`).all() as Array<{ name: string }>
+      if (!edgeCols.some((c) => c.name === 'sectorId')) {
+        db.exec(`ALTER TABLE graph_edge_overrides ADD COLUMN sectorId TEXT`)
+      }
+      const nodeCols = db.prepare(`PRAGMA table_info(graph_node_overrides)`).all() as Array<{ name: string }>
+      if (!nodeCols.some((c) => c.name === 'sectorId')) {
+        db.exec(`ALTER TABLE graph_node_overrides ADD COLUMN sectorId TEXT`)
+      }
+    }
   }
 ]

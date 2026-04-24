@@ -43,17 +43,126 @@ const LEGAL_SUFFIXES = [
   'llc'
 ]
 
+// Hand-curated map for well-known renames. SEC's sec_cik_map only carries
+// current registered names, so tickers that went through a rebrand (or
+// whose current registered name shares no words with the informal name the
+// model keeps emitting) can't be resolved from the index alone.
+// Keys are normalized names — see normalizeCompanyName. When the model
+// emits one of these, we return the mapped ticker at score 1.0 so the
+// chain-generation resolver treats it as verified.
+const NAME_ALIASES: Record<string, string> = {
+  // Energy rebrands + acronym-only SEC names.
+  schlumberger: 'SLB',
+  'royal dutch shell': 'SHEL',
+  'british petroleum': 'BP',
+  // Tech rebrands + parent/brand aliases.
+  facebook: 'META',
+  google: 'GOOGL',
+  alphabet: 'GOOGL',
+  'international business machines': 'IBM',
+  // Consumer / media rebrands.
+  'dow chemical': 'DOW',
+  fedex: 'FDX',
+  // Names the chain generator keeps emitting that don't match SEC's
+  // registered entity name (subsidiaries, brand names, or former names).
+  'monster energy': 'MNST',
+  'monster beverage': 'MNST',
+  'discover financial services': 'DFS',
+  discover: 'DFS',
+  aetna: 'CVS',
+  // Word-order-flipped SEC names that confuse the normalizer.
+  'charles schwab': 'SCHW',
+  'the charles schwab corporation': 'SCHW',
+  // Ollama hallucinates "USB Corporation" for U.S. Bancorp (ticker USB).
+  'u s bancorp': 'USB',
+  'us bancorp': 'USB',
+  'usb corporation': 'USB',
+  // Other common financials with quirks.
+  'pnc financial services': 'PNC',
+  'pnc financial services group': 'PNC',
+  // Foreign / informal names the chain generator emits repeatedly for
+  // companies with established US listings.
+  tsmc: 'TSM',
+  'taiwan semiconductor manufacturing': 'TSM',
+  'taiwan semiconductor': 'TSM',
+  'juniper networks': 'JNPR',
+  'ibm corporation': 'IBM',
+  'international business machines corporation': 'IBM',
+  'ase technology': 'ASX',
+  'ase technology holding': 'ASX',
+  'advanced semiconductor engineering': 'ASX',
+  'alps alpine': 'ALPS',
+  // Common post-merger / rebrand cases that keep showing up as unverified.
+  'coherent corp': 'COHR',
+  'ii-vi': 'COHR',
+  'ii-vi incorporated': 'COHR',
+  'kioxia': 'KXIAY',
+  'kioxia holdings': 'KXIAY',
+  // Foreign parent entities the model emits that have US-listed ADRs.
+  experian: 'EXPGY',
+  'experian plc': 'EXPGY',
+  femsa: 'FMX',
+  'coca cola femsa': 'KOF',
+  'coca-cola femsa': 'KOF',
+  'samsung electronics': 'SSNLF',
+  samsung: 'SSNLF',
+  'continental ag': 'CTTAY',
+  'continental tires': 'CTTAY',
+  bridgestone: 'BRDCY',
+  'foxconn technology': 'FXCOF',
+  foxconn: 'FXCOF',
+  'coca cola european partners': 'CCEP',
+  'coca-cola european partners': 'CCEP',
+  'volkswagen group': 'VWAGY',
+  volkswagen: 'VWAGY',
+  'fiat chrysler': 'STLA',
+  'fiat chrysler automobiles': 'STLA',
+  stellantis: 'STLA',
+  // Private / state entities — keep the alias map explicit about these so
+  // they don't slip through if Ollama claims them as tickers. These all
+  // resolve to null by returning a known non-ticker sentinel? Actually we
+  // only have string values. Best we can do is omit and let them stay
+  // unverified; leaving a marker here for future work.
+  // 'fidelity investments': 'FNF' — no, Fidelity (brokerage) is private
+  // 'jpmorgan chase': 'JPM' — handled by pickCommonStock fix
+  // 'bank of america': 'BAC' — handled by pickCommonStock fix
+  // 'citigroup': 'C' — handled by pickCommonStock fix
+  // 'wells fargo': 'WFC' — handled by pickCommonStock fix
+}
+
 export function normalizeCompanyName(raw: string): string {
   const lower = raw.toLowerCase().trim()
-  // Strip period-terminated suffixes by splitting on word boundaries.
-  const tokens = lower
-    .replace(/[,&.]/g, ' ')
+  // Collapse dot-separated abbreviations ("p.l.c." → "plc", "u.s.a." → "usa",
+  // "i.b.m." → "ibm") BEFORE stripping dots individually.
+  // Also strip apostrophes without introducing a split, so "McDonald's"
+  // normalizes to "mcdonalds" (one token) rather than "mcdonald s" (two),
+  // matching SEC's punctuation-stripped entity names.
+  const collapsed = lower
+    .replace(/\b(?:[a-z]\.){2,}[a-z]?\.?/g, (m) => m.replace(/\./g, ''))
+    .replace(/[''`]/g, '')
     .replace(/\bthe\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(' ')
-    .filter((t) => t.length > 0 && !LEGAL_SUFFIXES.includes(t.replace(/\./g, '')))
+  // Split on any non-alphanumeric run — covers spaces, commas, periods,
+  // slashes ("LIMITED/NV"), ampersands, hyphens. Without this, SEC names
+  // like "SLB LIMITED/NV" left "limited/nv" as one unrecognized token;
+  // with it, the slash splits the token into two, both of which match
+  // LEGAL_SUFFIXES and get stripped.
+  const tokens = collapsed
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 0 && !LEGAL_SUFFIXES.includes(t))
   return tokens.join(' ').trim()
+}
+
+// First letter of each token. "British Petroleum" → "BP",
+// "International Business Machines" → "IBM". Used by the acronym matcher
+// to bridge short SEC names (BP, HP, IBM) to full informal names the
+// model tends to emit.
+function tokenAcronym(normalized: string): string {
+  return normalized
+    .split(' ')
+    .filter((t) => t.length > 0)
+    .map((t) => t.charAt(0))
+    .join('')
+    .toUpperCase()
 }
 
 // Build the in-memory index once per call. Cheap — tickers table is <100
@@ -96,16 +205,47 @@ export interface ResolveResult {
   score: number // 1.0 = exact normalized match, ~0.7 = substring match
 }
 
+// Prefix- or suffix-word-boundary match. Accepts either side being a
+// superset of the other, so "Shell" matches "Royal Dutch Shell" and "Apple"
+// matches "Apple Inc." all through the same check.
+function isWordBoundaryMatch(a: string, b: string): boolean {
+  if (a === b) return true
+  return (
+    a.startsWith(b + ' ') ||
+    b.startsWith(a + ' ') ||
+    a.endsWith(' ' + b) ||
+    b.endsWith(' ' + a)
+  )
+}
+
+// When SEC's sec_cik_map returns multiple entries for the same normalized
+// name — typically one common-stock ticker + a handful of preferred-stock
+// classes (BAC vs BAC-PB/PK/PL/PE, JPM vs JPM-PC/PD/PJ/PK, etc.) — pick
+// the common stock. Preferred tickers always carry a hyphen; common stock
+// doesn't. Shortest symbol as tiebreaker favors the primary class over
+// warrants / tracking stocks that might share the name.
+function pickCommonStock<T extends { symbol: string }>(candidates: T[]): T | null {
+  const commonStock = candidates.filter((c) => !c.symbol.includes('-'))
+  if (commonStock.length === 0) return null
+  return [...commonStock].sort((a, b) => a.symbol.length - b.symbol.length)[0]
+}
+
 // Resolve a single name against the index. Strategy:
-//   1. Exact normalized match → single hit: accept (score 1.0).
-//   2. Exact normalized match → multiple hits: prefer tickers source; if
+//   1. Curated rename alias (Schlumberger → SLB, etc.): accept (score 1.0).
+//   2. Exact normalized match → single hit: accept (score 1.0).
+//   3. Exact normalized match → multiple hits: prefer tickers source; if
 //      still ambiguous (e.g., same company listed twice in SEC map), skip.
-//   3. Substring match on normalized forms → only accept when exactly one
-//      candidate (avoid "Amazon" matching "Amazon" and "Amazon Fresh").
-//   4. Token-subset match for short queries: reject (too noisy).
+//   4. Word-boundary substring match (prefix or suffix): only accept when
+//      exactly one candidate, to avoid "Amazon" matching "Amazon Fresh".
+//   5. Token-subset match for short queries: reject (too noisy).
 export function resolveCompanyName(rawName: string): ResolveResult | null {
   const normalized = normalizeCompanyName(rawName)
   if (normalized.length < 2) return null
+
+  const aliasSymbol = NAME_ALIASES[normalized]
+  if (aliasSymbol) {
+    return { symbol: aliasSymbol, matchedName: rawName, score: 1.0 }
+  }
 
   const index = loadIndex()
 
@@ -123,19 +263,21 @@ export function resolveCompanyName(rawName: string): ResolveResult | null {
         score: 0.95
       }
     }
-    // Multiple SEC rows with same name — could be reorganizations, shell
-    // companies, multiple share classes. Too ambiguous to auto-pick.
+    // Multiple SEC rows with same name — usually one common-stock ticker
+    // plus several preferred-stock classes (JPM + JPM-PC/PD/PJ/PK, etc.).
+    // Pick the common-stock entry.
+    const common = pickCommonStock(exact)
+    if (common) {
+      return { symbol: common.symbol, matchedName: common.original, score: 0.95 }
+    }
     return null
   }
 
-  // Substring match — the 10-K might say "Apple" while SEC has "Apple Inc.".
-  // Require the query to be a prefix or full-word substring of the candidate,
-  // or vice versa, to avoid false positives like "Tesla" matching "Teslas".
-  const starts = index.filter(
-    (e) =>
-      e.normalized.startsWith(normalized + ' ') ||
-      normalized.startsWith(e.normalized + ' ')
-  )
+  // Word-boundary substring match — the 10-K might say "Apple" while SEC
+  // has "Apple Inc.", or the model says "Royal Dutch Shell" while SEC has
+  // just "Shell". Require a whole-word boundary in either direction, to
+  // avoid false positives like "Tesla" matching "Teslas".
+  const starts = index.filter((e) => isWordBoundaryMatch(e.normalized, normalized))
   if (starts.length === 1) {
     return {
       symbol: starts[0].symbol,
@@ -152,7 +294,48 @@ export function resolveCompanyName(rawName: string): ResolveResult | null {
         score: 0.75
       }
     }
+    const common = pickCommonStock(starts)
+    if (common) {
+      return { symbol: common.symbol, matchedName: common.original, score: 0.75 }
+    }
     return null
+  }
+
+  // Acronym fallback — when the SEC entry is a short acronym ("BP", "HP",
+  // "IBM") and the query is a multi-token expansion whose first letters
+  // spell the entry. Scoped tight (entry normalized ≤ 4 chars, query has
+  // ≥ 2 tokens) so natural English phrases can't accidentally match short
+  // unrelated tickers.
+  const queryTokens = normalized.split(' ').filter((t) => t.length > 0)
+  if (queryTokens.length >= 2) {
+    const acronym = tokenAcronym(normalized)
+    const acronymHits = index.filter(
+      (e) =>
+        e.normalized.length <= 4 &&
+        !e.normalized.includes(' ') &&
+        e.normalized.toUpperCase() === acronym
+    )
+    if (acronymHits.length === 1) {
+      return {
+        symbol: acronymHits[0].symbol,
+        matchedName: acronymHits[0].original,
+        score: 0.85
+      }
+    }
+    if (acronymHits.length > 1) {
+      const tickersHits = acronymHits.filter((e) => e.source === 'tickers')
+      if (tickersHits.length === 1) {
+        return {
+          symbol: tickersHits[0].symbol,
+          matchedName: tickersHits[0].original,
+          score: 0.8
+        }
+      }
+      const common = pickCommonStock(acronymHits)
+      if (common) {
+        return { symbol: common.symbol, matchedName: common.original, score: 0.8 }
+      }
+    }
   }
 
   return null
@@ -166,6 +349,11 @@ export function resolveCompanyNames(names: string[]): Map<string, ResolveResult>
   for (const raw of names) {
     const normalized = normalizeCompanyName(raw)
     if (normalized.length < 2) continue
+    const aliasSymbol = NAME_ALIASES[normalized]
+    if (aliasSymbol) {
+      out.set(raw, { symbol: aliasSymbol, matchedName: raw, score: 1.0 })
+      continue
+    }
     const exact = index.filter((e) => e.normalized === normalized)
     if (exact.length === 1) {
       out.set(raw, { symbol: exact[0].symbol, matchedName: exact[0].original, score: 1.0 })
@@ -179,14 +367,15 @@ export function resolveCompanyNames(names: string[]): Map<string, ResolveResult>
           matchedName: tickersHits[0].original,
           score: 0.95
         })
+        continue
+      }
+      const common = pickCommonStock(exact)
+      if (common) {
+        out.set(raw, { symbol: common.symbol, matchedName: common.original, score: 0.95 })
       }
       continue
     }
-    const starts = index.filter(
-      (e) =>
-        e.normalized.startsWith(normalized + ' ') ||
-        normalized.startsWith(e.normalized + ' ')
-    )
+    const starts = index.filter((e) => isWordBoundaryMatch(e.normalized, normalized))
     if (starts.length === 1) {
       out.set(raw, { symbol: starts[0].symbol, matchedName: starts[0].original, score: 0.8 })
       continue
@@ -199,6 +388,11 @@ export function resolveCompanyNames(names: string[]): Map<string, ResolveResult>
           matchedName: tickersHits[0].original,
           score: 0.75
         })
+        continue
+      }
+      const common = pickCommonStock(starts)
+      if (common) {
+        out.set(raw, { symbol: common.symbol, matchedName: common.original, score: 0.75 })
       }
     }
   }

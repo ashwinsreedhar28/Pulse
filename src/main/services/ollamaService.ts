@@ -1192,6 +1192,12 @@ export async function generateCompanyValueChain(input: {
   profileDescription?: string | null
   tenKExcerpt?: string | null
   newsSnippets?: Array<{ title: string; summary: string | null }>
+  // Canonical stage list from the focus's sector. When provided, the
+  // prompt constrains Ollama to pick from this list verbatim — same
+  // constraint as the Claude path so cross-chain stage fragmentation is
+  // prevented regardless of which provider ran.
+  canonicalStages?: Array<{ id: string; name: string }>
+  sectorName?: string
 }): Promise<GeneratedValueChain | null> {
   if (!input.companyName.trim()) {
     console.warn('[ollama] generateCompanyValueChain: empty companyName')
@@ -1253,8 +1259,19 @@ export async function generateCompanyValueChain(input: {
     `  ]\n` +
     `}\n\n` +
     `Rules (strict):\n` +
-    `- 3 to 7 stages, ordered from upstream (raw inputs / R&D) to downstream ` +
-    `(end markets / consumers). Stage ids must be kebab-case identifiers.\n` +
+    (input.canonicalStages && input.canonicalStages.length > 0
+      ? `- STAGES ARE FIXED. Use EXACTLY these stage ids (no others, no inventions):\n` +
+        input.canonicalStages
+          .map((s) => `    "${s.id}" (${s.name})`)
+          .join('\n') +
+        `\n  Every node's "stage" field and every entry in the "stages" array ` +
+        `MUST use one of these ids verbatim. Order the stages array from ` +
+        `upstream to downstream using the canonical list above.\n`
+      : `- 3 to 7 stages, ordered from upstream (inputs / R&D / origination) to ` +
+        `downstream (end markets / consumers). Stage ids must be kebab-case.\n` +
+        `- Use INDUSTRY-APPROPRIATE stage names. Do not recycle generic tech-pipeline ` +
+        `stages ("raw-materials", "fabless", "foundry", "end-markets") for sectors ` +
+        `where they don't fit.\n`) +
     `- 6 to 20 nodes total, including the focus. The focus node's stage should ` +
     `match what the company actually is (producer, platform, retailer, etc.).\n` +
     `- 6 to 30 edges. Every edge endpoint must reference a node symbol that ` +
@@ -1262,8 +1279,20 @@ export async function generateCompanyValueChain(input: {
     `- isTicker=true only for companies you're certain trade publicly on a ` +
     `major exchange. When uncertain, set false and use a stable UPPERCASE_LABEL ` +
     `as the symbol (e.g. "SUEZ_WATER" for a private entity).\n` +
-    `- Do not invent relationships you don't actually know about. Prefer ` +
-    `well-documented connections from the company's own filings and press.\n` +
+    `\n` +
+    `EDGE DIRECTION — READ CAREFULLY:\n` +
+    `- "supplier" means "from" supplies "to". The seller is "from", the buyer is "to". ` +
+    `Example: ASML supplies machines to TSMC → {"from":"ASML","to":"TSM","relationship":"supplier"}.\n` +
+    `- "customer" means "from" is a customer of "to" (from buys from to, so to supplies from). ` +
+    `Example: Apple buys chips from TSMC → {"from":"AAPL","to":"TSM","relationship":"customer"}.\n` +
+    `- "competitor" and "partner" are symmetric; either order is fine.\n` +
+    `- Do NOT emit an edge where an automaker is a "supplier" to a bank (banks lend to car ` +
+    `buyers, automakers don't supply banks). Retailers aren't suppliers to payment processors. ` +
+    `If a relationship is indirect — e.g. both parties serve the same customer — use "partner" ` +
+    `or omit the edge entirely. Reserve supplier/customer for DIRECT procurement or revenue.\n` +
+    `- Only include an edge when the relationship is well-documented from the company's own ` +
+    `filings, earnings calls, or mainstream press. No speculation.\n` +
+    `\n` +
     `- blurbs and notes must stay short (<140 / <120 chars), factual, no ` +
     `marketing language.\n` +
     `- If the company's value chain is genuinely unclear from the context, ` +
@@ -1817,7 +1846,168 @@ export async function summarizeTickerNews(
     if (relevantCount === 0) return { summary: null, relevantCount: 0 }
     return { summary: summaryStr.length > 0 ? summaryStr : null, relevantCount }
   } catch (err) {
-    console.warn('[ollama] summary failed:', err instanceof Error ? err.message : err)
+    // Our own REQUEST_TIMEOUT_MS timer triggers AbortController.abort() —
+    // surface that as a concise "timed out" at info level rather than a
+    // scary "operation was aborted" warning. Anything else (network errors,
+    // malformed JSON) still logs at warn.
+    if (err instanceof Error && err.name === 'AbortError') {
+      console.log('[ollama] summary timed out after', REQUEST_TIMEOUT_MS, 'ms — skipping')
+    } else {
+      console.warn('[ollama] summary failed:', err instanceof Error ? err.message : err)
+    }
+    emitHealth(false)
+    return null
+  }
+}
+
+export interface TickerSectorCandidate {
+  sectorId: string
+  confidence: number
+  reason: string | null
+}
+
+export interface TickerSectorClassification {
+  primary: TickerSectorCandidate
+  secondary: TickerSectorCandidate[]
+}
+
+// Classify a company into the unified sector catalog. Returns a primary
+// sector (highest-conviction assignment) plus zero-or-more secondary
+// sectors where the company has real, material operations. Cap / floor
+// enforcement lives in the caller (sectorService.ensureTickerSectorsClassified)
+// so this function stays a thin prompt wrapper.
+export async function classifyTickerSectors(input: {
+  symbol: string
+  companyName: string
+  profileDescription?: string | null
+  tenKExcerpt?: string | null
+  // Pre-rendered hierarchical sector list (one line per sector with
+  // parent indentation, id in parentheses, optional description).
+  sectorCatalogPrompt: string
+  // Allowed sector ids — model output is filtered against this set.
+  validSectorIds: string[]
+}): Promise<TickerSectorClassification | null> {
+  if (!input.companyName.trim()) return null
+  if (!(await checkOllamaHealth())) return null
+
+  const system =
+    `You classify a public company into sectors from a fixed catalog. ` +
+    `Output strict JSON:\n` +
+    `{\n` +
+    `  "primary": { "sectorId": "<id>", "confidence": 0.0-1.0, "reason": "one short sentence" },\n` +
+    `  "secondary": [\n` +
+    `    { "sectorId": "<id>", "confidence": 0.0-1.0, "reason": "one short sentence" }\n` +
+    `  ]\n` +
+    `}\n\n` +
+    `Rules:\n` +
+    `- primary.sectorId MUST be an EXACT match for one of the ids in the catalog below. ` +
+    `No inventing ids; no display names; no prefixes.\n` +
+    `- STRONGLY prefer the most specific leaf sub-sector (e.g. "tech-semi" over "technology", ` +
+    `"fin-payments" over "financials"). A top-level id like "financials" or "technology" is ` +
+    `ONLY acceptable when the company truly spans 3+ of its sub-sectors in material size ` +
+    `(e.g. Berkshire Hathaway, a real conglomerate). For focused companies, always return a leaf.\n` +
+    `- Watch for misleading business terms. "Payments network" and "card network" belong in ` +
+    `fin-payments, NOT communication-services (which is for telecom / media / interactive ad). ` +
+    `"Cloud infrastructure" is tech-cloud, not comms. "Investment bank" / "commercial bank" is ` +
+    `fin-banks. "Asset manager" / "broker" is fin-capital-markets. "Insurance" / "managed care" ` +
+    `is fin-insurance or hc-insurance depending on products.\n` +
+    `- Known examples for calibration: Mastercard → fin-payments. Visa → fin-payments. ` +
+    `PayPal → fin-payments. JPMorgan → fin-banks. Berkshire → financials (spans banks, ` +
+    `insurance, energy, consumer). Amazon → tech-cloud primary, consumer-discretionary ` +
+    `secondary. Netflix → comms-media. Alphabet → comms-interactive.\n` +
+    `- secondary is an array of OTHER sectors where this company has a real, material ` +
+    `business line — revenue segment, operating division, or strategic investment of scale. ` +
+    `Do NOT include a sector just because the company is a vendor to it. ` +
+    `Return an empty array if the company is focused on one sector only.\n` +
+    `- confidence is how certain you are the company operates in that sector, not how big the company is.\n` +
+    `- reason: 1 sentence, <120 chars, cite the business line. Example: "AWS is Amazon's cloud infrastructure arm with $100B+ annual revenue."\n\n` +
+    `Sector catalog (use these ids exactly):\n${input.sectorCatalogPrompt}`
+
+  const profileLine = input.profileDescription
+    ? `Profile: ${input.profileDescription.trim().slice(0, 1500)}\n`
+    : ''
+  const tenKLine = input.tenKExcerpt
+    ? `10-K Item 1 excerpt: ${input.tenKExcerpt.trim().slice(0, 3500)}\n`
+    : ''
+
+  const user =
+    `Symbol: ${input.symbol}\n` +
+    `Company: ${input.companyName}\n` +
+    profileLine +
+    tenKLine
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    let res: Response
+    try {
+      res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user }
+          ],
+          stream: false,
+          format: 'json',
+          options: { num_predict: 600, temperature: 0.1 }
+        }),
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!res.ok) {
+      emitHealth(false)
+      return null
+    }
+    const body = (await res.json()) as { message?: { content?: string } }
+    const content = body.message?.content
+    if (!content) return null
+    const parsed = JSON.parse(content) as {
+      primary?: unknown
+      secondary?: unknown
+    }
+    emitHealth(true)
+
+    const validSet = new Set(input.validSectorIds)
+
+    const parseCandidate = (raw: unknown): TickerSectorCandidate | null => {
+      if (!raw || typeof raw !== 'object') return null
+      const r = raw as { sectorId?: unknown; confidence?: unknown; reason?: unknown }
+      const sectorId = typeof r.sectorId === 'string' ? r.sectorId.trim() : ''
+      if (!sectorId || !validSet.has(sectorId)) return null
+      const conf = typeof r.confidence === 'number' ? Math.max(0, Math.min(1, r.confidence)) : 0
+      const reason =
+        typeof r.reason === 'string' && r.reason.trim().length > 0
+          ? r.reason.trim().slice(0, 200)
+          : null
+      return { sectorId, confidence: conf, reason }
+    }
+
+    const primary = parseCandidate(parsed.primary)
+    if (!primary) return null
+
+    const secondary: TickerSectorCandidate[] = []
+    if (Array.isArray(parsed.secondary)) {
+      const seen = new Set<string>([primary.sectorId])
+      for (const raw of parsed.secondary) {
+        const cand = parseCandidate(raw)
+        if (!cand) continue
+        if (seen.has(cand.sectorId)) continue
+        seen.add(cand.sectorId)
+        secondary.push(cand)
+      }
+    }
+
+    return { primary, secondary }
+  } catch (err) {
+    console.warn(
+      '[ollama] classifyTickerSectors failed:',
+      err instanceof Error ? err.message : err
+    )
     emitHealth(false)
     return null
   }

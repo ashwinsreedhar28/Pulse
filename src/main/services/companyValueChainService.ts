@@ -11,19 +11,25 @@ import { JSDOM, VirtualConsole } from 'jsdom'
 import { getDb } from '../database/connection'
 import {
   getCompanyValueChain,
+  listCompanyValueChainSymbols,
   setCompanyValueChain,
   type CompanyValueChain,
   type CompanyValueChainNode
 } from '../database/companyValueChains'
-import { getFilingsForSymbol, type SecFiling } from '../database/secFilings'
+import { getTickerBySymbol, listTickers } from '../database/tickers'
+import { getFilingsForSymbol, lookupCik, type SecFiling } from '../database/secFilings'
 import { resolveCompanyName } from './companyNameResolver'
 import { ensureCompanyProfile, getCompanyProfile } from './companyProfileService'
-import {
-  generateCompanyValueChain as ollamaGenerate,
-  type GeneratedValueChain
-} from './ollamaService'
+import { generateCompanyValueChain as routedGenerate } from './aiClient'
+import type { GeneratedValueChain } from './ollamaService'
 import { buildPrimaryDocUrl } from './secService'
 import { forceRefreshFilings } from './secFilingsService'
+import {
+  ensureTickerSectorsClassified,
+  getPrimarySectorForSymbol,
+  getSector
+} from './sectorService'
+import { absorbGeneratedChain } from './chainAbsorberService'
 
 const UA = 'Pulse Desktop (ashwin.sreedhar2003@gmail.com)'
 const FETCH_TIMEOUT_MS = 30_000
@@ -132,10 +138,14 @@ function resolveNodes(
       continue
     }
     const tickerLike = /^[A-Z]{1,5}(\.[A-Z]{1,3})?$/.test(n.symbol)
-    if (n.isTicker && tickerLike) {
-      // Verify the ticker against Pulse's ticker + SEC maps via the name
-      // resolver. Accept when either symbol == returned symbol or the name
-      // matches. Otherwise downgrade to unverified.
+    // "Both agree" path: when the model emits a ticker-shaped symbol and
+    // the resolver independently arrives at the same symbol from the
+    // company name, that's a two-source convergence — strongest form of
+    // verification. Accept at any resolver score because the convergence
+    // itself is the signal. The isTicker flag from Ollama is ignored here
+    // because the model often hedges and sets it to false even when both
+    // sides clearly agree (observed for BAC, WFC, C etc.).
+    if (tickerLike) {
       const resolved = resolveCompanyName(n.name)
       if (resolved && resolved.symbol === n.symbol) {
         out.push({
@@ -147,11 +157,54 @@ function resolveNodes(
         })
         continue
       }
+      // Second chance: when the model's name IS just the ticker symbol
+      // (e.g., {symbol: "UPS", name: "UPS"}), the resolver has nothing to
+      // go on — "ups" normalized doesn't match "united parcel service".
+      // Verify directly against the SEC ticker map: if a real filer with
+      // that symbol exists, trust the model's claim. The tickerLike shape
+      // guard keeps placeholder labels (PRIVATE_LABEL_MFG, BBBY_DC) out.
+      if (n.name.trim().toUpperCase() === n.symbol && lookupCik(n.symbol)) {
+        out.push({
+          symbol: n.symbol,
+          stage: n.stage,
+          name: n.name,
+          blurb: n.blurb,
+          kind: 'ticker'
+        })
+        continue
+      }
+      // Third chance: resolver found NOTHING (not a different ticker, just
+      // null) AND the model's claimed symbol exists in sec_cik_map. The
+      // typical case is {symbol: TSM, name: "TSMC"} — "tsmc" doesn't
+      // normalize to anything SEC carries, so resolver returns null. But
+      // TSM IS a real filer, so trusting the claim is safe. We explicitly
+      // guard on resolved===null so that when the resolver DOES find a
+      // different canonical (e.g., SCHL + "Schlumberger Limited" → SLB),
+      // we fall through to the name-only path below and adopt the
+      // resolver's correction rather than the model's (wrong) ticker.
+      if (!resolved && lookupCik(n.symbol)) {
+        out.push({
+          symbol: n.symbol,
+          stage: n.stage,
+          name: n.name,
+          blurb: n.blurb,
+          kind: 'ticker'
+        })
+        continue
+      }
     }
-    // Try to resolve by name even if symbol didn't match. This catches cases
-    // where the model's ticker is slightly off but the name is right.
+    // Name-only path: the model's ticker disagrees with the resolver (or
+    // isn't ticker-shaped), but the name alone resolves. Accept the
+    // resolver's symbol in place of the model's.
     const resolved = resolveCompanyName(n.name)
-    if (resolved && resolved.score >= 0.95) {
+    // 0.75 = word-boundary match with multi-candidate disambiguation
+    // ("Siemens AG" → SMERY, "Coherent" → COHR, "Kioxia" → KXIAY,
+    // "CATL" → CYATY, "Alps Alpine" → ALPS). 0.8+ = exact normalize hit
+    // or acronym match. Originally we gated at 0.8 which left the 0.75
+    // word-boundary hits stranded — regen logs showed a dozen of them.
+    // 0.75 stays safe because word-boundary requires a whole-word match,
+    // not fuzzy overlap.
+    if (resolved && resolved.score >= 0.75) {
       out.push({
         symbol: resolved.symbol,
         stage: n.stage,
@@ -161,7 +214,13 @@ function resolveNodes(
       })
       continue
     }
-    // Fall through: keep as unverified node.
+    // Fall through: keep as unverified node. Log what fell through so the
+    // user can spot systematic classifier gaps (e.g. a legacy-name the
+    // model keeps emitting that deserves a NAME_ALIASES entry).
+    console.log(
+      `[companyChain] unverified node: claimed=${n.symbol} name="${n.name}"` +
+        (resolved ? ` (resolver: ${resolved.symbol}@${resolved.score.toFixed(2)})` : ' (resolver: miss)')
+    )
     out.push({
       symbol: n.symbol,
       stage: n.stage,
@@ -169,6 +228,86 @@ function resolveNodes(
       blurb: n.blurb,
       kind: 'unverified'
     })
+  }
+  return out
+}
+
+// Claude (and Ollama) frequently emit edges that reference companies using
+// slightly different symbol strings than the nodes array uses — "MACOM" in
+// edges vs "MTSI" in nodes, "AMKOR" vs "AMKR", "ASE" vs "ASX", "SMSN" vs
+// "SSNLF", "INFINEON" vs "IFNNY". The downstream absorber requires BOTH
+// endpoints to exist in the chain's node list, so these mismatches cause
+// every edge touching the renamed entity to silently drop — leaving the
+// node stranded with zero connections in the unified Value Chain + Diagram
+// views. We canonicalize here: build an alias index from node names, then
+// rewrite edges. Drops edges whose endpoints we still can't resolve.
+type ChainEdge = {
+  from: string
+  to: string
+  relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
+  note: string | null
+}
+
+function canonicalizeEdges(
+  rawEdges: ChainEdge[],
+  resolvedNodes: CompanyValueChainNode[]
+): ChainEdge[] {
+  const symbolByAlias = new Map<string, string>()
+  // Identity mapping for every node symbol. Even unverified nodes
+  // participate so edges pointing at placeholder labels still render in
+  // the per-ticker view (absorber will filter them later if needed).
+  for (const n of resolvedNodes) {
+    const sym = n.symbol.toUpperCase()
+    symbolByAlias.set(sym, sym)
+  }
+  // Name-derived aliases. Only for ticker-kind nodes — unverified labels
+  // have non-commercial names like "End Consumers" that would create
+  // spurious matches on common words.
+  for (const n of resolvedNodes) {
+    if (n.kind !== 'ticker') continue
+    const sym = n.symbol.toUpperCase()
+    const nameUpper = n.name.trim().toUpperCase()
+    const firstWord = nameUpper.split(/[\s,.&/]+/).filter(Boolean)[0] ?? ''
+    // First-word alias: "MACOM Technology Solutions" → MACOM → MTSI.
+    // Skip words shorter than 3 chars (IBM, SAP would cause confusion
+    // with identity lookup; they already resolve via node.symbol).
+    if (firstWord.length >= 3 && !symbolByAlias.has(firstWord)) {
+      symbolByAlias.set(firstWord, sym)
+    }
+    // Full-name-without-punctuation alias: "AMKOR TECHNOLOGY" →
+    // "AMKORTECHNOLOGY" → AMKR. Catches cases like edges using the full
+    // company name instead of the ticker.
+    const fullKey = nameUpper.replace(/[^A-Z0-9]/g, '')
+    if (fullKey.length >= 3 && !symbolByAlias.has(fullKey)) {
+      symbolByAlias.set(fullKey, sym)
+    }
+  }
+
+  const out: ChainEdge[] = []
+  let dropped = 0
+  for (const edge of rawEdges) {
+    const from = edge.from.toUpperCase()
+    const to = edge.to.toUpperCase()
+    const canonicalFrom =
+      symbolByAlias.get(from) ?? symbolByAlias.get(from.replace(/[^A-Z0-9]/g, ''))
+    const canonicalTo =
+      symbolByAlias.get(to) ?? symbolByAlias.get(to.replace(/[^A-Z0-9]/g, ''))
+    if (!canonicalFrom || !canonicalTo || canonicalFrom === canonicalTo) {
+      dropped += 1
+      continue
+    }
+    out.push({
+      from: canonicalFrom,
+      to: canonicalTo,
+      relationship: edge.relationship,
+      note: edge.note
+    })
+  }
+  if (dropped > 0) {
+    console.log(
+      `[companyChain] canonicalize: dropped ${dropped} edge(s) whose endpoints ` +
+        `couldn't be matched to any node (placeholder labels or out-of-list refs)`
+    )
   }
   return out
 }
@@ -232,15 +371,63 @@ export async function generateCompanyChain(input: {
   if (profile) sources.push('company profile')
   if (tenKExcerpt) sources.push('10-K Item 1')
   if (news.length > 0) sources.push(`${news.length} recent article${news.length === 1 ? '' : 's'}`)
-  const sourceContext = sources.length > 0 ? sources.join(' + ') : 'Ollama prior only'
+  const contextLabel = sources.length > 0 ? sources.join(' + ') : 'model priors only'
 
-  const generated = await ollamaGenerate({
+  // Classify the ticker into the unified sector catalog so the generated
+  // chain can eventually be absorbed into the right bucket. Best-effort —
+  // we don't fail generation if the classifier misfires. Force-regenerate
+  // of the chain also forces re-classification; otherwise idempotent.
+  try {
+    const cls = await ensureTickerSectorsClassified({
+      symbol: sym,
+      companyName: input.companyName,
+      profileDescription: profile?.description ?? null,
+      tenKExcerpt,
+      force: input.force ?? false
+    })
+    if (cls) {
+      console.log(
+        `[companyChain] classified ${sym} as ${cls.primary.sectorId}` +
+          (cls.secondary.length > 0
+            ? ` + ${cls.secondary.length} secondary (${cls.secondary.map((s) => s.sectorId).join(', ')})`
+            : '')
+      )
+    }
+  } catch (err) {
+    console.warn(
+      `[companyChain] sector classification failed for ${sym}:`,
+      err instanceof Error ? err.message : err
+    )
+  }
+
+  // Look up the focus's classified sector so we can feed the generator the
+  // canonical stage list for that sector. Prevents stage-name drift across
+  // chains (two banks with two different stage-ordering conventions).
+  // Falls back to undefined → generator uses free-form stage naming.
+  const focusSectorAssignment = getPrimarySectorForSymbol(sym)
+  const sectorCatalogEntry = focusSectorAssignment
+    ? getSector(focusSectorAssignment.sectorId)
+    : null
+  const canonicalStages =
+    sectorCatalogEntry?.stages && sectorCatalogEntry.stages.length > 0
+      ? sectorCatalogEntry.stages
+      : undefined
+
+  const { result: generated, provider } = await routedGenerate({
     symbol: sym,
     companyName: input.companyName,
     profileDescription: profile?.description ?? null,
     tenKExcerpt,
-    newsSnippets: news
+    newsSnippets: news,
+    canonicalStages,
+    sectorName: sectorCatalogEntry?.name
   })
+
+  // Stamp the generated-by provider into the provenance string so the
+  // detail-page card can show "Claude · profile + 10-K" vs "Ollama · profile",
+  // and we can spot regressions by reading the saved chain later.
+  const providerLabel = provider === 'claude' ? 'Claude' : 'local Ollama'
+  const sourceContext = `${providerLabel} · ${contextLabel}`
 
   if (!generated || generated.nodes.length === 0 || generated.stages.length === 0) {
     setCompanyValueChain({
@@ -254,12 +441,12 @@ export async function generateCompanyChain(input: {
   }
 
   const resolvedNodes = resolveNodes(generated.nodes, sym)
+  const canonicalEdges = canonicalizeEdges(generated.edges, resolvedNodes)
   const graph: CompanyValueChain = {
     focus: sym,
     stages: generated.stages,
     nodes: resolvedNodes,
-    // Edges stay as-is — they reference node symbols that we preserved.
-    edges: generated.edges
+    edges: canonicalEdges
   }
 
   setCompanyValueChain({
@@ -268,10 +455,131 @@ export async function generateCompanyChain(input: {
     graph,
     sourceContext
   })
+
+  // Absorb the chain into the unified overlay tables so the sector-wide
+  // renderer (Phase 4) can see it. Non-fatal: absorption failure doesn't
+  // invalidate the per-ticker chain that just got saved.
+  try {
+    const absorbed = absorbGeneratedChain(sym, graph)
+    if (absorbed.skipped) {
+      console.log(`[companyChain] skipped absorption for ${sym}: ${absorbed.skipped}`)
+    } else if (absorbed.nodesAdded > 0 || absorbed.edgesAdded > 0) {
+      console.log(
+        `[companyChain] absorbed into ${absorbed.sectorId}: ` +
+          `+${absorbed.nodesAdded} node(s), +${absorbed.edgesAdded} edge(s)`
+      )
+    }
+  } catch (err) {
+    console.warn(
+      `[companyChain] absorption failed for ${sym}:`,
+      err instanceof Error ? err.message : err
+    )
+  }
+
   broadcastUpdated(sym)
   return graph
 }
 
 export function readCompanyChain(symbol: string): ReturnType<typeof getCompanyValueChain> {
   return getCompanyValueChain(symbol)
+}
+
+export interface RegenerateAllProgress {
+  total: number
+  completed: number
+  currentSymbol: string | null
+  succeeded: number
+  failed: number
+  running: boolean
+}
+
+// Bulk regenerate state. Only one run can be in flight at a time — the
+// classifier + generator are heavy enough (30-60s per ticker) that parallel
+// runs would drown Ollama's two-concurrent limit and pile up other
+// requests behind them. A second Start click while running is a no-op.
+let regenRunning = false
+let regenProgress: RegenerateAllProgress = {
+  total: 0,
+  completed: 0,
+  currentSymbol: null,
+  succeeded: 0,
+  failed: 0,
+  running: false
+}
+
+function broadcastRegenProgress(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('chainRegen:progress', regenProgress)
+    }
+  }
+}
+
+export function getRegenerateAllProgress(): RegenerateAllProgress {
+  return regenProgress
+}
+
+// Regenerate every ticker that already has a company_value_chains row.
+// This is the "I added pipeline improvements, refresh all existing chains
+// so they pick them up" button. Runs sequentially — Ollama's 2-concurrent
+// cap makes parallel runs counterproductive, and keeping order stable
+// makes the progress UI easier to read.
+export async function regenerateAllChains(): Promise<RegenerateAllProgress> {
+  if (regenRunning) return regenProgress
+  regenRunning = true
+  // Expanded scope: "regenerate all" now means every ticker the user has
+  // expressed interest in — union of (a) tickers that already have a chain
+  // (refresh them with the latest classifier / prompt / model) and
+  // (b) active watchlist tickers that have never been generated (give them
+  // a chain so they participate in the unified graph). Passive tickers
+  // (chain-absorbed counterparties in someone else's chain) are NOT in
+  // scope — they already appear via inheritance and would multiply cost.
+  const existingChainSymbols = new Set(listCompanyValueChainSymbols())
+  const watchlist = listTickers().filter((t) => t.isActive)
+  const symbolSet = new Set<string>([
+    ...existingChainSymbols,
+    ...watchlist.map((t) => t.symbol.toUpperCase())
+  ])
+  const symbols = [...symbolSet].sort()
+  // Build a companyName lookup so every symbol in the run has a usable
+  // prompt input even if it was only in the existingChainSymbols set
+  // (covers the rare case where a chain exists but the tickers row was
+  // wiped or the name is empty — fall back to the symbol itself).
+  const nameBySymbol = new Map<string, string>()
+  for (const t of listTickers()) {
+    nameBySymbol.set(t.symbol.toUpperCase(), t.companyName || t.symbol)
+  }
+
+  regenProgress = {
+    total: symbols.length,
+    completed: 0,
+    currentSymbol: null,
+    succeeded: 0,
+    failed: 0,
+    running: true
+  }
+  broadcastRegenProgress()
+
+  for (const sym of symbols) {
+    regenProgress = { ...regenProgress, currentSymbol: sym }
+    broadcastRegenProgress()
+    const companyName = nameBySymbol.get(sym) ?? getTickerBySymbol(sym)?.companyName ?? sym
+    try {
+      await generateCompanyChain({ symbol: sym, companyName, force: true })
+      regenProgress = { ...regenProgress, succeeded: regenProgress.succeeded + 1 }
+    } catch (err) {
+      console.warn(
+        `[companyChain] regenerate-all: ${sym} failed —`,
+        err instanceof Error ? err.message : err
+      )
+      regenProgress = { ...regenProgress, failed: regenProgress.failed + 1 }
+    }
+    regenProgress = { ...regenProgress, completed: regenProgress.completed + 1 }
+    broadcastRegenProgress()
+  }
+
+  regenProgress = { ...regenProgress, currentSymbol: null, running: false }
+  regenRunning = false
+  broadcastRegenProgress()
+  return regenProgress
 }

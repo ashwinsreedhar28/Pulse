@@ -1,0 +1,583 @@
+{
+  "version": 2,
+  "description": "GICS-11 top-level sectors with deeper sub-sector breakdowns. Every leaf sub-sector defines a canonical stages list — the chain generator is constrained to pick from these so stages don't fragment across chains (JPM using 'consumer-banking', BAC using 'retail-lending', COF using 'credit-card-issuance' for the same concept). legacyIds map old supplyChainGraph.json 'sector' values to current ids.",
+  "sectors": [
+    {
+      "id": "technology",
+      "name": "Information Technology",
+      "description": "Hardware, software, semiconductors, IT services."
+    },
+    {
+      "id": "tech-semi",
+      "parentId": "technology",
+      "name": "Semiconductors",
+      "description": "Chip design, manufacturing, equipment, materials.",
+      "legacyIds": ["semi"],
+      "stages": [
+        { "id": "specialty-materials", "name": "Specialty Materials & Gases" },
+        { "id": "equipment", "name": "Fab Equipment" },
+        { "id": "eda-ip", "name": "EDA & IP" },
+        { "id": "foundry", "name": "Foundries & IDMs" },
+        { "id": "memory", "name": "Memory" },
+        { "id": "fabless", "name": "Fabless Designers" },
+        { "id": "power-sic", "name": "Power & SiC" },
+        { "id": "atp", "name": "Assembly, Test & Packaging" }
+      ]
+    },
+    {
+      "id": "tech-hardware",
+      "parentId": "technology",
+      "name": "Hardware & Systems",
+      "description": "Servers, PCs, networking, storage, consumer devices.",
+      "legacyIds": ["hardware"],
+      "stages": [
+        { "id": "components", "name": "Networking & Optical Components" },
+        { "id": "storage", "name": "Storage Systems" },
+        { "id": "oems", "name": "OEMs & Server Makers" },
+        { "id": "consumer-devices", "name": "Consumer Devices" },
+        { "id": "contract-mfg", "name": "Contract Manufacturing" }
+      ]
+    },
+    {
+      "id": "tech-cloud",
+      "parentId": "technology",
+      "name": "Cloud & Software",
+      "description": "Cloud platforms, SaaS, enterprise software.",
+      "legacyIds": ["cloud"],
+      "stages": [
+        { "id": "hyperscalers", "name": "Hyperscale Cloud" },
+        { "id": "saas-platform", "name": "Platform SaaS" },
+        { "id": "saas-app", "name": "Application SaaS" },
+        { "id": "security-obs", "name": "Security & Observability" },
+        { "id": "edge-cdn", "name": "Edge & CDN" },
+        { "id": "data-ai", "name": "Data & AI Platforms" }
+      ]
+    },
+    {
+      "id": "tech-services",
+      "parentId": "technology",
+      "name": "IT Services",
+      "description": "Consulting, systems integration, outsourced IT.",
+      "stages": [
+        { "id": "consulting-advisory", "name": "Consulting & Advisory" },
+        { "id": "systems-integration", "name": "Systems Integration" },
+        { "id": "managed-services", "name": "Managed Services" },
+        { "id": "enterprise-clients", "name": "Enterprise Clients" }
+      ]
+    },
+
+    {
+      "id": "communication-services",
+      "name": "Communication Services",
+      "description": "Media, telecom, interactive media."
+    },
+    {
+      "id": "comms-telecom",
+      "parentId": "communication-services",
+      "name": "Telecom Services",
+      "stages": [
+        { "id": "network-equipment", "name": "Network Equipment" },
+        { "id": "carriers", "name": "Carriers" },
+        { "id": "resellers-retail", "name": "Resellers & Retail" },
+        { "id": "end-users", "name": "Consumers & Businesses" }
+      ]
+    },
+    {
+      "id": "comms-media",
+      "parentId": "communication-services",
+      "name": "Media & Entertainment",
+      "stages": [
+        { "id": "content-creation", "name": "Content Creation" },
+        { "id": "production-studios", "name": "Production & Studios" },
+        { "id": "distribution-streaming", "name": "Distribution & Streaming" },
+        { "id": "audiences", "name": "Audiences & Advertisers" }
+      ]
+    },
+    {
+      "id": "comms-interactive",
+      "parentId": "communication-services",
+      "name": "Interactive Media",
+      "description": "Search, social, digital advertising.",
+      "stages": [
+        { "id": "infrastructure", "name": "Infrastructure" },
+        { "id": "platforms", "name": "Platforms" },
+        { "id": "advertisers", "name": "Advertisers" },
+        { "id": "users", "name": "Users" }
+      ]
+    },
+
+    {
+      "id": "consumer-discretionary",
+      "name": "Consumer Discretionary",
+      "description": "Autos, retail, apparel, hotels, restaurants."
+    },
+    {
+      "id": "autos",
+      "parentId": "consumer-discretionary",
+      "name": "Autos & EVs",
+      "description": "Vehicle OEMs, EV platforms, battery materials.",
+      "legacyIds": ["auto"],
+      "stages": [
+        { "id": "battery-raw", "name": "Battery Raw Materials" },
+        { "id": "battery-cells", "name": "Battery Cells & Packs" },
+        { "id": "auto-silicon", "name": "Automotive Silicon" },
+        { "id": "tier1", "name": "Tier-1 Suppliers" },
+        { "id": "oem", "name": "OEMs" },
+        { "id": "charging", "name": "Charging Infrastructure" }
+      ]
+    },
+    {
+      "id": "retail-ecom",
+      "parentId": "consumer-discretionary",
+      "name": "Retail & E-commerce",
+      "stages": [
+        { "id": "sourcing-suppliers", "name": "Sourcing & Suppliers" },
+        { "id": "private-label-manufacturing", "name": "Private Label Manufacturing" },
+        { "id": "fulfillment-logistics", "name": "Fulfillment & Logistics" },
+        { "id": "marketplace-storefront", "name": "Marketplace & Storefront" },
+        { "id": "consumer", "name": "Consumer" }
+      ]
+    },
+    {
+      "id": "hotels-leisure",
+      "parentId": "consumer-discretionary",
+      "name": "Hotels, Restaurants & Leisure",
+      "stages": [
+        { "id": "real-estate", "name": "Real Estate & Properties" },
+        { "id": "operations", "name": "Operations" },
+        { "id": "distribution-loyalty", "name": "Distribution & Loyalty" },
+        { "id": "travelers", "name": "Travelers & Guests" }
+      ]
+    },
+    {
+      "id": "apparel-luxury",
+      "parentId": "consumer-discretionary",
+      "name": "Apparel & Luxury Goods",
+      "stages": [
+        { "id": "raw-materials", "name": "Raw Materials" },
+        { "id": "design-brand", "name": "Design & Brand" },
+        { "id": "manufacturing", "name": "Manufacturing" },
+        { "id": "retail-distribution", "name": "Retail & Distribution" },
+        { "id": "consumer", "name": "Consumer" }
+      ]
+    },
+
+    {
+      "id": "consumer-staples",
+      "name": "Consumer Staples",
+      "description": "Food, beverage, household, personal care."
+    },
+    {
+      "id": "food-bev",
+      "parentId": "consumer-staples",
+      "name": "Food & Beverage",
+      "stages": [
+        { "id": "ingredients-commodities", "name": "Ingredients & Commodities" },
+        { "id": "processing-bottling", "name": "Processing & Bottling" },
+        { "id": "distribution", "name": "Distribution" },
+        { "id": "retail-foodservice", "name": "Retail & Foodservice" },
+        { "id": "consumer", "name": "Consumer" }
+      ]
+    },
+    {
+      "id": "household-personal",
+      "parentId": "consumer-staples",
+      "name": "Household & Personal Care",
+      "stages": [
+        { "id": "raw-materials", "name": "Raw Materials" },
+        { "id": "manufacturing-brand", "name": "Manufacturing & Brand" },
+        { "id": "distribution", "name": "Distribution" },
+        { "id": "retail", "name": "Retail" },
+        { "id": "consumer", "name": "Consumer" }
+      ]
+    },
+    {
+      "id": "food-retail",
+      "parentId": "consumer-staples",
+      "name": "Food & Staples Retail",
+      "stages": [
+        { "id": "sourcing", "name": "Sourcing" },
+        { "id": "distribution-centers", "name": "Distribution Centers" },
+        { "id": "stores", "name": "Stores" },
+        { "id": "consumer", "name": "Consumer" }
+      ]
+    },
+
+    {
+      "id": "energy",
+      "name": "Energy",
+      "description": "Oil, gas, coal, oilfield services."
+    },
+    {
+      "id": "energy-upstream",
+      "parentId": "energy",
+      "name": "Upstream (E&P)",
+      "stages": [
+        { "id": "exploration", "name": "Exploration" },
+        { "id": "drilling-production", "name": "Drilling & Production" },
+        { "id": "reserves-transport", "name": "Reserves & Transport" }
+      ]
+    },
+    {
+      "id": "energy-midstream",
+      "parentId": "energy",
+      "name": "Midstream",
+      "stages": [
+        { "id": "gathering-processing", "name": "Gathering & Processing" },
+        { "id": "pipelines-storage", "name": "Pipelines & Storage" },
+        { "id": "terminals-export", "name": "Terminals & Export" }
+      ]
+    },
+    {
+      "id": "energy-refining",
+      "parentId": "energy",
+      "name": "Refining & Marketing",
+      "stages": [
+        { "id": "crude-input", "name": "Crude Input" },
+        { "id": "refining", "name": "Refining" },
+        { "id": "marketing-distribution", "name": "Marketing & Distribution" },
+        { "id": "end-fuel-consumers", "name": "Fuel End-Consumers" }
+      ]
+    },
+    {
+      "id": "energy-services",
+      "parentId": "energy",
+      "name": "Oilfield Services",
+      "stages": [
+        { "id": "oilfield-services", "name": "Oilfield Services" },
+        { "id": "equipment-manufacturing", "name": "Equipment Manufacturing" },
+        { "id": "drilling-contractors", "name": "Drilling Contractors" },
+        { "id": "operator-customers", "name": "Operator Customers" }
+      ]
+    },
+
+    {
+      "id": "financials",
+      "name": "Financials",
+      "description": "Banks, insurance, payments, capital markets."
+    },
+    {
+      "id": "fin-banks",
+      "parentId": "financials",
+      "name": "Banks",
+      "stages": [
+        { "id": "deposits", "name": "Deposits" },
+        { "id": "retail-lending", "name": "Retail Lending" },
+        { "id": "commercial-lending", "name": "Commercial Lending" },
+        { "id": "capital-markets-activities", "name": "Capital Markets Activities" },
+        { "id": "wealth-management", "name": "Wealth Management" }
+      ]
+    },
+    {
+      "id": "fin-payments",
+      "parentId": "financials",
+      "name": "Payments",
+      "description": "Networks, processors, fintech.",
+      "stages": [
+        { "id": "issuing", "name": "Issuing Banks" },
+        { "id": "network", "name": "Payments Network" },
+        { "id": "acquiring-processing", "name": "Acquiring & Processing" },
+        { "id": "merchants", "name": "Merchants" },
+        { "id": "consumer", "name": "Consumer" }
+      ]
+    },
+    {
+      "id": "fin-insurance",
+      "parentId": "financials",
+      "name": "Insurance",
+      "stages": [
+        { "id": "underwriting", "name": "Underwriting" },
+        { "id": "reinsurance", "name": "Reinsurance" },
+        { "id": "distribution-brokers", "name": "Distribution & Brokers" },
+        { "id": "claims-services", "name": "Claims Services" },
+        { "id": "asset-management", "name": "Asset Management" }
+      ]
+    },
+    {
+      "id": "fin-capital-markets",
+      "parentId": "financials",
+      "name": "Capital Markets & Brokers",
+      "stages": [
+        { "id": "investment-banking", "name": "Investment Banking" },
+        { "id": "sales-trading", "name": "Sales & Trading" },
+        { "id": "asset-management", "name": "Asset Management" },
+        { "id": "wealth-advisory", "name": "Wealth Advisory" },
+        { "id": "market-data", "name": "Market Data & Exchanges" }
+      ]
+    },
+    {
+      "id": "fin-diversified",
+      "parentId": "financials",
+      "name": "Diversified Financials",
+      "stages": [
+        { "id": "lending", "name": "Lending" },
+        { "id": "asset-management", "name": "Asset Management" },
+        { "id": "trading", "name": "Trading" },
+        { "id": "insurance", "name": "Insurance" },
+        { "id": "advisory", "name": "Advisory" }
+      ]
+    },
+
+    {
+      "id": "healthcare",
+      "name": "Healthcare",
+      "description": "Pharma, biotech, devices, insurance, services."
+    },
+    {
+      "id": "hc-pharma",
+      "parentId": "healthcare",
+      "name": "Pharmaceuticals",
+      "stages": [
+        { "id": "discovery-research", "name": "Discovery & Research" },
+        { "id": "clinical-trials", "name": "Clinical Trials" },
+        { "id": "manufacturing", "name": "Manufacturing" },
+        { "id": "distribution", "name": "Distribution" },
+        { "id": "prescribers-payers", "name": "Prescribers & Payers" }
+      ]
+    },
+    {
+      "id": "hc-biotech",
+      "parentId": "healthcare",
+      "name": "Biotech",
+      "stages": [
+        { "id": "discovery-research", "name": "Discovery & Research" },
+        { "id": "clinical-development", "name": "Clinical Development" },
+        { "id": "manufacturing", "name": "Manufacturing" },
+        { "id": "commercialization", "name": "Commercialization" }
+      ]
+    },
+    {
+      "id": "hc-devices",
+      "parentId": "healthcare",
+      "name": "Medical Devices",
+      "stages": [
+        { "id": "research-development", "name": "Research & Development" },
+        { "id": "manufacturing", "name": "Manufacturing" },
+        { "id": "distribution", "name": "Distribution" },
+        { "id": "providers", "name": "Providers & Patients" }
+      ]
+    },
+    {
+      "id": "hc-insurance",
+      "parentId": "healthcare",
+      "name": "Managed Care",
+      "stages": [
+        { "id": "carriers", "name": "Carriers" },
+        { "id": "pbms", "name": "PBMs" },
+        { "id": "benefits-administration", "name": "Benefits Administration" },
+        { "id": "providers-consumers", "name": "Providers & Consumers" }
+      ]
+    },
+    {
+      "id": "hc-services",
+      "parentId": "healthcare",
+      "name": "Providers & Services",
+      "stages": [
+        { "id": "hospitals-systems", "name": "Hospitals & Systems" },
+        { "id": "outpatient-clinics", "name": "Outpatient Clinics" },
+        { "id": "diagnostics-labs", "name": "Diagnostics & Labs" },
+        { "id": "retail-pharmacy", "name": "Retail Pharmacy" }
+      ]
+    },
+    {
+      "id": "hc-tools",
+      "parentId": "healthcare",
+      "name": "Life Sciences Tools",
+      "stages": [
+        { "id": "instruments", "name": "Instruments" },
+        { "id": "reagents-consumables", "name": "Reagents & Consumables" },
+        { "id": "services", "name": "Services" },
+        { "id": "research-labs", "name": "Research Labs" }
+      ]
+    },
+
+    {
+      "id": "industrials",
+      "name": "Industrials",
+      "description": "Aerospace, defense, machinery, transportation, electrical infrastructure."
+    },
+    {
+      "id": "ind-aerospace-defense",
+      "parentId": "industrials",
+      "name": "Aerospace & Defense",
+      "stages": [
+        { "id": "research-development", "name": "Research & Development" },
+        { "id": "primes", "name": "Primes" },
+        { "id": "tier-1-suppliers", "name": "Tier-1 Suppliers" },
+        { "id": "tier-2-suppliers", "name": "Tier-2 Suppliers" },
+        { "id": "customers-military-commercial", "name": "Military & Commercial Customers" }
+      ]
+    },
+    {
+      "id": "ind-machinery",
+      "parentId": "industrials",
+      "name": "Machinery",
+      "stages": [
+        { "id": "components", "name": "Components" },
+        { "id": "oems", "name": "OEMs" },
+        { "id": "distribution", "name": "Distribution" },
+        { "id": "end-users", "name": "End Users" }
+      ]
+    },
+    {
+      "id": "ind-transportation",
+      "parentId": "industrials",
+      "name": "Transportation & Logistics",
+      "stages": [
+        { "id": "equipment-assets", "name": "Equipment & Assets" },
+        { "id": "operators-carriers", "name": "Operators & Carriers" },
+        { "id": "logistics-platforms", "name": "Logistics Platforms" },
+        { "id": "shippers-customers", "name": "Shippers & Customers" }
+      ]
+    },
+    {
+      "id": "ind-construction",
+      "parentId": "industrials",
+      "name": "Construction & Engineering",
+      "stages": [
+        { "id": "engineering-design", "name": "Engineering & Design" },
+        { "id": "materials-suppliers", "name": "Materials Suppliers" },
+        { "id": "builders-contractors", "name": "Builders & Contractors" },
+        { "id": "end-customers", "name": "End Customers" }
+      ]
+    },
+    {
+      "id": "ind-infra",
+      "parentId": "industrials",
+      "name": "Electrical & Data Center Infrastructure",
+      "description": "Grid equipment, data center power and cooling, industrial electrical.",
+      "legacyIds": ["energy"],
+      "stages": [
+        { "id": "grid-equipment", "name": "Grid Equipment" },
+        { "id": "dc-power", "name": "Data Center Power" },
+        { "id": "dc-cooling", "name": "Data Center Cooling" },
+        { "id": "power-gen", "name": "Power Generation" }
+      ]
+    },
+
+    {
+      "id": "materials",
+      "name": "Materials",
+      "description": "Chemicals, metals, mining, paper, packaging."
+    },
+    {
+      "id": "mat-chemicals",
+      "parentId": "materials",
+      "name": "Chemicals",
+      "stages": [
+        { "id": "feedstock", "name": "Feedstock" },
+        { "id": "basic-chemicals", "name": "Basic Chemicals" },
+        { "id": "specialty-chemicals", "name": "Specialty Chemicals" },
+        { "id": "downstream-customers", "name": "Downstream Customers" }
+      ]
+    },
+    {
+      "id": "mat-metals-mining",
+      "parentId": "materials",
+      "name": "Metals & Mining",
+      "stages": [
+        { "id": "exploration", "name": "Exploration" },
+        { "id": "mining-extraction", "name": "Mining & Extraction" },
+        { "id": "smelting-refining", "name": "Smelting & Refining" },
+        { "id": "fabrication-customers", "name": "Fabrication & Customers" }
+      ]
+    },
+    {
+      "id": "mat-packaging",
+      "parentId": "materials",
+      "name": "Paper & Packaging",
+      "stages": [
+        { "id": "raw-materials", "name": "Raw Materials" },
+        { "id": "converters-manufacturers", "name": "Converters & Manufacturers" },
+        { "id": "brand-owners", "name": "Brand Owners" },
+        { "id": "retail-consumer", "name": "Retail & Consumer" }
+      ]
+    },
+    {
+      "id": "mat-construction",
+      "parentId": "materials",
+      "name": "Construction Materials",
+      "stages": [
+        { "id": "raw-materials", "name": "Raw Materials" },
+        { "id": "manufacturing", "name": "Manufacturing" },
+        { "id": "distribution", "name": "Distribution" },
+        { "id": "builders-end-use", "name": "Builders & End-Use" }
+      ]
+    },
+
+    {
+      "id": "real-estate",
+      "name": "Real Estate"
+    },
+    {
+      "id": "re-reits",
+      "parentId": "real-estate",
+      "name": "REITs",
+      "stages": [
+        { "id": "property-acquisition", "name": "Property Acquisition" },
+        { "id": "property-management", "name": "Property Management" },
+        { "id": "tenants-users", "name": "Tenants & Users" },
+        { "id": "capital-markets", "name": "Capital Markets" }
+      ]
+    },
+    {
+      "id": "re-dev",
+      "parentId": "real-estate",
+      "name": "Real Estate Development",
+      "stages": [
+        { "id": "land-acquisition", "name": "Land Acquisition" },
+        { "id": "construction", "name": "Construction" },
+        { "id": "sales-leasing", "name": "Sales & Leasing" }
+      ]
+    },
+
+    {
+      "id": "utilities",
+      "name": "Utilities",
+      "description": "Electric, gas, water, renewable generation."
+    },
+    {
+      "id": "util-electric",
+      "parentId": "utilities",
+      "name": "Electric Utilities",
+      "stages": [
+        { "id": "generation", "name": "Generation" },
+        { "id": "transmission", "name": "Transmission" },
+        { "id": "distribution", "name": "Distribution" },
+        { "id": "retail-customers", "name": "Retail Customers" }
+      ]
+    },
+    {
+      "id": "util-gas",
+      "parentId": "utilities",
+      "name": "Gas Utilities",
+      "stages": [
+        { "id": "supply", "name": "Supply" },
+        { "id": "pipeline-transport", "name": "Pipeline Transport" },
+        { "id": "distribution", "name": "Distribution" },
+        { "id": "end-users", "name": "End Users" }
+      ]
+    },
+    {
+      "id": "util-water",
+      "parentId": "utilities",
+      "name": "Water Utilities",
+      "stages": [
+        { "id": "source-treatment", "name": "Source & Treatment" },
+        { "id": "distribution", "name": "Distribution" },
+        { "id": "customers", "name": "Customers" }
+      ]
+    },
+    {
+      "id": "util-indep-power",
+      "parentId": "utilities",
+      "name": "Independent Power & Renewables",
+      "description": "Merchant generators, nuclear, renewables.",
+      "stages": [
+        { "id": "equipment-suppliers", "name": "Equipment Suppliers" },
+        { "id": "power-generators", "name": "Power Generators" },
+        { "id": "grid-offtakers", "name": "Grid & Offtakers" }
+      ]
+    }
+  ]
+}

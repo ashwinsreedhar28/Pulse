@@ -1115,6 +1115,7 @@ const REELS_PREF_KEYS: (keyof Preferences)[] = [
   'ttsVoice',
   'mediaPipelineEnabled'
 ]
+const AI_PREF_KEYS: (keyof Preferences)[] = ['aiProvider', 'anthropicApiKey']
 
 function PreferencesTab(): JSX.Element {
   // `prefs` = last known committed state from the DB.
@@ -1124,6 +1125,7 @@ function PreferencesTab(): JSX.Element {
   const [draft, setDraft] = useState<Preferences | null>(null)
   const [coreStatus, setCoreStatus] = useState<ApplyStatus>(null)
   const [reelsStatus, setReelsStatus] = useState<ApplyStatus>(null)
+  const [aiStatus, setAiStatus] = useState<ApplyStatus>(null)
 
   useEffect(() => {
     void window.api.prefs.get().then((p) => {
@@ -1184,6 +1186,7 @@ function PreferencesTab(): JSX.Element {
 
   const coreDirty = diffKeys(CORE_PREF_KEYS).length
   const reelsDirty = diffKeys(REELS_PREF_KEYS).length
+  const aiDirty = diffKeys(AI_PREF_KEYS).length
 
   return (
     <div className="p-6 space-y-8 max-w-lg">
@@ -1267,6 +1270,59 @@ function PreferencesTab(): JSX.Element {
         status={coreStatus}
         onApply={() => void applyScope(CORE_PREF_KEYS, setCoreStatus)}
         onReset={() => resetScope(CORE_PREF_KEYS)}
+      />
+
+      <PrefSection title="AI provider">
+        <div className="text-[11px] text-zinc-500 leading-relaxed pl-1 mb-2">
+          Chooses the model that generates company value chains and sector
+          classifications. Claude (Anthropic API, your key) produces
+          substantially better chains than local Ollama but costs ~$0.02 per
+          generation. Local Ollama stays free and private.
+        </div>
+        <PrefRow label="Provider">
+          <select
+            value={draft.aiProvider}
+            onChange={(e) =>
+              patch('aiProvider', e.target.value as Preferences['aiProvider'])
+            }
+            className="bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent"
+          >
+            <option value="auto">Auto (Claude if key is set, else Ollama)</option>
+            <option value="claude">Claude (requires API key)</option>
+            <option value="ollama">Ollama only (local, free)</option>
+          </select>
+        </PrefRow>
+        <PrefRow label="Anthropic API key">
+          <input
+            type="password"
+            value={draft.anthropicApiKey}
+            onChange={(e) => patch('anthropicApiKey', e.target.value)}
+            placeholder="sk-ant-..."
+            autoComplete="off"
+            spellCheck={false}
+            className="w-[320px] bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent font-mono"
+          />
+        </PrefRow>
+        <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
+          Key is stored locally in pulse.db and never transmitted anywhere
+          except the Anthropic API. Revokable any time at
+          console.anthropic.com.{' '}
+          {draft.anthropicApiKey &&
+            !draft.anthropicApiKey.startsWith('sk-ant-') && (
+              <span className="text-amber-300">
+                ⚠ Anthropic keys typically start with &ldquo;sk-ant-&rdquo; —
+                double-check what you pasted.
+              </span>
+            )}
+        </div>
+      </PrefSection>
+
+      <ApplyBar
+        label="AI provider"
+        dirtyCount={aiDirty}
+        status={aiStatus}
+        onApply={() => void applyScope(AI_PREF_KEYS, setAiStatus)}
+        onReset={() => resetScope(AI_PREF_KEYS)}
       />
 
       <CalendarPrefSection />

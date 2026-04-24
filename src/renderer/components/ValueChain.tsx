@@ -7,10 +7,12 @@ import type {
   GraphNodeOverride,
   OptionsSnapshot,
   SecFiling,
+  SectorWithContent,
   StockQuote,
   Ticker
 } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
+import sectorCatalogRaw from '../../data/sectorCatalog.json'
 import { ValueChainDiagram } from './ValueChainDiagram'
 import {
   TransactionCluster,
@@ -62,6 +64,72 @@ interface ValueChainGraph {
 }
 
 const CHAIN = graph as ValueChainGraph
+
+// Sector catalog (unified multi-sector graph). Bundled as static data so
+// the renderer can build ancestor maps / tab labels without waiting on IPC.
+// The backend's ticker_sectors + primaryIndex provide the runtime content
+// counts; the catalog here provides the tree structure those counts roll up
+// through.
+interface CatalogEntry {
+  id: string
+  parentId?: string
+  name: string
+  description?: string
+  stages?: Array<{ id: string; name: string }>
+  legacyIds?: string[]
+}
+const CATALOG = (sectorCatalogRaw as { sectors: CatalogEntry[] }).sectors
+
+// sectorId → inclusive set of ancestor ids (the sector itself up to its
+// top-level GICS parent). Used for the sector tab filter — a ticker is in
+// a tab's scope iff the tab's id is somewhere in the ticker's primary
+// sector's ancestor chain.
+const SECTOR_ANCESTORS: Map<string, Set<string>> = (() => {
+  const parentOf = new Map<string, string | null>()
+  for (const s of CATALOG) parentOf.set(s.id, s.parentId ?? null)
+  const out = new Map<string, Set<string>>()
+  for (const s of CATALOG) {
+    const set = new Set<string>()
+    let cur: string | null = s.id
+    const visited = new Set<string>()
+    while (cur && !visited.has(cur)) {
+      visited.add(cur)
+      set.add(cur)
+      cur = parentOf.get(cur) ?? null
+    }
+    out.set(s.id, set)
+  }
+  return out
+})()
+
+// legacy supplyChainGraph sector ('semi', 'cloud', …) → current sub-sector
+// id. Built from the catalog's legacyIds field so there's one source of
+// truth. Used as a fallback when a node in graph_node_overrides has a
+// legacy `sector` string but no sectorId yet.
+const LEGACY_TO_SECTOR_ID: Map<string, string> = (() => {
+  const m = new Map<string, string>()
+  for (const entry of CATALOG) {
+    for (const legacy of entry.legacyIds ?? []) m.set(legacy, entry.id)
+  }
+  return m
+})()
+
+// GICS top-level id → display name. Used by the tab strip.
+const TOP_LEVEL_SECTORS: Array<{ id: string; name: string }> = CATALOG.filter(
+  (s) => !s.parentId
+).map((s) => ({ id: s.id, name: s.name }))
+
+// Turn a kebab-case stage id ("battery-cells") into a human title
+// ("Battery Cells") when we don't have a catalog-supplied label. Used for
+// stages discovered from generated chains that land in sectors without a
+// curated stage list.
+function humanizeStageId(id: string): string {
+  return id
+    .split('-')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
 
 // Competitor relationships are symmetric — stored once in the JSON as
 // [A, B] pairs but indexed both directions here so either side of the pair
@@ -264,6 +332,27 @@ export function ValueChain({
   // new edges/nodes or the user undoes one in Settings).
   const [edgeOverrides, setEdgeOverrides] = useState<GraphEdgeOverride[]>([])
   const [nodeOverrides, setNodeOverrides] = useState<GraphNodeOverride[]>([])
+
+  // Unified-graph sector state. `sectorsWithContent` drives which top-level
+  // GICS tabs render (hides sectors with zero assigned tickers).
+  // `primaryIndex` powers the sector filter and the cross-sector edge badge.
+  const [sectorsWithContent, setSectorsWithContent] = useState<SectorWithContent[]>([])
+  const [primaryIndex, setPrimaryIndex] = useState<Record<string, string>>({})
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([window.api.sectors.listWithContent(), window.api.sectors.primaryIndex()])
+      .then(([withContent, idx]) => {
+        if (cancelled) return
+        setSectorsWithContent(withContent)
+        setPrimaryIndex(idx)
+      })
+      .catch((err: unknown) => {
+        console.warn('[valueChain] sectors fetch failed', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
   useEffect(() => {
     let cancelled = false
     Promise.all([
@@ -284,16 +373,24 @@ export function ValueChain({
   }, [])
   useEffect(() => {
     return window.api.graph.onUpdated(() => {
+      // Refetch both the overlays AND the sector rollup / primary index.
+      // chain generation absorbs new nodes into overrides AND writes new
+      // ticker_sectors rows, so the sector tab strip + filter need a fresh
+      // read to avoid the "leave page and come back" behavior.
       Promise.all([
         window.api.graph.listOverrides(),
-        window.api.graph.listNodeOverrides()
+        window.api.graph.listNodeOverrides(),
+        window.api.sectors.listWithContent(),
+        window.api.sectors.primaryIndex()
       ])
-        .then(([edges, nodes]) => {
+        .then(([edges, nodes, withContent, idx]) => {
           setEdgeOverrides(edges)
           setNodeOverrides(nodes)
+          setSectorsWithContent(withContent)
+          setPrimaryIndex(idx)
         })
         .catch(() => {
-          /* keep prior overrides */
+          /* keep prior state */
         })
     })
   }, [])
@@ -396,16 +493,87 @@ export function ValueChain({
     return out
   }, [nodeOverrides])
 
+  // Resolve a symbol's primary sector id using (in order): the backend
+  // primaryIndex (ticker_sectors.isPrimary=1), a node override's sectorId,
+  // or the legacy supplyChainGraph.json sector string via LEGACY_TO_SECTOR_ID.
+  // Returns null when we genuinely don't know — such symbols still render in
+  // the "all" view but can't be routed into a specific sector tab.
+  const resolvedPrimarySector = useMemo(() => {
+    const nodeOverrideBySym = new Map(nodeOverrides.map((o) => [o.symbol.toUpperCase(), o]))
+    const out = new Map<string, string>()
+    for (const node of mergedNodes) {
+      const sym = node.symbol.toUpperCase()
+      const fromIndex = primaryIndex[sym]
+      if (fromIndex) {
+        out.set(sym, fromIndex)
+        continue
+      }
+      const ov = nodeOverrideBySym.get(sym)
+      if (ov?.sectorId) {
+        out.set(sym, ov.sectorId)
+        continue
+      }
+      const legacy = LEGACY_TO_SECTOR_ID.get(node.sector)
+      if (legacy) out.set(sym, legacy)
+    }
+    return out
+  }, [mergedNodes, nodeOverrides, primaryIndex])
+
   // Filter the node set by the active sector tab. "all" passes everything;
-  // any specific sector drops nodes outside it so the chain view stays focused.
-  // Edges are filtered by membership in the visible node set.
+  // for any specific sector, a node is kept iff its primary sector's
+  // ancestor chain contains the selected tab id (so picking the top-level
+  // "technology" tab shows tech-semi, tech-hardware, tech-cloud, etc.).
   const visibleSymbols = useMemo(() => {
     const s = new Set<string>()
     for (const node of mergedNodes) {
-      if (sectorId === 'all' || node.sector === sectorId) s.add(node.symbol)
+      if (sectorId === 'all') {
+        s.add(node.symbol)
+        continue
+      }
+      const primary = resolvedPrimarySector.get(node.symbol.toUpperCase())
+      if (!primary) continue
+      const ancestors = SECTOR_ANCESTORS.get(primary)
+      if (ancestors?.has(sectorId)) s.add(node.symbol)
     }
     return s
-  }, [sectorId, mergedNodes])
+  }, [sectorId, mergedNodes, resolvedPrimarySector])
+
+  // Stage list for the current view.
+  // - "all": curated supplyChainGraph tech pipeline PLUS every unique stage
+  //   seen on absorbed nodes (financial stages like "credit-card-issuance",
+  //   energy stages like "refining"). Without the merge, non-tech nodes
+  //   fall into a single "Other" bucket — for a heavily-used app with
+  //   chains across multiple sectors that bucket becomes a 40-tile blob.
+  // - Specific sector: prefer the catalog's stage list; fall back to
+  //   derived stages from visible nodes for sectors without curated stages.
+  const activeStages = useMemo<ValueChainStage[]>(() => {
+    if (sectorId === 'all') {
+      const known = new Set<string>(CHAIN.stages.map((s) => s.id))
+      const extras: ValueChainStage[] = []
+      for (const node of mergedNodes) {
+        if (!node.stage || known.has(node.stage)) continue
+        known.add(node.stage)
+        extras.push({ id: node.stage, label: humanizeStageId(node.stage) })
+      }
+      return [...CHAIN.stages, ...extras]
+    }
+    const catalogEntry = CATALOG.find((c) => c.id === sectorId)
+    if (catalogEntry?.stages && catalogEntry.stages.length > 0) {
+      return catalogEntry.stages.map((s) => ({ id: s.id, label: s.name }))
+    }
+    const seen = new Set<string>()
+    const ordered: ValueChainStage[] = []
+    for (const node of mergedNodes) {
+      if (!visibleSymbols.has(node.symbol)) continue
+      if (seen.has(node.stage)) continue
+      seen.add(node.stage)
+      ordered.push({
+        id: node.stage,
+        label: humanizeStageId(node.stage)
+      })
+    }
+    return ordered
+  }, [sectorId, mergedNodes, visibleSymbols])
 
   // Show every visible graph node, not just watchlist holdings — the point of
   // the chain is the ecosystem context, which is mostly suppliers/customers
@@ -414,15 +582,34 @@ export function ValueChain({
   // highlighting so the graph stays intelligible.
   const stageGroups = useMemo(() => {
     const bucket = new Map<string, ValueChainNode[]>()
-    for (const stage of CHAIN.stages) bucket.set(stage.id, [])
+    for (const stage of activeStages) bucket.set(stage.id, [])
+    // Catch-all bucket for nodes whose stage isn't in activeStages — keeps
+    // them visible under a generic "Other" group rather than silently
+    // dropped. Only surfaces when a mismatch actually occurs.
+    const strayNodes: ValueChainNode[] = []
     for (const node of mergedNodes) {
       if (!visibleSymbols.has(node.symbol)) continue
-      bucket.get(node.stage)?.push(node)
+      const target = bucket.get(node.stage)
+      if (target) target.push(node)
+      else strayNodes.push(node)
     }
-    return CHAIN.stages
+    const groups = activeStages
       .map((s) => ({ stage: s, nodes: bucket.get(s.id) ?? [] }))
       .filter((g) => g.nodes.length > 0)
-  }, [visibleSymbols, mergedNodes])
+    if (strayNodes.length > 0) {
+      // These are nodes that participate in the current sector's chain but
+      // carry a stage from a different chain's taxonomy (e.g., AMZN's
+      // override stage = 'marketplace-storefront' from its retail-ecom
+      // chain, rendered here under tech-cloud). Surface them with an
+      // explicit label that tells the user what they're looking at —
+      // "Other" is unhelpful noise.
+      groups.push({
+        stage: { id: '__cross_sector', label: 'Cross-sector participants' },
+        nodes: strayNodes
+      })
+    }
+    return groups
+  }, [visibleSymbols, mergedNodes, activeStages])
 
   // Static graph edges + directional overlay edges (supplier/partner). The
   // overrides pipeline auto-classifies high-confidence ticker pairs into
@@ -430,6 +617,12 @@ export function ValueChain({
   // through outgoing/incoming so they show up as customer/supplier roles
   // on the focus panel just like the static edges do.
   const mergedDirectionalEdges = useMemo<ValueChainEdge[]>(() => {
+    // Absorber canonicalizes customer edges to supplier at write time
+    // (swaps endpoints + relabels), so the override table holds one
+    // canonical form per directed relationship. Legacy customer rows from
+    // older absorptions are still handled with an endpoint swap as a
+    // safety net. Dedupe by (from, to) at the end so cross-chain
+    // duplicates don't render the same counterparty twice.
     const out: ValueChainEdge[] = [...CHAIN.edges]
     for (const o of edgeOverrides) {
       if (o.relationship === 'supplier' || o.relationship === 'partner') {
@@ -438,9 +631,23 @@ export function ValueChain({
           to: o.toSymbol.toUpperCase(),
           note: o.note ?? undefined
         })
+      } else if (o.relationship === 'customer') {
+        out.push({
+          from: o.toSymbol.toUpperCase(),
+          to: o.fromSymbol.toUpperCase(),
+          note: o.note ?? undefined
+        })
       }
     }
-    return out
+    const seen = new Set<string>()
+    const deduped: ValueChainEdge[] = []
+    for (const edge of out) {
+      const key = `${edge.from}→${edge.to}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      deduped.push(edge)
+    }
+    return deduped
   }, [edgeOverrides])
 
   // Static competitor pairs + competitor-typed overrides. Same shape as the
@@ -554,18 +761,54 @@ export function ValueChain({
   // Node-level metadata lookups for the details panel.
   const nodeBySymbol = useMemo(() => {
     const m = new Map<string, ValueChainNode>()
-    for (const n of CHAIN.nodes) m.set(n.symbol, n)
+    // Index the unified node list (static + overrides), not just the static
+    // curated graph. Without the overrides here, chain-absorbed tickers
+    // (VALE, BP, COP, SHEL, …) hit `undefined` at lookup time, so
+    // buildCounterparty returns them with empty stage and useStageGroups
+    // filters them out as stageless — resulting in the "count is 2 but
+    // list is empty" symptom on the focus panel.
+    for (const n of mergedNodes) m.set(n.symbol.toUpperCase(), n)
     return m
-  }, [])
+  }, [mergedNodes])
   const stageLabelById = useMemo(() => {
     const m = new Map<string, string>()
+    // Always include the curated supplyChainGraph stages so counterparty
+    // rows for tech tickers get the full "Fabless Chip Design" style label
+    // even when the current sector tab's active stage list doesn't include
+    // that id. Active stages (catalog-driven or derived) layer on top so
+    // sector-specific names win when they overlap.
     for (const s of CHAIN.stages) m.set(s.id, s.label)
+    for (const s of activeStages) m.set(s.id, s.label)
     return m
-  }, [])
+  }, [activeStages])
   const focusNode = focusSymbol ? nodeBySymbol.get(focusSymbol) : null
   const focusStageLabel = focusNode ? stageLabelById.get(focusNode.stage) ?? focusNode.stage : ''
   const focusCompanyName = focusTicker?.companyName ?? focusSymbol ?? ''
   const focusBlurb = focusNode?.blurb ?? ''
+
+  // Top-level GICS ancestor for the current focus. When a counterparty's
+  // top-level differs from this, the relationship is cross-sector and gets
+  // badged in the row. Unknown focus sector → no badging at all.
+  const focusTopLevel = useMemo(() => {
+    if (!focusSymbol) return null
+    const primary = resolvedPrimarySector.get(focusSymbol.toUpperCase())
+    if (!primary) return null
+    const ancestors = SECTOR_ANCESTORS.get(primary)
+    if (!ancestors) return null
+    // Top-level = the ancestor whose parentId is null.
+    for (const id of ancestors) {
+      const entry = CATALOG.find((c) => c.id === id)
+      if (entry && !entry.parentId) return entry.id
+    }
+    return null
+  }, [focusSymbol, resolvedPrimarySector])
+
+  // Display name lookup for the top-level-sector badge.
+  const topLevelNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const top of TOP_LEVEL_SECTORS) m.set(top.id, top.name)
+    return m
+  }, [])
 
   // Reshape the focus panel's counterparties into the Counterparty structure
   // used by TransactionCluster so the panel body reads identically to the
@@ -573,12 +816,32 @@ export function ValueChain({
   const buildCounterparty = (sym: string, note: string | null): Counterparty => {
     const n = nodeBySymbol.get(sym)
     const stage = n?.stage ?? ''
+    // Cross-sector badge: show the counterparty's top-level sector name
+    // when it differs from the focus's top-level. Both must be known for
+    // the badge to render — we don't speculate.
+    let crossSectorLabel: string | null = null
+    if (focusTopLevel) {
+      const primary = resolvedPrimarySector.get(sym.toUpperCase())
+      if (primary) {
+        const ancestors = SECTOR_ANCESTORS.get(primary)
+        const top = ancestors
+          ? [...ancestors].find((id) => {
+              const entry = CATALOG.find((c) => c.id === id)
+              return entry && !entry.parentId
+            })
+          : undefined
+        if (top && top !== focusTopLevel) {
+          crossSectorLabel = topLevelNameById.get(top) ?? null
+        }
+      }
+    }
     return {
       symbol: sym,
       stage,
       stageLabel: stage ? stageLabelById.get(stage) ?? stage : '—',
       companyName: tickerBySymbol.get(sym.toUpperCase())?.companyName ?? n?.name ?? sym,
-      note
+      note,
+      crossSectorLabel
     }
   }
   const customerItems = useMemo(
@@ -627,20 +890,104 @@ export function ValueChain({
         )}
       </div>
 
-      <div className="flex items-center gap-1 mb-4 rounded-full bg-surface-1 ring-1 ring-edge/60 p-0.5 w-fit">
-        {CHAIN.sectors.map((s) => (
-          <SectorTab
-            key={s.id}
-            label={s.label}
-            active={sectorId === s.id}
-            onClick={() => {
-              setSectorId(s.id)
-              setHoverSymbol(null)
-              setLockedSymbol(null)
-            }}
-          />
-        ))}
-      </div>
+      {(() => {
+        // Two-row tab strip. Row 1 shows top-level GICS sectors with any
+        // content in their subtree ("Financials", "Technology"). Row 2 —
+        // only when a top-level is in context — shows that top-level's
+        // sub-sectors that hold direct tickers as pill chips under the
+        // row above ("Payments", "Banking" under Financials). Clicking a
+        // sub chip narrows the filter to that sub-sector; the chip row
+        // itself signals parent/child hierarchy visually rather than
+        // putting Payments next to Financials as a sibling.
+        const withCount = new Map(sectorsWithContent.map((s) => [s.id, s]))
+        // Resolve the top-level ancestor of the currently-selected sector.
+        // For 'all', no top-level context. For a top-level id, it's itself.
+        // For a sub-sector, walk up.
+        let currentTopLevelId: string | null = null
+        if (sectorId !== 'all') {
+          const ancestors = SECTOR_ANCESTORS.get(sectorId)
+          if (ancestors) {
+            for (const id of ancestors) {
+              const entry = CATALOG.find((c) => c.id === id)
+              if (entry && !entry.parentId) {
+                currentTopLevelId = entry.id
+                break
+              }
+            }
+          }
+        }
+        const subSectors = currentTopLevelId
+          ? CATALOG.filter(
+              (entry) =>
+                entry.parentId === currentTopLevelId &&
+                (withCount.get(entry.id)?.tickerCount ?? 0) > 0
+            )
+          : []
+
+        return (
+          <>
+            <div className="flex items-center gap-1 mb-2 rounded-full bg-surface-1 ring-1 ring-edge/60 p-0.5 w-fit flex-wrap">
+              <SectorTab
+                label="All"
+                active={sectorId === 'all'}
+                onClick={() => {
+                  setSectorId('all')
+                  setHoverSymbol(null)
+                  setLockedSymbol(null)
+                }}
+              />
+              {TOP_LEVEL_SECTORS.filter(
+                (top) => (withCount.get(top.id)?.descendantTickerCount ?? 0) > 0
+              ).map((top) => (
+                <SectorTab
+                  key={top.id}
+                  label={top.name}
+                  active={
+                    sectorId === top.id ||
+                    (currentTopLevelId === top.id && sectorId !== 'all')
+                  }
+                  onClick={() => {
+                    setSectorId(top.id)
+                    setHoverSymbol(null)
+                    setLockedSymbol(null)
+                  }}
+                />
+              ))}
+            </div>
+            {subSectors.length > 0 && (
+              <div className="flex items-center gap-1.5 mb-4 ml-3 flex-wrap">
+                <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-600 mr-1">
+                  ↳
+                </span>
+                <SubSectorChip
+                  label={`All of ${
+                    TOP_LEVEL_SECTORS.find((t) => t.id === currentTopLevelId)?.name ?? ''
+                  }`}
+                  active={sectorId === currentTopLevelId}
+                  onClick={() => {
+                    if (!currentTopLevelId) return
+                    setSectorId(currentTopLevelId)
+                    setHoverSymbol(null)
+                    setLockedSymbol(null)
+                  }}
+                />
+                {subSectors.map((sub) => (
+                  <SubSectorChip
+                    key={sub.id}
+                    label={sub.name}
+                    active={sectorId === sub.id}
+                    onClick={() => {
+                      setSectorId(sub.id)
+                      setHoverSymbol(null)
+                      setLockedSymbol(null)
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )
+      })()}
 
       {/* Fixed height so the panel never resizes when switching between
           tickers with different numbers of edges. Inner grid scrolls if a
@@ -821,7 +1168,7 @@ export function ValueChain({
                   <ValueChainTile
                     key={n.symbol}
                     symbol={n.symbol}
-                    companyName={t?.companyName ?? n.symbol}
+                    companyName={t?.companyName ?? n.name ?? n.symbol}
                     quote={q}
                     financials={fin}
                     earnings={earnings}
@@ -894,6 +1241,33 @@ function SectorTab({
         active
           ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-inset ring-emerald-500/40'
           : 'text-zinc-400 hover:text-zinc-200'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
+// Sub-sector chip used under an active top-level tab. Smaller footprint
+// than SectorTab and uses a subtler emerald to preserve the parent-child
+// visual relationship (parent tab is the dominant accent, children are
+// supporting chips).
+function SubSectorChip({
+  label,
+  active,
+  onClick
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-2.5 py-[3px] rounded-full text-[9px] font-semibold uppercase tracking-[0.18em] transition-colors ring-1 ring-inset ${
+        active
+          ? 'bg-emerald-500/15 text-emerald-200 ring-emerald-500/30'
+          : 'bg-surface-1 text-zinc-500 ring-edge/60 hover:text-zinc-300'
       }`}
     >
       {label}

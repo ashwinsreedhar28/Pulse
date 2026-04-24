@@ -131,7 +131,7 @@ export function CompanyValueChainSection({
     : 'Industry subgraph, on demand'
 
   return (
-    <CollapsibleSection title="Value chain" meta={meta} defaultOpen>
+    <CollapsibleSection title="Value chain" meta={meta} defaultOpen gradient>
       {row === undefined ? (
         <div className="text-[12px] text-zinc-500">Checking for a cached value chain…</div>
       ) : !row || !row.graph ? (

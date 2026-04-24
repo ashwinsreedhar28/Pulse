@@ -12,19 +12,25 @@ export interface GraphEdgeOverride {
   weight: number | null
   source: string
   acceptedAt: number
+  // Unified-graph sector tag. Identifies which sector's value-chain view
+  // this edge naturally lives in (usually the focus ticker's primary
+  // sector at the time the edge was proposed). Nullable because rows
+  // predating v35 may not have one until the bootstrap backfills.
+  sectorId?: string | null
 }
 
 export function upsertEdgeOverride(input: GraphEdgeOverride): void {
   getDb()
     .prepare(
       `INSERT INTO graph_edge_overrides
-         (fromSymbol, toSymbol, relationship, note, weight, source, acceptedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+         (fromSymbol, toSymbol, relationship, note, weight, source, acceptedAt, sectorId)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(fromSymbol, toSymbol, relationship) DO UPDATE SET
          note = excluded.note,
          weight = excluded.weight,
          source = excluded.source,
-         acceptedAt = excluded.acceptedAt`
+         acceptedAt = excluded.acceptedAt,
+         sectorId = COALESCE(excluded.sectorId, graph_edge_overrides.sectorId)`
     )
     .run(
       input.fromSymbol.toUpperCase(),
@@ -33,7 +39,8 @@ export function upsertEdgeOverride(input: GraphEdgeOverride): void {
       input.note,
       input.weight,
       input.source,
-      input.acceptedAt
+      input.acceptedAt,
+      input.sectorId ?? null
     )
 }
 
@@ -57,7 +64,7 @@ export function upsertEdgeOverrideWithConsensus(input: GraphEdgeOverride): {
   const to = input.toSymbol.toUpperCase()
   const existing = db
     .prepare<[string, string, string], GraphEdgeOverride>(
-      `SELECT fromSymbol, toSymbol, relationship, note, weight, source, acceptedAt
+      `SELECT fromSymbol, toSymbol, relationship, note, weight, source, acceptedAt, sectorId
          FROM graph_edge_overrides
         WHERE fromSymbol = ? AND toSymbol = ? AND relationship = ?`
     )
@@ -96,10 +103,14 @@ export function upsertEdgeOverrideWithConsensus(input: GraphEdgeOverride): {
         ? existing.note
         : input.note ?? existing.note ?? null
 
+  // sectorId: keep whichever one is set. First-in wins; if the merge
+  // introduces a new sectorId over a null, adopt it.
+  const mergedSectorId = existing.sectorId ?? input.sectorId ?? null
+
   db
     .prepare(
       `UPDATE graph_edge_overrides
-          SET note = ?, weight = ?, source = ?, acceptedAt = ?
+          SET note = ?, weight = ?, source = ?, acceptedAt = ?, sectorId = ?
         WHERE fromSymbol = ? AND toSymbol = ? AND relationship = ?`
     )
     .run(
@@ -107,6 +118,7 @@ export function upsertEdgeOverrideWithConsensus(input: GraphEdgeOverride): {
       finalWeight,
       mergedSources.join(','),
       input.acceptedAt,
+      mergedSectorId,
       from,
       to,
       input.relationship
@@ -131,7 +143,7 @@ export function deleteEdgeOverride(
 export function listEdgeOverrides(): GraphEdgeOverride[] {
   return getDb()
     .prepare<[], GraphEdgeOverride>(
-      `SELECT fromSymbol, toSymbol, relationship, note, weight, source, acceptedAt
+      `SELECT fromSymbol, toSymbol, relationship, note, weight, source, acceptedAt, sectorId
          FROM graph_edge_overrides
         ORDER BY acceptedAt DESC`
     )

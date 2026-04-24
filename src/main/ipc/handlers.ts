@@ -65,6 +65,13 @@ import {
   listNodeOverrides
 } from '../database/graphNodeOverrides'
 import {
+  buildPrimarySectorIndex,
+  getSectorsForSymbol,
+  getTopLevelAncestor,
+  listSectors,
+  listSectorsWithContent
+} from '../services/sectorService'
+import {
   ensureCompanyProfile,
   getCompanyProfile,
   regenerateCompanyProfile
@@ -502,6 +509,20 @@ export function registerDbIpc(): void {
     const { readCompanyChain } = await import('../services/companyValueChainService')
     return readCompanyChain(symbol)
   })
+  // Bulk regenerate every existing company_value_chains row. Useful after
+  // pipeline improvements so existing chains pick up new classifier /
+  // absorber behavior without the user re-clicking Generate on each detail
+  // page. Fire-and-forget from the renderer's perspective — progress is
+  // broadcast on 'chainRegen:progress'.
+  ipcMain.handle('stocks:regenerateAllChains', async () => {
+    const { regenerateAllChains } = await import('../services/companyValueChainService')
+    void regenerateAllChains()
+    return { ok: true }
+  })
+  ipcMain.handle('stocks:getRegenerateAllProgress', async () => {
+    const { getRegenerateAllProgress } = await import('../services/companyValueChainService')
+    return getRegenerateAllProgress()
+  })
 
   // Value-chain growth pipeline. Renderer surfaces the audit log + overlay
   // list in Settings, lets users trigger a sweep manually, and hit Undo on
@@ -521,6 +542,13 @@ export function registerDbIpc(): void {
       deleteNodeOverride(symbol)
       if (candidateId) {
         markCandidateRejected(candidateId, 'User removed node override via audit panel')
+      }
+      // Broadcast graph:updated so the main Value Chain view refreshes its
+      // overrides cache and the removed node disappears from stage groups.
+      // Without this, the undo only affected the Settings panel's reload()
+      // and the main view kept showing stale tiles.
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('graph:updated')
       }
       return { ok: true }
     }
@@ -550,8 +578,24 @@ export function registerDbIpc(): void {
       if (candidateId) {
         markCandidateRejected(candidateId, 'User removed override via audit panel')
       }
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('graph:updated')
+      }
       return { ok: true }
     }
+  )
+
+  // sectors — unified multi-sector graph. listWithContent rolls up ticker
+  // counts so the UI only surfaces top-level GICS sectors that actually
+  // have assigned tickers. primarySectorIndex + topLevelAncestor power the
+  // cross-sector edge badge (endpoints whose primary sectors resolve to
+  // different top-level parents are "cross-sector").
+  ipcMain.handle('sectors:list', () => listSectors())
+  ipcMain.handle('sectors:listWithContent', () => listSectorsWithContent())
+  ipcMain.handle('sectors:forSymbol', (_e, symbol: string) => getSectorsForSymbol(symbol))
+  ipcMain.handle('sectors:primaryIndex', () => buildPrimarySectorIndex())
+  ipcMain.handle('sectors:topLevelAncestor', (_e, sectorId: string) =>
+    getTopLevelAncestor(sectorId)
   )
 
   // sports
