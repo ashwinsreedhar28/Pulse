@@ -188,6 +188,20 @@ export function MacroPanel(): JSX.Element | null {
     }
   }, [])
 
+  // Order tiles by group so the colored dots cluster naturally even though
+  // there's no explicit section divider — left-to-right reads as a small
+  // legend matching the group order. Hook MUST be unconditional (rules
+  // of hooks); early returns below this line for cold/loading states.
+  const orderedTiles = useMemo(() => {
+    if (!snapshot) return []
+    const out: FredSeriesSnapshot[] = []
+    for (const g of GROUP_ORDER) {
+      for (const s of snapshot) if (s.group === g) out.push(s)
+    }
+    return out
+  }, [snapshot])
+
+  // Loading state — initial fetch hasn't resolved yet.
   if (!snapshot) return null
 
   // Cold state: snapshot resolved, but every series has no data. Most
@@ -222,18 +236,6 @@ export function MacroPanel(): JSX.Element | null {
       setRefreshing(false)
     }
   }
-
-  // Order tiles by group so the colored dots cluster naturally even though
-  // there's no explicit section divider — left-to-right reads as a small
-  // legend matching the group order.
-  const orderedTiles = useMemo(() => {
-    if (!snapshot) return []
-    const out: FredSeriesSnapshot[] = []
-    for (const g of GROUP_ORDER) {
-      for (const s of snapshot) if (s.group === g) out.push(s)
-    }
-    return out
-  }, [snapshot])
 
   return (
     <div className="mx-6 mt-3 mb-2 rounded-xl border border-edge/60 bg-surface-1/40">
