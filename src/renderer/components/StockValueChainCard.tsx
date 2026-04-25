@@ -131,8 +131,8 @@ function SourceBadge({
   if (citation?.kind === 'filing') {
     const dateStr = formatCiteDate(citation.filedAt)
     // Show form type + date on the pill so the user can see WHEN the
-    // filing was made without hovering. Date is the most-asked-about
-    // detail when judging whether a citation is current.
+    // filing was made without hovering. Full label always rendered;
+    // pill wraps to multiple lines if needed.
     label = dateStr ? `${citation.formType} · ${dateStr}` : citation.formType
     title = `${citation.formType} filed ${dateStr} · ${citation.accession} — click to open SEC filing`
     openArgs = {
@@ -143,10 +143,9 @@ function SourceBadge({
   } else if (citation?.kind === 'article' && citation.url) {
     const dateStr = formatCiteDate(citation.publishedAt)
     const sourceStr = citation.feedTitle ?? 'News'
-    // Show source + date on the pill (e.g. "Reuters · 2025-04-22").
-    // More generous truncation budget now that the pill has its own row.
-    const truncatedSource = sourceStr.length > 22 ? sourceStr.slice(0, 20) + '…' : sourceStr
-    label = dateStr ? `${truncatedSource} · ${dateStr}` : truncatedSource
+    // Full source + date — no truncation, the pill wraps onto multiple
+    // lines for long publisher names.
+    label = dateStr ? `${sourceStr} · ${dateStr}` : sourceStr
     title = `${citation.title}${dateStr ? ` (${dateStr})` : ''} — click to open`
     openArgs = {
       url: citation.url,
@@ -156,19 +155,21 @@ function SourceBadge({
         : (citation.feedTitle ?? null)
     }
   } else if (citation?.kind === 'model' && citation.attribution) {
-    // Model-grounded edge with a free-text training attribution.
-    // Show the attribution as the badge label so the user sees a real
-    // source name (e.g. "Apple FY2023 10-K") instead of the generic
-    // "Model". Generous truncation now that the pill has its own row.
-    const attr = citation.attribution
-    label = attr.length > 48 ? attr.slice(0, 46) + '…' : attr
-    title = `${attr} — from the model's training knowledge (no live link)`
+    // Model-grounded edge with a free-text training attribution. Render
+    // the full string (no character cap) so users see the complete
+    // source name like "Industry analyst consensus circa 2023" or
+    // "JCI 10-K 2023 competitive landscape disclosure". The pill wraps
+    // to multiple lines when needed; readability beats compactness here
+    // since this IS the citation.
+    label = citation.attribution
+    title = `${citation.attribution} — from the model's training knowledge (no live link)`
   }
 
-  // 10.5px pill text is small but readable. flex-row + min-w-0 on the label
-  // span so long labels get text-ellipsis instead of overflowing the
-  // counterparty column. max-w-full clamps the pill to its container.
-  const baseClasses = `inline-flex items-center gap-1 px-2 py-[2px] rounded-full border text-[10.5px] font-semibold uppercase tracking-[0.12em] max-w-full ${meta.className}`
+  // Multi-line-friendly pill. `whitespace-normal break-words` lets long
+  // labels wrap onto multiple lines inside the rounded shape rather than
+  // ellipsizing or busting the column width. Padding bumped slightly so
+  // wrapped lines don't look cramped.
+  const baseClasses = `inline-flex items-start gap-1 px-2 py-[3px] rounded-md border text-[10.5px] font-semibold uppercase tracking-[0.12em] max-w-full whitespace-normal break-words leading-[1.35] ${meta.className}`
 
   if (openArgs && onOpen) {
     const args = openArgs
@@ -179,15 +180,15 @@ function SourceBadge({
           e.stopPropagation()
           onOpen(args.url, args.title, args.subtitle)
         }}
-        className={`${baseClasses} cursor-pointer hover:brightness-125 hover:underline underline-offset-2`}
+        className={`${baseClasses} cursor-pointer hover:brightness-125 hover:underline underline-offset-2 text-left`}
         title={title}
       >
-        {/* min-w-0 + truncate so the label ellipsises cleanly when the
-            cluster column is narrow rather than busting the pill width. */}
-        <span className="truncate min-w-0">{label}</span>
+        <span className="flex-1 min-w-0">{label}</span>
         {/* Link arrow makes the click affordance obvious — without it the
-            pill looks like a static badge. */}
-        <span aria-hidden="true" className="shrink-0 text-[9px] opacity-80">
+            pill looks like a static badge. shrink-0 + slightly indented
+            from the top so it aligns with the first line of a wrapped
+            label, not the visual center. */}
+        <span aria-hidden="true" className="shrink-0 text-[9px] opacity-80 mt-[1px]">
           ↗
         </span>
       </button>
@@ -195,7 +196,7 @@ function SourceBadge({
   }
   return (
     <span className={baseClasses} title={title}>
-      <span className="truncate min-w-0">{label}</span>
+      <span className="flex-1 min-w-0">{label}</span>
     </span>
   )
 }
