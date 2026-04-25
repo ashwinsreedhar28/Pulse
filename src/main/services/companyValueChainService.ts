@@ -1427,10 +1427,61 @@ const IR_SUBDOMAIN_PREFIXES = [
   'corporate.'    // corporate.exxonmobil.com
 ]
 
+// Path patterns that identify a first-party press-release URL when the
+// host is a company root domain (e.g. asml.com/en/news/press-releases/
+// or intel.com/content/www/us/en/newsroom/...). Many companies host
+// their press releases on the root domain instead of a dedicated
+// subdomain, so subdomain-prefix matching alone misses them.
+const PRESS_RELEASE_PATH_PATTERNS: RegExp[] = [
+  /\/press-?releases?\//i,
+  /\/news\/press-?releases?\//i,
+  /\/newsroom\//i,
+  /\/press\/release/i,
+  /\/investor[s]?\/news/i,
+  /\/news-events\//i,
+  /\/about\/news\//i,
+  /\/media\/press/i
+]
+
+// Known aggregator / second-tier-research hosts that we explicitly do
+// NOT accept even when they have press-release-ish paths. These re-host
+// content from primary sources and shouldn't crowd out the original.
+const AGGREGATOR_BLACKLIST = new Set([
+  'finance.yahoo.com',
+  'yahoo.com',
+  'news.yahoo.com',
+  'msn.com',
+  'money.msn.com',
+  'seekingalpha.com',
+  'fool.com',
+  'simplywall.st',
+  'trefis.com',
+  'tipranks.com',
+  'zacks.com',
+  'investorplace.com',
+  'benzinga.com',
+  'finbox.com',
+  'macrotrends.net',
+  'stockanalysis.com',
+  'wallstreetzen.com',
+  'gurufocus.com'
+])
+
+function isAggregatorHost(host: string): boolean {
+  if (AGGREGATOR_BLACKLIST.has(host)) return true
+  for (const agg of AGGREGATOR_BLACKLIST) {
+    if (host.endsWith('.' + agg)) return true
+  }
+  return false
+}
+
 function matchesPrimaryPress(url: string): { ok: true; host: string } | { ok: false } {
   try {
     const u = new URL(url)
     const host = u.hostname.toLowerCase()
+    const path = u.pathname.toLowerCase()
+    // Aggregator blacklist short-circuit — no path-based reprieve.
+    if (isAggregatorHost(host)) return { ok: false }
     // IR subdomain match: ir.kla.com, investors.intel.com, etc.
     for (const prefix of IR_SUBDOMAIN_PREFIXES) {
       if (host.startsWith(prefix)) return { ok: true, host }
@@ -1440,6 +1491,14 @@ function matchesPrimaryPress(url: string): { ok: true; host: string } | { ok: fa
       if (host === domain || host.endsWith('.' + domain) || host === 'www.' + domain) {
         return { ok: true, host }
       }
+    }
+    // First-party press-release path on a company root domain.
+    // asml.com/en/news/press-releases/... is functionally a press
+    // release on ASML's own corporate site — accept when the path
+    // matches one of the canonical press-release patterns AND the
+    // host isn't a known aggregator (already filtered above).
+    for (const pattern of PRESS_RELEASE_PATH_PATTERNS) {
+      if (pattern.test(path)) return { ok: true, host }
     }
     return { ok: false }
   } catch {
@@ -1461,7 +1520,7 @@ async function webSearchAugmentCitations(
   edges: import('../database/companyValueChains').CompanyValueChainEdge[],
   focusSymbol: string,
   focusCompanyName: string,
-  maxSearches = 8
+  maxSearches = 12
 ): Promise<import('../database/companyValueChains').CompanyValueChainEdge[]> {
   const focus = focusSymbol.toUpperCase()
   // Find edges still missing a primary cite. Order by edge index so the
@@ -1519,10 +1578,14 @@ async function webSearchAugmentCitations(
       `BusinessInsider, Fortune)\n` +
       `3. Press-wire announcement (PR Newswire, Business Wire, ` +
       `GlobeNewswire, AccessWire) — these are first-party press releases\n` +
-      `4. Company's own investor-relations / press / media page (any ` +
-      `URL on ir.<company>.com, investors.<company>.com, ` +
-      `pr.<company>.com, press.<company>.com, newsroom.<company>.com, ` +
-      `news.<company>.com, media.<company>.com, corporate.<company>.com)\n` +
+      `4. Company's own investor-relations / press / media page. Two ` +
+      `valid forms: (a) URL on a corporate-comms subdomain like ` +
+      `ir.<company>.com, investors.<company>.com, pr.<company>.com, ` +
+      `press.<company>.com, newsroom.<company>.com, news.<company>.com, ` +
+      `media.<company>.com, or corporate.<company>.com; (b) URL on the ` +
+      `company root domain whose PATH is a press-release page (e.g. ` +
+      `asml.com/en/news/press-releases/..., intel.com/.../newsroom/..., ` +
+      `samsung.com/.../press-releases/...).\n` +
       `\n` +
       `Return STRICT JSON only, one of these shapes:\n` +
       `- SEC: {"kind":"filing","url":"https://www.sec.gov/...","formType":"10-K","year":2024}\n` +
