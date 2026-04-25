@@ -546,11 +546,13 @@ export interface CompanyValueChainNode {
   kind: 'ticker' | 'unverified'
 }
 
-// Provenance for the edge claim. 'filings' = from the 10-K excerpt,
-// 'news' = from a recent news snippet, 'profile' = from the company
-// profile description, 'model' = the LLM's general knowledge. Null on
-// legacy chains generated before this field was added.
-export type CompanyValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'analyst' | 'model'
+// Provenance for the edge claim. Restricted to primary-document sources:
+// 'filings' (SEC 10-K/10-Q/8-K), 'news' (in-app reader article), or
+// 'model' (un-grounded training-knowledge claim). Profile blurbs and
+// analyst rating pages used to live here but were dropped — they don't
+// evidence supplier/customer/competitor relationships, just self-
+// description or price-target sentiment. Null on legacy chains.
+export type CompanyValueChainEdgeSource = 'filings' | 'news' | 'model'
 
 // Specific document the edge claim points to. Renderer turns this into a
 // clickable chip — opens the SEC URL externally for filings, the in-app
@@ -572,13 +574,6 @@ export type CompanyValueChainEdgeCitation =
       url: string | null
       publishedAt: number | null
       feedTitle: string | null
-    }
-  | { kind: 'profile' }
-  | {
-      kind: 'analyst'
-      firm: string
-      date: string
-      url: string
     }
   | {
       kind: 'model'

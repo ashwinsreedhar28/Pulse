@@ -51,8 +51,8 @@ export interface Counterparty {
   crossSectorLabel?: string | null
   // Provenance for the note, populated by generated chains only. Curated
   // or legacy edges leave this null and no badge renders. 'filings' / 'news'
-  // / 'profile' are real groundings; 'model' means the LLM claimed the
-  // relationship from training knowledge without any supplied context.
+  // are real groundings; 'model' means the LLM claimed the relationship
+  // from training knowledge without any supplied context.
   source?: CompanyValueChainEdgeSource | null
   // Multi-citation array — each entry is one document supporting this
   // edge. Renderer stacks them as multiple clickable pills. When empty
@@ -81,22 +81,12 @@ export const SOURCE_BADGE: Record<
   filings: {
     label: '10-K',
     className: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200',
-    title: 'Cited in the company’s 10-K filing excerpt'
+    title: 'Cited in an SEC filing (10-K / 10-Q / 8-K)'
   },
   news: {
     label: 'News',
     className: 'border-sky-500/40 bg-sky-500/10 text-sky-200',
-    title: 'Cited in a recent news article fed into the generator'
-  },
-  profile: {
-    label: 'Profile',
-    className: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
-    title: 'Cited in the company profile description'
-  },
-  analyst: {
-    label: 'Analyst',
-    className: 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-200',
-    title: 'Cited in an analyst rating action'
+    title: 'Cited in a recent news article'
   },
   model: {
     label: 'Model',
@@ -118,8 +108,8 @@ function formatCiteDate(ms: number | null | undefined): string {
 // citation + onOpen handler are both present, the pill becomes a clickable
 // link to the actual document. Falls back to a static pill (matching the
 // legacy non-cited UX) for: edges without citations, edges with citations
-// but kinds that have no URL ('profile'/'model'), or callers that didn't
-// wire a handler.
+// but kinds that have no URL ('model'), or callers that didn't wire a
+// handler.
 function SourceBadge({
   source,
   citation,
@@ -139,11 +129,7 @@ function SourceBadge({
       ? 'filings'
       : citation.kind === 'article'
         ? 'news'
-        : citation.kind === 'analyst'
-          ? 'analyst'
-          : citation.kind === 'profile'
-            ? 'profile'
-            : 'model'
+        : 'model'
     : (source ?? null)
   if (!derivedSource) return null
   const meta = SOURCE_BADGE[derivedSource]
@@ -178,17 +164,6 @@ function SourceBadge({
       subtitle: dateStr
         ? `${citation.feedTitle ?? 'Article'} · ${dateStr}`
         : (citation.feedTitle ?? null)
-    }
-  } else if (citation?.kind === 'analyst') {
-    // Analyst rating event citation. URL is Yahoo's per-symbol analyst
-    // page (concrete public link; per-rating-report URLs are paywalled).
-    const dateStr = citation.date ? ` · ${citation.date}` : ''
-    label = `${citation.firm}${dateStr}`
-    title = `${citation.firm} analyst action${dateStr} — click to open Yahoo Finance analyst page`
-    openArgs = {
-      url: citation.url,
-      title: `${citation.firm} — analyst coverage`,
-      subtitle: citation.date || null
     }
   } else if (citation?.kind === 'model' && citation.attribution) {
     // Model-grounded edge with a free-text training attribution that

@@ -168,6 +168,99 @@ async function callClaude(options: ClaudeMessageOptions): Promise<string | null>
   }
 }
 
+// Variant of callClaude that enables Anthropic's server-side web_search
+// tool. The model can issue searches during reasoning; the API handles
+// the search round-trip and pipes results back into the model's context.
+// We only return the FINAL text block — the tool_use / tool_result blocks
+// in between aren't useful to the caller. Used by the SEC-filing search
+// augmenter for cite-less edges in companyValueChainService. Returns null
+// on any failure so callers can fall through gracefully.
+//
+// max_uses caps how many searches the model can run per request — keep
+// it tight (1-2) to bound cost. The tool name "web_search_20250305" is
+// Anthropic's stable identifier for the standard web search tool.
+export async function callClaudeWithWebSearch(options: {
+  model: string
+  system: string
+  user: string
+  maxTokens: number
+  maxSearches?: number
+}): Promise<string | null> {
+  const apiKey = getPreferences().anthropicApiKey
+  if (!apiKey) return null
+
+  const messages: Array<{ role: 'user'; content: string }> = [
+    { role: 'user', content: options.user }
+  ]
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    const res = await fetch(ANTHROPIC_API, {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': ANTHROPIC_VERSION,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: options.model,
+        max_tokens: options.maxTokens,
+        system: options.system,
+        messages,
+        tools: [
+          {
+            type: 'web_search_20250305',
+            name: 'web_search',
+            max_uses: options.maxSearches ?? 2
+          }
+        ]
+      }),
+      signal: controller.signal
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.warn(
+        `[claude] ${options.model} web-search call failed: HTTP ${res.status}`,
+        body.slice(0, 400)
+      )
+      return null
+    }
+    const data = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>
+      stop_reason?: string
+    }
+    // Anthropic returns multiple content blocks when tools fire (text,
+    // tool_use, tool_result, more text). The final text block is the
+    // model's synthesized answer — concatenate all text blocks defensively
+    // in case the model spreads its answer.
+    const text = (data.content ?? [])
+      .filter((c) => c.type === 'text' && typeof c.text === 'string')
+      .map((c) => c.text!)
+      .join('\n')
+      .trim()
+    return text || null
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      console.log(
+        `[claude] ${options.model} web-search timed out after ${REQUEST_TIMEOUT_MS} ms`
+      )
+    } else {
+      console.warn(
+        `[claude] ${options.model} web-search error:`,
+        err instanceof Error ? err.message : err
+      )
+    }
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Re-export models so the caller can pick a cheap one (Haiku) for the
+// web-search augmenter without duplicating the constant.
+export { MODELS as CLAUDE_MODELS }
+
 // Strip common JSON extras Claude occasionally wraps output in: markdown
 // fences, leading commentary before the first brace.
 function extractJsonObject(raw: string): string | null {
@@ -190,11 +283,13 @@ function extractJsonObject(raw: string): string | null {
 // ---- generateCompanyValueChain ---------------------------------------------
 
 // Per-source context the generator can cite by reference id. Each kind
-// gets a stable id ("F" for the filing, "P" for profile, "N1"/"N2"/...
-// for news) that the model emits as `sourceRef` on edges it grounds in
+// gets a stable id ("F"/"F2"/.../"Fn" for filings, "N1"/"N2"/... for
+// news) that the model emits as `sourceRef` on edges it grounds in
 // that source. The orchestrator in companyValueChainService builds these
 // from the SEC filing row + Pulse article rows so the resolver can map
-// the model's ref back to a clickable citation later.
+// the model's ref back to a clickable citation later. Profile blurbs
+// and analyst rating actions are NOT citation sources — they don't
+// evidence supplier/customer/competitor relationships.
 export interface ChainGroundingFiling {
   refId: string // 'F' | 'F2' | 'F3' — corresponds to 10-K, 8-K, 10-Q
   accession: string
@@ -217,23 +312,6 @@ export interface ChainGroundingArticle {
   publishedAt: number | null
   feedTitle: string | null
 }
-// Analyst rating event — Yahoo's upgradeDowngradeHistory rows fed as
-// citable references. URL points to Yahoo's per-symbol analyst page
-// (concrete, public, but not a per-rating-report URL since those
-// are paywalled). Refs A1..A5.
-export interface ChainGroundingAnalyst {
-  refId: string // 'A1' | 'A2' | ...
-  firm: string
-  action: 'up' | 'down' | 'main' | 'init' | 'reit'
-  fromGrade: string | null
-  toGrade: string | null
-  // Date of the rating action in YYYY-MM-DD form (not epoch — the
-  // prompt-rendered string is what the model needs, and we already
-  // formatted it before passing).
-  date: string
-  url: string
-}
-
 export async function generateCompanyValueChain(input: {
   symbol: string
   companyName: string
@@ -251,9 +329,6 @@ export async function generateCompanyValueChain(input: {
   // accepted but doesn't get refIds, so the model can only cite by 'news'
   // category, not by article.
   articles?: ChainGroundingArticle[]
-  // Analyst rating events. Refs A1..A5 — last few upgrades/downgrades.
-  // Provides a citable footprint for "the consensus moved" claims.
-  analystEvents?: ChainGroundingAnalyst[]
   newsSnippets?: Array<{ title: string; summary: string | null }>
   // Canonical stage list for the focus's classified sub-sector. When
   // provided, Claude is constrained to pick stage ids from this list —
@@ -285,10 +360,13 @@ export async function generateCompanyValueChain(input: {
   if (!input.companyName.trim()) return null
   if (!(await checkClaudeHealth())) return null
 
-  // Profile is the only single-source category, so it gets a fixed ref
-  // "P" — the model uses sourceRef="P" on edges grounded in profile text.
+  // Profile description goes in as background-only context — NOT a citable
+  // ref. Profile blurbs are company self-description, they don't evidence
+  // relationships. Edges grounded only in profile text used to come back
+  // with a "Profile" pill, which was unclickable and ambiguous; we'd rather
+  // drop those edges in strict mode than mislead the user.
   const profileBlock = input.profileDescription
-    ? `\n\nCompany profile [ref P]:\n${input.profileDescription.trim().slice(0, 2000)}`
+    ? `\n\nBackground — company description (NOT a citable source, just orienting context):\n${input.profileDescription.trim().slice(0, 2000)}`
     : ''
   // Filing block prefers the structured ChainGroundingFiling (gives the
   // model concrete metadata about WHICH 10-K it's looking at — form type
@@ -337,33 +415,10 @@ export async function generateCompanyValueChain(input: {
           )
           .join('\n')
       : ''
-  // Analyst rating events — give the model a citable basis for any
-  // "consensus shifted" / "rated X" claims. Refs A1-A5.
-  const analystBlock =
-    input.analystEvents && input.analystEvents.length > 0
-      ? '\n\nAnalyst rating actions:\n' +
-        input.analystEvents
-          .map((a) => {
-            const transition =
-              a.fromGrade && a.toGrade
-                ? `${a.fromGrade} → ${a.toGrade}`
-                : a.toGrade
-                  ? `to ${a.toGrade}`
-                  : ''
-            const verb =
-              a.action === 'up'
-                ? 'upgraded'
-                : a.action === 'down'
-                  ? 'downgraded'
-                  : a.action === 'init'
-                    ? 'initiated coverage'
-                    : a.action === 'reit'
-                      ? 're-iterated'
-                      : 'maintained'
-            return `[ref ${a.refId}] ${a.firm} ${verb} ${transition} on ${a.date}`
-          })
-          .join('\n')
-      : ''
+  // Analyst rating events used to be passed as A1..A5 grounding refs but
+  // were dropped — a Buy/Hold rating action doesn't evidence whether
+  // company X supplies company Y. Analyst events still flow through the
+  // notification system; they just can't anchor edge citations.
   // Cross-chain corroboration block. Translates each neighboring-chain
   // mention into a human-readable "[counterparty] [role] [focus]" line
   // with the origin chain cited so Claude can weight corroborating
@@ -392,7 +447,6 @@ export async function generateCompanyValueChain(input: {
     profileBlock +
     filingsBlock +
     newsBlock +
-    analystBlock +
     crossChainBlock
   ).trim()
 
@@ -418,7 +472,7 @@ export async function generateCompanyValueChain(input: {
     `      "to": "node symbol",\n` +
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
     `      "note": "one sentence, <120 chars, grounded in facts",\n` +
-    `      "source": "filings" | "news" | "profile" | "analyst" | "model",\n` +
+    `      "source": "filings" | "news" | "model",\n` +
     `      "sourceRefs": ["F", "N3"]   ← ARRAY of refs supporting this edge,\n` +
     `      "modelSource": "concrete attribution" (REQUIRED when source = "model")\n` +
     `    }\n` +
@@ -486,19 +540,22 @@ export async function generateCompanyValueChain(input: {
     `→ competitor, "partners-with-focus" → partner.\n` +
     `\n` +
     `\n` +
-    `Edge "source" field — cite where the claim comes from. EVERY edge ` +
-    `MUST be linkable to a specific document or named source the user can ` +
-    `click through to. We've adopted strict-citation mode:\n` +
+    `Edge "source" field — STRICT CITATION MODE. EVERY edge MUST be ` +
+    `linkable to a primary document the user can click through to:\n` +
     `- "filings" — the relationship is stated or clearly implied in one ` +
     `of the SEC filing excerpts above (10-K Item 1, 8-K disclosure, 10-Q ` +
-    `MD&A). Set sourceRef to F / F2 / F3 to identify which.\n` +
+    `MD&A). Refs F / F2 / F3 are the focus's own filings; F4 / F5 / ... ` +
+    `(when present) are counterparty filings that mention the focus. Use ` +
+    `whichever filing actually documents the relationship.\n` +
     `- "news" — stated in one of the news articles above. Set sourceRef ` +
     `to N1..N15 for the specific article.\n` +
-    `- "analyst" — sourced from one of the analyst rating actions above. ` +
-    `Set sourceRef to A1..A5. Use this only for "consensus is X" / "X ` +
-    `is rated Y" claims, not for relationship-existence claims.\n` +
-    `- "profile" — from the company profile text above (sourceRef "P").\n` +
     `- "model" — from your training knowledge. SEE STRICT RULES BELOW.\n` +
+    `\n` +
+    `Profile blurbs and analyst rating actions are NOT acceptable citation ` +
+    `sources. Profile = self-description, doesn't evidence relationships. ` +
+    `Analyst ratings = price-target sentiment, doesn't evidence supplier/` +
+    `customer/competitor links. If the only evidence you have is one of ` +
+    `these, OMIT THE EDGE.\n` +
     `\n` +
     `Edge "sourceRefs" field — ARRAY of refs supporting this edge. ` +
     `MULTIPLE REFS ARE STRONGLY ENCOURAGED when an edge is supported by ` +
@@ -508,11 +565,11 @@ export async function generateCompanyValueChain(input: {
     `- ["F"] — supported only by the 10-K\n` +
     `- ["F", "N3"] — supported by both the 10-K and article N3\n` +
     `- ["N1", "N5", "N9"] — three articles all describe this relationship\n` +
-    `- ["F2", "A1"] — 8-K (e.g. earnings call) plus an analyst rating\n` +
+    `- ["F2", "F4"] — focus 8-K plus a counterparty's filing\n` +
     `\n` +
     `ONLY use refs that appeared in [ref X] tags above. NEVER fabricate. ` +
-    `If you set source="filings"/"news"/"profile"/"analyst" but no matching ` +
-    `ref exists, downgrade source to "model" and follow strict rules below.\n` +
+    `If you set source="filings"/"news" but no matching ref exists, ` +
+    `downgrade source to "model" and follow strict rules below.\n` +
     `Set "source" to whichever ref category is dominant (the one most ` +
     `responsible for the claim); the other refs in the array can be from ` +
     `different categories — Pulse handles mixed-source rendering.\n` +
@@ -528,18 +585,15 @@ export async function generateCompanyValueChain(input: {
     `- Investor presentation / earnings call (these are filed as 8-K): ` +
     `"${input.symbol} 2024 investor day" / "${input.symbol} Q2 2024 earnings call" ` +
     `— Pulse maps to the most recent 8-K of that period.\n` +
-    `- Analyst note: "Goldman Sachs upgrade ${input.symbol} 2024" / ` +
-    `"Morgan Stanley analyst note ${input.symbol}" — Pulse links to the ` +
-    `Yahoo Finance analyst page.\n` +
     `- News coverage: "Bloomberg ${input.symbol} supply chain coverage 2024" / ` +
     `"Reuters ${input.symbol} M&A 2023" — Pulse searches the local article DB.\n` +
     `\n` +
     `If your knowledge of the edge does NOT match one of these patterns ` +
     `— if you'd be tempted to write "industry consensus", "common knowledge", ` +
-    `"general training", "public information", or any vague unattributed ` +
-    `phrase — OMIT THE EDGE ENTIRELY. Pulse will drop unlinkable edges ` +
-    `before display. Better fewer edges with real provenance than many ` +
-    `edges with hand-wavy attributions.\n` +
+    `"general training", "public information", "analyst coverage", or any ` +
+    `vague unattributed phrase — OMIT THE EDGE ENTIRELY. Pulse will drop ` +
+    `unlinkable edges before display. Better fewer edges with real provenance ` +
+    `than many edges with hand-wavy attributions.\n` +
     `\n` +
     (input.userCorrectionsBlock
       ? `\n${input.userCorrectionsBlock}\n\n` +
@@ -696,13 +750,16 @@ export async function generateCompanyValueChain(input: {
         rel === 'supplier' || rel === 'customer' || rel === 'competitor' || rel === 'partner'
       if (!validRel) continue
       const rawSource = typeof row.source === 'string' ? row.source.trim().toLowerCase() : ''
-      const source =
-        rawSource === 'filings' ||
-        rawSource === 'news' ||
-        rawSource === 'profile' ||
-        rawSource === 'model'
+      // Accept the canonical source values plus 'profile' / 'analyst' as
+      // legacy synonyms — older prompts allowed them, but we now treat
+      // both as 'model' so the strict-cite path drops them unless the
+      // model also emitted a resolvable filing/news ref or modelSource.
+      const source: 'filings' | 'news' | 'model' | null =
+        rawSource === 'filings' || rawSource === 'news' || rawSource === 'model'
           ? rawSource
-          : null
+          : rawSource === 'profile' || rawSource === 'analyst'
+            ? 'model'
+            : null
       // Accept either sourceRefs (array) or sourceRef (legacy single).
       // Cap at 6 refs to keep the rendered pill stack sane.
       const sourceRefs: string[] = []

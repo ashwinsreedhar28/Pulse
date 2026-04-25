@@ -1166,12 +1166,11 @@ export interface GeneratedValueChainNode {
   isTicker: boolean
 }
 
-// Attribution for a claimed relationship. Lets the UI show a provenance
-// pill ("10-K", "news", "profile", "model") next to the edge note so the
-// user can judge how grounded the claim is at a glance. 'model' means the
-// LLM produced the edge from its training-time knowledge rather than any
-// of the grounding material we supplied.
-export type GeneratedValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'model'
+// Attribution for a claimed relationship. Restricted to primary-document
+// sources: SEC filings, in-app news articles, or 'model' for un-grounded
+// training-knowledge claims. Profile blurbs and analyst rating pages
+// were dropped — they don't evidence supplier/customer/competitor links.
+export type GeneratedValueChainEdgeSource = 'filings' | 'news' | 'model'
 
 export interface GeneratedValueChainEdge {
   from: string
@@ -1289,9 +1288,11 @@ export async function generateCompanyValueChain(input: {
   }
 
   const contextParts: string[] = []
+  // Profile description is fed in as background-only context (no [ref P]),
+  // because profile blurbs no longer count as a primary citation source.
   if (input.profileDescription) {
     contextParts.push(
-      `Company profile [ref P]:\n${input.profileDescription.slice(0, 1200)}`
+      `Background — company description (NOT a citable source, just context):\n${input.profileDescription.slice(0, 1200)}`
     )
   }
   if (input.filings && input.filings.length > 0) {
@@ -1331,30 +1332,10 @@ export async function generateCompanyValueChain(input: {
       .join('\n')
     contextParts.push(`Recent news:\n${bullets}`)
   }
-  if (input.analystEvents && input.analystEvents.length > 0) {
-    const bullets = input.analystEvents
-      .map((a) => {
-        const transition =
-          a.fromGrade && a.toGrade
-            ? `${a.fromGrade} → ${a.toGrade}`
-            : a.toGrade
-              ? `to ${a.toGrade}`
-              : ''
-        const verb =
-          a.action === 'up'
-            ? 'upgraded'
-            : a.action === 'down'
-              ? 'downgraded'
-              : a.action === 'init'
-                ? 'initiated coverage'
-                : a.action === 'reit'
-                  ? 're-iterated'
-                  : 'maintained'
-        return `[ref ${a.refId}] ${a.firm} ${verb} ${transition} on ${a.date}`
-      })
-      .join('\n')
-    contextParts.push(`Analyst rating actions:\n${bullets}`)
-  }
+  // Analyst events used to be passed in as A1..A5 grounding refs, but rating
+  // actions don't actually evidence supplier/customer/competitor relationships
+  // — only price-target sentiment. Dropped from edge-citation duty; they
+  // still surface separately in the notification system.
   if (input.crossChainMentions && input.crossChainMentions.length > 0) {
     const bullets = input.crossChainMentions
       .slice(0, 20)
@@ -1403,7 +1384,7 @@ export async function generateCompanyValueChain(input: {
     `      "to": "node symbol",\n` +
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
     `      "note": "one short sentence, <120 chars",\n` +
-    `      "source": "filings" | "news" | "profile" | "analyst" | "model",\n` +
+    `      "source": "filings" | "news" | "model",\n` +
     `      "sourceRefs": ["F", "N3"]   ← ARRAY of supporting refs,\n` +
     `      "modelSource": "concrete attribution" (REQUIRED when source = "model")\n` +
     `    }\n` +
@@ -1469,20 +1450,21 @@ export async function generateCompanyValueChain(input: {
     `(10-K, news snippet) that contradicts it.\n` +
     `\n` +
     `Edge "source" field — STRICT CITATION MODE. Every edge MUST be ` +
-    `linkable to a specific document or named source the user can click ` +
-    `through to:\n` +
-    `- "filings" — supported by 10-K (F), 8-K (F2), or 10-Q (F3) excerpt above.\n` +
+    `linkable to a primary document the user can click through to:\n` +
+    `- "filings" — supported by an SEC filing excerpt above (10-K=F, 8-K=F2, 10-Q=F3, ` +
+    `or any F4..Fn from a counterparty's filings).\n` +
     `- "news" — supported by one of the news articles above (N1..N15).\n` +
-    `- "analyst" — supported by an analyst rating action above (A1..A5).\n` +
-    `- "profile" — from the company profile text (P).\n` +
     `- "model" — from training knowledge. STRICT RULES BELOW.\n` +
+    `Profile blurbs and analyst rating actions are NOT acceptable citation ` +
+    `sources — they don't evidence relationships, only self-description or ` +
+    `price-target sentiment.\n` +
     `\n` +
     `Edge "sourceRefs" field — ARRAY of refs supporting this edge. ` +
     `Multiple refs encouraged for cross-referenced claims:\n` +
     `- ["F"] — only the 10-K\n` +
     `- ["F", "N3"] — 10-K plus article N3\n` +
     `- ["N1", "N5"] — two articles\n` +
-    `- ["F2", "A1"] — 8-K plus analyst event\n` +
+    `- ["F2", "F4"] — focus 8-K plus a counterparty filing\n` +
     `Only use refs that appeared in [ref X] tags. NEVER fabricate.\n` +
     `\n` +
     `Edge "modelSource" — REQUIRED when source="model". Pulse drops edges ` +
@@ -1689,7 +1671,7 @@ export async function generateCompanyValueChain(input: {
     const validNodeSymbols = new Set(nodes.map((n) => n.symbol))
 
     const validRelationships = ['supplier', 'customer', 'competitor', 'partner']
-    const validSources = ['filings', 'news', 'profile', 'model']
+    const validSources = ['filings', 'news', 'model']
     const rawEdges = Array.isArray(parsed.edges)
       ? parsed.edges
           .map(

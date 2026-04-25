@@ -1665,16 +1665,6 @@ function formatCitationLabel(
       fullText: `${citation.title}${dateStr ? ` (${dateStr})` : ''}`
     }
   }
-  if (citation.kind === 'profile') {
-    return { label: 'Company profile', fullText: 'From the company profile description' }
-  }
-  if (citation.kind === 'analyst') {
-    const dateStr = citation.date ? ` · ${citation.date}` : ''
-    return {
-      label: `${citation.firm}${dateStr}`,
-      fullText: `${citation.firm} analyst note${dateStr}`
-    }
-  }
   // model
   if (citation.attribution) {
     return {
@@ -1702,8 +1692,8 @@ function DiagramCitationLabel({
 
 // Clickable citation chip for the pinned tooltip. When the citation is
 // a filing or article with a URL, renders as a button that opens the
-// document via the parent's onOpen handler. Otherwise (profile, model)
-// renders as a static label.
+// document via the parent's onOpen handler. Otherwise (model) renders
+// as a static label.
 function DiagramCitationButton({
   citation,
   onOpen
@@ -1745,24 +1735,6 @@ function DiagramCitationButton({
         }
         className="text-[10.5px] underline decoration-dotted underline-offset-2 hover:opacity-100 opacity-90 cursor-pointer"
         title={`${fullText} — click to open article`}
-      >
-        ↳ {label}
-      </button>
-    )
-  }
-  if (citation.kind === 'analyst' && onOpen) {
-    return (
-      <button
-        type="button"
-        onClick={() =>
-          onOpen(
-            citation.url,
-            `${citation.firm} — analyst coverage`,
-            citation.date || null
-          )
-        }
-        className="text-[10.5px] underline decoration-dotted underline-offset-2 hover:opacity-100 opacity-90 cursor-pointer"
-        title={`${fullText} — click to open Yahoo analyst page`}
       >
         ↳ {label}
       </button>

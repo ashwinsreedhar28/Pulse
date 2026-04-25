@@ -732,11 +732,7 @@ export function ValueChain({
           ? 'filings'
           : cites[0].kind === 'article'
             ? 'news'
-            : cites[0].kind === 'analyst'
-              ? 'analyst'
-              : cites[0].kind === 'profile'
-                ? 'profile'
-                : 'model'
+            : 'model'
         : null
       if (o.relationship === 'supplier' || o.relationship === 'partner') {
         out.push({
