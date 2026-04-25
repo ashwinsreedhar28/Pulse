@@ -1124,7 +1124,7 @@ function GameTickerItem({
       type="button"
       onClick={onOpen}
       title={`${game.away.shortName} @ ${game.home.shortName}`}
-      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors min-w-[180px]"
+      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors min-w-[150px]"
     >
       <span className={`font-bold uppercase tracking-[0.16em] tabular-nums shrink-0 w-[52px] ${statusColor}`}>
         {timeLabel}
@@ -1215,7 +1215,7 @@ function StockTickerItem({
           : `Open ${quote.symbol}`
       }
       className={`flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors shrink-0 ${
-        rq.sessionBadge ? 'min-w-[218px]' : 'min-w-[172px]'
+        rq.sessionBadge ? 'min-w-[175px]' : 'min-w-[130px]'
       }`}
     >
       <span className="font-semibold tracking-[0.14em] text-zinc-100">{quote.symbol}</span>
@@ -3632,6 +3632,16 @@ function StockDetail({
                   + Watchlist
                 </button>
               )}
+              {/* Diagram launcher — sits next to the watchlist control so
+                  primary actions are co-located. Same purple treatment as
+                  the matching button on the ValueChain focus panel. */}
+              <button
+                onClick={() => setDiagramSymbol(ticker.symbol)}
+                title="Open zoomable subgraph diagram"
+                className="ml-2 px-3 h-9 rounded-full bg-purple-500/15 text-purple-200 text-[11px] font-semibold uppercase tracking-[0.18em] ring-1 ring-inset ring-purple-500/40 hover:bg-purple-500/25 transition-colors"
+              >
+                Diagram
+              </button>
               <button
                 onClick={onClose}
                 className="ml-2 h-9 w-9 flex items-center justify-center rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2 transition-colors text-xl"
@@ -3717,20 +3727,6 @@ function StockDetail({
           )}
 
           <FinancialsDetailSection financials={financials} />
-
-          {/* Diagram launcher row above the value chain card. Mirrors the
-              "View diagram" button on the ValueChain page's focus panel so
-              users can reach the zoomable subgraph from either entry point.
-              Right-aligned so it doesn't compete with the card's header. */}
-          <div className="flex justify-end -mb-2">
-            <button
-              type="button"
-              onClick={() => setDiagramSymbol(ticker.symbol)}
-              className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-200 ring-1 ring-inset ring-purple-500/40 hover:bg-purple-500/25"
-            >
-              View diagram
-            </button>
-          </div>
 
           <UnifiedValueChainCard
             symbol={ticker.symbol}
