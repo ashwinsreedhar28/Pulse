@@ -314,13 +314,41 @@ export function ValueChain({
   // Replaces six independent fetches that each rendered an empty map until
   // the slowest resolved. Incremental refreshes flow through the *:updated
   // listeners below.
+  //
+  // Symbol set is the UNION of three sources so every tile we'll render
+  // actually has data:
+  //   - Static CHAIN.nodes (the curated semi/hardware tech pipeline)
+  //   - Active watchlist tickers (covers user-added symbols outside the
+  //     static graph — previously these tiles rendered with blank
+  //     financials, blank sparkline, blank earnings badge)
+  //   - Persisted node overrides (auto-discovered tickers absorbed from
+  //     other chains; we read these via window.api on first mount so they
+  //     join the symbol list without waiting for the bundle to populate
+  //     them in the second round)
   useEffect(() => {
     let cancelled = false
-    const symbols = [...new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))]
     const since = Date.now() - 72 * 60 * 60 * 1000
-    window.api.stocks
-      .getValueChainMountBundle(symbols, since)
-      .then((bundle) => {
+    const buildAndFetch = async (): Promise<void> => {
+      const staticSymbols = CHAIN.nodes.map((n) => n.symbol.toUpperCase())
+      const watchlistSymbols = tickers
+        .filter((t) => t.isActive)
+        .map((t) => t.symbol.toUpperCase())
+      // Read node overrides ahead of the bundle so symbols absorbed from
+      // generated chains are part of the initial fetch rather than waiting
+      // for the bundle's own nodeOverrides slice to land and re-trigger.
+      let overrideSymbols: string[] = []
+      try {
+        const overrides = await window.api.graph.listNodeOverrides()
+        overrideSymbols = overrides.map((o) => o.symbol.toUpperCase())
+      } catch {
+        /* fall through with empty overrides — bundle will refresh them */
+      }
+      if (cancelled) return
+      const symbols = [
+        ...new Set([...staticSymbols, ...watchlistSymbols, ...overrideSymbols])
+      ]
+      try {
+        const bundle = await window.api.stocks.getValueChainMountBundle(symbols, since)
         if (cancelled) return
         const fin = new Map<string, FinancialsSnapshot>()
         for (const s of bundle.financials) fin.set(s.symbol.toUpperCase(), s)
@@ -340,13 +368,15 @@ export function ValueChain({
           filings.set(sym.toUpperCase(), bundle.recentFilings[sym])
         }
         setRecentFilingsMap(filings)
-      })
-      .catch((err: unknown) => {
+      } catch (err) {
         console.warn('[valueChain] mount bundle fetch failed', err)
-      })
+      }
+    }
+    void buildAndFetch()
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
     return window.api.stocks.onFinancialsUpdated((symbol) => {
@@ -406,6 +436,60 @@ export function ValueChain({
         })
     })
   }, [])
+  // Incremental backfill: when nodeOverrides changes (e.g. chain
+  // absorption introduces a new ticker after mount), fetch financials +
+  // earnings + estimates for any symbol now in the rendered set that
+  // wasn't covered by the initial bundle. Without this, newly-absorbed
+  // tiles would show blank financials until the page is reopened.
+  useEffect(() => {
+    if (nodeOverrides.length === 0) return
+    const have = financialsMap
+    const haveEarn = earningsMap
+    const haveEst = estimatesMap
+    const missing = new Set<string>()
+    for (const o of nodeOverrides) {
+      const sym = o.symbol.toUpperCase()
+      if (!have.has(sym) || !haveEarn.has(sym) || !haveEst.has(sym)) {
+        missing.add(sym)
+      }
+    }
+    if (missing.size === 0) return
+    const symbols = [...missing]
+    let cancelled = false
+    void Promise.all([
+      window.api.stocks.getFinancialsBatch(symbols).catch(() => []),
+      window.api.stocks.getEarningsBatch(symbols).catch(() => []),
+      window.api.stocks.getEstimatesBatch(symbols).catch(() => [])
+    ]).then(([fins, earns, ests]) => {
+      if (cancelled) return
+      if (fins.length > 0) {
+        setFinancialsMap((prev) => {
+          const next = new Map(prev)
+          for (const f of fins) next.set(f.symbol.toUpperCase(), f)
+          return next
+        })
+      }
+      if (earns.length > 0) {
+        setEarningsMap((prev) => {
+          const next = new Map(prev)
+          for (const b of earns) next.set(b.symbol.toUpperCase(), b)
+          return next
+        })
+      }
+      if (ests.length > 0) {
+        setEstimatesMap((prev) => {
+          const next = new Map(prev)
+          for (const r of ests) next.set(r.symbol.toUpperCase(), r)
+          return next
+        })
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeOverrides])
+
   useEffect(() => {
     return window.api.sec.onUpdated((symbol) => {
       const sym = symbol.toUpperCase()
