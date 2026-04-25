@@ -242,17 +242,22 @@ export function ValueChainDiagram({
     })
   }, [])
 
-  // Merged graph data. Starts with the static JSON and layers in accepted
-  // overlay edges for supplier/partner kinds; competitor overrides extend
-  // the competitor map. weight + source ride along so the renderer can
-  // scale edge thickness / opacity by confidence (D1).
+  // Merged graph data. Override edges (chain-absorbed + hand-curated) WIN
+  // over the static supplyChainGraph.json baseline — the static JSON was
+  // the original baseline before chain generation existed; it's now a
+  // fallback for symbol pairs no chain has covered yet. Same priority
+  // flip we apply to mergedNodes in ValueChain.tsx.
   const mergedEdges = useMemo<ChainEdge[]>(() => {
-    // Absorber normalizes customer edges to supplier form at write time;
-    // the swap branch below catches any legacy pre-normalization rows.
-    // Dedupe by (from, to) so cross-chain duplicates draw one arrow.
-    const out: ChainEdge[] = CHAIN.edges.map((e) => ({ ...e, weight: null, source: null }))
+    const out: ChainEdge[] = []
+    const seen = new Set<string>()
+    // Override edges first. Absorber normalizes customer→supplier-form at
+    // write time; the swap branch below catches any legacy pre-normalization
+    // rows still in the override table.
     for (const o of edgeOverrides) {
       if (o.relationship === 'supplier' || o.relationship === 'partner') {
+        const key = `${o.fromSymbol.toUpperCase()}→${o.toSymbol.toUpperCase()}`
+        if (seen.has(key)) continue
+        seen.add(key)
         out.push({
           from: o.fromSymbol.toUpperCase(),
           to: o.toSymbol.toUpperCase(),
@@ -262,6 +267,9 @@ export function ValueChainDiagram({
           citation: o.citation ?? null
         })
       } else if (o.relationship === 'customer') {
+        const key = `${o.toSymbol.toUpperCase()}→${o.fromSymbol.toUpperCase()}`
+        if (seen.has(key)) continue
+        seen.add(key)
         out.push({
           from: o.toSymbol.toUpperCase(),
           to: o.fromSymbol.toUpperCase(),
@@ -272,15 +280,16 @@ export function ValueChainDiagram({
         })
       }
     }
-    const seen = new Set<string>()
-    const deduped: ChainEdge[] = []
-    for (const edge of out) {
-      const key = `${edge.from}→${edge.to}`
+    // Static fallback: only push static edges for (from,to) pairs no
+    // override covers. As chain generation expands coverage, the static
+    // edges contribute less and less.
+    for (const e of CHAIN.edges) {
+      const key = `${e.from}→${e.to}`
       if (seen.has(key)) continue
       seen.add(key)
-      deduped.push(edge)
+      out.push({ ...e, weight: null, source: null })
     }
-    return deduped
+    return out
   }, [edgeOverrides])
 
   const mergedCompetitorMap = useMemo<Map<string, Set<string>>>(() => {

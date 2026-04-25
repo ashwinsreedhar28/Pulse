@@ -1413,7 +1413,17 @@ export async function maybeAutoRegenerateOnBoot(): Promise<void> {
     .get()
   const lastRun = row ? Number(row.value) : 0
   const now = Date.now()
-  if (Number.isFinite(lastRun) && now - lastRun < AUTO_REGEN_THROTTLE_MS) {
+
+  // First-boot detection: zero existing chain rows means this is either
+  // a brand-new install or a database that's been reset. Either way, the
+  // user expects a populated value-chain view ASAP — burn through the
+  // full watchlist with no idle gate or symbol cap. Exception: still
+  // honor the throttle so a quick restart in the middle of a run doesn't
+  // re-fire from scratch.
+  const existingChainCount = listCompanyValueChainSymbols().length
+  const isFirstBoot = existingChainCount === 0
+
+  if (!isFirstBoot && Number.isFinite(lastRun) && now - lastRun < AUTO_REGEN_THROTTLE_MS) {
     const hoursAgo = Math.round((now - lastRun) / 3600_000)
     console.log(
       `[companyChain] auto-regen skipped — last run was ${hoursAgo}h ago ` +
@@ -1421,17 +1431,34 @@ export async function maybeAutoRegenerateOnBoot(): Promise<void> {
     )
     return
   }
-  console.log(
-    `[companyChain] auto-regen starting — skip <${Math.round(AUTO_REGEN_SKIP_MS / 3600_000)}h old, ` +
-      `cap ${AUTO_REGEN_MAX_PER_BOOT} stalest, ${AUTO_REGEN_IDLE_GATE_SECONDS}s idle gate between`
-  )
+
+  if (isFirstBoot) {
+    console.log(
+      `[companyChain] FIRST-BOOT auto-regen — generating chains for the entire ` +
+        `watchlist (no cap, no idle gate). This is a one-time cost so the ` +
+        `value-chain view is populated immediately.`
+    )
+  } else {
+    console.log(
+      `[companyChain] auto-regen starting — skip <${Math.round(AUTO_REGEN_SKIP_MS / 3600_000)}h old, ` +
+        `cap ${AUTO_REGEN_MAX_PER_BOOT} stalest, ${AUTO_REGEN_IDLE_GATE_SECONDS}s idle gate between`
+    )
+  }
   try {
-    await regenerateAllChains({
-      skipIfGeneratedWithinMs: AUTO_REGEN_SKIP_MS,
-      idleGateSeconds: AUTO_REGEN_IDLE_GATE_SECONDS,
-      maxSymbols: AUTO_REGEN_MAX_PER_BOOT,
-      stalestFirst: true
-    })
+    await regenerateAllChains(
+      isFirstBoot
+        ? {
+            // First-boot: no skip filter (all chains are missing anyway),
+            // no max cap, no idle gate. Just run it.
+            stalestFirst: false
+          }
+        : {
+            skipIfGeneratedWithinMs: AUTO_REGEN_SKIP_MS,
+            idleGateSeconds: AUTO_REGEN_IDLE_GATE_SECONDS,
+            maxSymbols: AUTO_REGEN_MAX_PER_BOOT,
+            stalestFirst: true
+          }
+    )
   } finally {
     // Record the stamp even if the run partially failed (Claude cap, etc.).
     // Prevents a failing run from re-firing every restart.

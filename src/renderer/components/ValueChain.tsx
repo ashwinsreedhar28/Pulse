@@ -541,16 +541,21 @@ export function ValueChain({
     return m
   }, [tickers])
 
-  // Static graph nodes + auto-discovered overlay nodes. Overlay symbols
-  // present in the static graph are ignored (static wins for baseline data);
-  // new symbols are promoted to ValueChainNode shape using the classifier's
-  // stage/sector/blurb. The renderer sees a single unified node list.
+  // Generated/absorbed overlay nodes WIN over static graph nodes.
+  // Static supplyChainGraph.json was the original baseline before chain
+  // generation existed; it's now a fallback for symbols no chain has
+  // covered yet. Once a chain regenerates and the absorber writes a
+  // node override, the override's stage/sector/blurb take precedence —
+  // the override is fresher and reflects the actual generated chain
+  // rather than hand-curated 2024 hardware-pipeline taxonomy.
   const mergedNodes = useMemo<ValueChainNode[]>(() => {
-    const staticSymbols = new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))
-    const out: ValueChainNode[] = [...CHAIN.nodes]
+    const out: ValueChainNode[] = []
+    const seen = new Set<string>()
+    // Override layer first: every override gets its own node entry, replacing
+    // any baseline static node for the same symbol.
     for (const o of nodeOverrides) {
       const sym = o.symbol.toUpperCase()
-      if (staticSymbols.has(sym)) continue
+      seen.add(sym)
       out.push({
         symbol: sym,
         stage: o.stage,
@@ -558,6 +563,14 @@ export function ValueChain({
         name: o.name ?? undefined,
         blurb: o.blurb ?? undefined
       })
+    }
+    // Static fallback: only add static nodes for symbols no override
+    // covers. Eventually the overrides will cover the entire static set
+    // and CHAIN.nodes can be retired entirely.
+    for (const n of CHAIN.nodes) {
+      const sym = n.symbol.toUpperCase()
+      if (seen.has(sym)) continue
+      out.push(n)
     }
     return out
   }, [nodeOverrides])
