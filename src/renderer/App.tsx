@@ -968,7 +968,7 @@ function StoryTickerItem({
       className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors"
     >
       <span className={`font-bold uppercase tracking-[0.16em] shrink-0 ${badgeColor}`}>{label}</span>
-      <span className="text-zinc-200 truncate w-[440px]">{article.title}</span>
+      <span className="text-zinc-200 truncate max-w-[420px]">{article.title}</span>
     </button>
   )
 }
@@ -1124,7 +1124,7 @@ function GameTickerItem({
       type="button"
       onClick={onOpen}
       title={`${game.away.shortName} @ ${game.home.shortName}`}
-      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors min-w-[150px]"
+      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors min-w-[185px]"
     >
       <span className={`font-bold uppercase tracking-[0.16em] tabular-nums shrink-0 w-[52px] ${statusColor}`}>
         {timeLabel}
