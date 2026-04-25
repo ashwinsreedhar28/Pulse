@@ -316,6 +316,40 @@ function parseCustomerConcentration(text: string): ConcentrationDisclosure[] {
   return out
 }
 
+// Find the body section for a specific item heading in an SEC filing.
+// Works for both 8-K item numbers ("1.01", "7.01", "2.03") and 10-K
+// items ("1A", "7"). Critical TOC handling: 8-K and 10-K filings often
+// list every item in a table of contents BEFORE the body, so a naive
+// regex match would slice the TOC entry instead of the body. We use
+// the LAST occurrence of the heading because the body always sits
+// after the TOC. Caps the slice at 12K chars and trims at the next
+// item heading or the signature/exhibit-index sentinel.
+function findItemBodySection(text: string, itemNumber: string): string | null {
+  const escaped = itemNumber.replace(/\./g, '\\.')
+  const headerRe = new RegExp(`\\bitem\\s+${escaped}\\b`, 'gi')
+  const matches: number[] = []
+  let m: RegExpExecArray | null
+  while ((m = headerRe.exec(text)) !== null) {
+    matches.push(m.index)
+    // Defensive cap so a pathological filing doesn't blow up the loop.
+    if (matches.length > 50) break
+  }
+  if (matches.length === 0) return null
+  const startIdx = matches[matches.length - 1]
+  const slice = text.slice(startIdx, startIdx + 12000)
+  // Trim at the next item, signature block, or exhibit index. Skip the
+  // first 30 chars of the slice when looking for these sentinels so we
+  // don't accidentally trim at the heading itself (e.g. "Item 1.01 ...
+  // Item 1.01 Entry into a Material Definitive Agreement").
+  const tail = slice.slice(30).search(
+    /\bitem\s+\d+[A-Z]?(\.\d+)?\b|\bsignatures?\b|\bexhibit\s+index\b|\bsignature\s+page\b/i
+  )
+  if (tail >= 0) {
+    return slice.slice(0, 30 + tail)
+  }
+  return slice
+}
+
 // Bilateral counterparty filing fetcher. For each counterparty symbol
 // in `counterpartySymbols`, look up its most recent 10-K and 10-Q (if
 // resolvable to a CIK), fetch the body, and scan for mentions of the
@@ -1285,8 +1319,20 @@ async function materialAgreementAugmentCitations(
   }
   if (counterparties.length === 0) return edges
 
+  // Items we look for in 8-Ks. All four name counterparties when a
+  // material event involves a third party:
+  //   1.01 — Entry into a Material Definitive Agreement (supply
+  //          contracts, license deals, JVs, partnerships)
+  //   1.02 — Termination of a Material Definitive Agreement (when a
+  //          relationship ends — also a real signal)
+  //   2.03 — Creation of a Material Direct Financial Obligation
+  //          (debt agreements with banks, credit facilities)
+  //   7.01 — Regulation FD Disclosure (catch-all for material
+  //          announcements that don't fit a specific item — Apple
+  //          files Foxconn / TSMC partnership news here, not in 1.01)
+  const ITEMS_TO_SCAN = ['1.01', '1.02', '2.03', '7.01'] as const
   let scanned = 0
-  let withItem101 = 0
+  let totalSectionsFound = 0
   // First match per counterparty wins so we attach the MOST RECENT 8-K
   // mentioning each. Ordering by filedAt DESC is already guaranteed by
   // getFilingsForSymbol.
@@ -1296,32 +1342,29 @@ async function materialAgreementAugmentCitations(
     const body = await fetchFilingBody(filing)
     if (!body) continue
     scanned += 1
-    // Slice out the Item 1.01 block. 8-K items run from "Item X.Y …"
-    // until the next item heading, the signature block, or the exhibit
-    // index. Cap the slice at 12K chars to bound regex cost on long
-    // 8-Ks that bundle multiple items.
-    const item101 = body.text.match(
-      /\bitem\s+1\.01[^a-z][\s\S]{0,12000}?(?=\bitem\s+\d+\.\d+|signatures?\b|exhibit\s+index|\Z)/i
-    )
-    if (!item101) continue
-    withItem101 += 1
-    const sectionUpper = item101[0].toUpperCase()
-    for (const cp of counterparties) {
-      if (matchByCounterparty.has(cp.symbol)) continue
-      // Word-boundary match on each needle so "AMD" doesn't hit "Adam".
-      const hit = cp.needles.some((needle) => {
-        const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        return new RegExp(`\\b${escaped}\\b`).test(sectionUpper)
-      })
-      if (hit) {
-        matchByCounterparty.set(cp.symbol, { filing, url: body.url })
+    // Iterate through each item type. Each 8-K can have multiple
+    // items; we scan all four and merge counterparty hits.
+    for (const itemNumber of ITEMS_TO_SCAN) {
+      const section = findItemBodySection(body.text, itemNumber)
+      if (!section) continue
+      totalSectionsFound += 1
+      const sectionUpper = section.toUpperCase()
+      for (const cp of counterparties) {
+        if (matchByCounterparty.has(cp.symbol)) continue
+        const hit = cp.needles.some((needle) => {
+          const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          return new RegExp(`\\b${escaped}\\b`).test(sectionUpper)
+        })
+        if (hit) {
+          matchByCounterparty.set(cp.symbol, { filing, url: body.url })
+        }
       }
     }
   }
 
   if (matchByCounterparty.size === 0) {
     console.log(
-      `[companyChain] materialAgreementAugmentCitations: scanned ${scanned} 8-K(s), ${withItem101} with Item 1.01, 0 counterparty mention(s)`
+      `[companyChain] materialAgreementAugmentCitations: scanned ${scanned} 8-K(s), ${totalSectionsFound} item-section(s) found across [${ITEMS_TO_SCAN.join(', ')}], 0 counterparty mention(s)`
     )
     return edges
   }
@@ -1354,9 +1397,280 @@ async function materialAgreementAugmentCitations(
     }
   })
   console.log(
-    `[companyChain] materialAgreementAugmentCitations: scanned ${scanned} 8-K(s), ${withItem101} with Item 1.01, found ${matchByCounterparty.size} counterparty match(es), +${attached} cites attached`
+    `[companyChain] materialAgreementAugmentCitations: scanned ${scanned} 8-K(s), ${totalSectionsFound} item-section(s) across [${ITEMS_TO_SCAN.join(', ')}], found ${matchByCounterparty.size} counterparty match(es), +${attached} cites attached`
   )
   return out
+}
+
+// Risk-factors augment: scan focus's 10-K Item 1A "Risk Factors" for
+// counterparty concentration narrative — language like "we depend on
+// a small number of customers" / "our largest customers include X" /
+// "we rely on N suppliers including X for critical components." This
+// catches concentration disclosures that fall under the 10% threshold
+// (so concentrationAugmentCitations doesn't catch them) but are
+// specific enough to name counterparties.
+async function riskFactorsAugmentCitations(
+  edges: import('../database/companyValueChains').CompanyValueChainEdge[],
+  focusSymbol: string,
+  resolvedNodes: CompanyValueChainNode[]
+): Promise<import('../database/companyValueChains').CompanyValueChainEdge[]> {
+  const focus = focusSymbol.toUpperCase()
+  const tenKs = getFilingsForSymbol(focus, 3, new Set(['10-K', '10-K/A']))
+  const latest = tenKs[0]
+  if (!latest) {
+    console.log(
+      `[companyChain] riskFactorsAugmentCitations: no 10-K available for ${focus}`
+    )
+    return edges
+  }
+  const body = await fetchFilingBody(latest)
+  if (!body) {
+    console.log(
+      `[companyChain] riskFactorsAugmentCitations: failed to fetch 10-K body for ${focus}`
+    )
+    return edges
+  }
+  const section = findItemBodySection(body.text, '1A')
+  if (!section) {
+    console.log(
+      `[companyChain] riskFactorsAugmentCitations: no Item 1A section located in ${focus}'s 10-K`
+    )
+    return edges
+  }
+  // Build counterparty needle index (same shape as materialAgreement).
+  const stopSuffix = /\b(Inc\.?|Incorporated|Corp\.?|Corporation|Ltd\.?|Limited|LLC|Company|Co\.?|Holdings|Group|PLC|N\.V\.|S\.A\.|AG)\b/gi
+  type CounterpartyKey = { symbol: string; needles: string[] }
+  const counterparties: CounterpartyKey[] = []
+  for (const n of resolvedNodes) {
+    if (n.kind !== 'ticker') continue
+    const sym = n.symbol.toUpperCase()
+    if (sym === focus) continue
+    const cleaned = n.name.replace(stopSuffix, '').trim()
+    const fullName = n.name.trim().toUpperCase()
+    const cleanedUpper = cleaned.toUpperCase()
+    const head = cleaned.split(/\s+/)[0]?.trim().toUpperCase() ?? ''
+    const needles: string[] = []
+    if (fullName.length >= 5) needles.push(fullName)
+    if (cleanedUpper.length >= 5 && cleanedUpper !== fullName) needles.push(cleanedUpper)
+    if (head.length >= 4) needles.push(head)
+    if (needles.length === 0) continue
+    counterparties.push({ symbol: sym, needles })
+  }
+  if (counterparties.length === 0) return edges
+
+  // Risk Factors is long; we don't want to attach the 10-K to every
+  // edge whose counterparty is mentioned anywhere in 80 pages of risk
+  // disclosures (most of those mentions are macro / industry context,
+  // not relationship-specific). Restrict to sentences that contain
+  // BOTH a counterparty mention AND a relationship-cue word so we
+  // only fire when the disclosure is plausibly about THIS edge.
+  const sectionUpper = section.toUpperCase()
+  const sentences = section.split(/(?<=[.!?])\s+/).slice(0, 1500)
+  const cueRe =
+    /\b(supplier|supplied|supply|customer|client|partner|partnership|rely|depend|substantial(ly)?|significant(ly)?|portion|percent|including|such as|principal|key)\b/i
+
+  const matches = new Set<string>()
+  for (const sentence of sentences) {
+    if (!cueRe.test(sentence)) continue
+    const sUpper = sentence.toUpperCase()
+    for (const cp of counterparties) {
+      if (matches.has(cp.symbol)) continue
+      const hit = cp.needles.some((needle) => {
+        const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        return new RegExp(`\\b${escaped}\\b`).test(sUpper)
+      })
+      if (hit) matches.add(cp.symbol)
+    }
+  }
+  void sectionUpper
+
+  if (matches.size === 0) {
+    console.log(
+      `[companyChain] riskFactorsAugmentCitations: parsed Item 1A in ${focus}'s 10-K, 0 counterparty mention(s) in relationship-cue sentences`
+    )
+    return edges
+  }
+
+  const cite: import('../database/companyValueChains').CompanyValueChainEdgeCitation = {
+    kind: 'filing',
+    accession: latest.accessionNumber,
+    cik: latest.cik,
+    formType: latest.formType,
+    filedAt: latest.filedAt,
+    url: body.url
+  }
+  let attached = 0
+  const out = edges.map((e) => {
+    const from = e.from.toUpperCase()
+    const to = e.to.toUpperCase()
+    const counterparty = from !== focus ? from : to
+    if (!counterparty || counterparty === focus) return e
+    if (!matches.has(counterparty)) return e
+    const existing = e.citations ?? []
+    if (existing.some((c) => c.kind === 'filing' && c.accession === latest.accessionNumber)) {
+      return e
+    }
+    attached += 1
+    return {
+      ...e,
+      source: 'filings' as const,
+      citations: [...existing, cite]
+    }
+  })
+  console.log(
+    `[companyChain] riskFactorsAugmentCitations: parsed Item 1A in ${focus}'s 10-K, found ${matches.size} counterparty mention(s), +${attached} cites attached`
+  )
+  return out
+}
+
+// EDGAR full-text search augment: for any cite-less edge, query SEC's
+// official full-text search API (efts.sec.gov) for filings mentioning
+// BOTH the focus company name and the counterparty. Way more reliable
+// than asking Claude's web tool to land on Archives URLs — EDGAR FTS
+// IS Archives URLs by definition, and it's free (no LLM cost). Sits
+// between the local 8-K/10-K augmenters and the web-search augmenter
+// in the pipeline so SEC sources are exhausted via the cheap path
+// before we burn tokens on web search.
+async function edgarFullTextSearchAugmentCitations(
+  edges: import('../database/companyValueChains').CompanyValueChainEdge[],
+  focusSymbol: string,
+  focusCompanyName: string,
+  resolvedNodes: CompanyValueChainNode[],
+  maxQueries = 15
+): Promise<import('../database/companyValueChains').CompanyValueChainEdge[]> {
+  const focus = focusSymbol.toUpperCase()
+  // Build a node lookup for counterparty company names.
+  const nameBySymbol = new Map<string, string>()
+  for (const n of resolvedNodes) {
+    if (n.kind !== 'ticker') continue
+    nameBySymbol.set(n.symbol.toUpperCase(), n.name)
+  }
+  // Find cite-less edges with ticker counterparties.
+  const targets: Array<{ index: number; counterparty: string; counterpartyName: string }> = []
+  edges.forEach((e, i) => {
+    const hasPrimary = e.citations?.some(
+      (c) => c.kind === 'filing' || c.kind === 'article'
+    )
+    if (hasPrimary) return
+    const from = e.from.toUpperCase()
+    const to = e.to.toUpperCase()
+    const counterparty = from !== focus ? from : to
+    if (!counterparty || counterparty === focus) return
+    const name = nameBySymbol.get(counterparty)
+    if (!name) return
+    targets.push({ index: i, counterparty, counterpartyName: name })
+  })
+  if (targets.length === 0) {
+    console.log(
+      `[companyChain] edgarFullTextSearchAugmentCitations: 0 cite-less edges with ticker counterparties for ${focus}`
+    )
+    return edges
+  }
+  const cap = Math.min(maxQueries, targets.length)
+  const next = [...edges]
+  let attached = 0
+  let zeroHits = 0
+  // Strip corp suffixes off names so query is more concise. EDGAR FTS
+  // requires phrase matches in quotes for multi-word strings.
+  const stopSuffix = /\b(Inc\.?|Incorporated|Corp\.?|Corporation|Ltd\.?|Limited|LLC|Company|Co\.?|Holdings|Group|PLC|N\.V\.|S\.A\.|AG)\b/gi
+  const focusName = focusCompanyName.replace(stopSuffix, '').trim()
+  // Sequential to be polite; SEC's published rate limit is 10 req/s.
+  // Per-call timeout of 8s is plenty for the EDGAR FTS endpoint.
+  for (let i = 0; i < cap; i++) {
+    const t = targets[i]
+    const counterpartyClean = t.counterpartyName.replace(stopSuffix, '').trim()
+    const query = `"${focusName}" "${counterpartyClean}"`
+    const url =
+      `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}` +
+      `&forms=10-K,10-Q,8-K&dateRange=custom&startdt=2018-01-01`
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 8_000)
+      let res: Response
+      try {
+        res = await fetch(url, {
+          headers: { 'User-Agent': UA, Accept: 'application/json' },
+          signal: controller.signal
+        })
+      } finally {
+        clearTimeout(timer)
+      }
+      if (!res.ok) continue
+      const data = (await res.json()) as {
+        hits?: {
+          hits?: Array<{
+            _id?: string
+            _source?: {
+              ciks?: string[]
+              adsh?: string
+              form?: string
+              file_date?: string
+              display_names?: string[]
+            }
+          }>
+        }
+      }
+      const hits = data.hits?.hits ?? []
+      if (hits.length === 0) {
+        zeroHits += 1
+        continue
+      }
+      // Prefer a hit FILED BY the focus or counterparty themselves —
+      // those are first-party documentation. Falls back to top hit
+      // when no first-party match exists.
+      const focusHit = hits.find((h) => {
+        const display = (h._source?.display_names ?? []).join(' ').toLowerCase()
+        return (
+          display.includes(focusCompanyName.toLowerCase()) ||
+          display.includes(t.counterpartyName.toLowerCase())
+        )
+      })
+      const top = focusHit ?? hits[0]
+      const source = top._source
+      if (!source) continue
+      const accession = source.adsh
+      const cik = source.ciks?.[0]
+      const formType = source.form ?? '10-K'
+      if (!accession || !cik) continue
+      // Build canonical Archives URL. EDGAR primary doc URL pattern:
+      //   https://www.sec.gov/Archives/edgar/data/<CIK>/<ACC-NO-DASHES>/<ACC-NO>-index.htm
+      // We default to the index page since we don't have the primary
+      // document filename from FTS. The index resolves to the filing
+      // index where the user can click into the actual doc.
+      const cikNum = String(parseInt(cik, 10))
+      const accNoDashes = accession.replace(/-/g, '')
+      const archivesUrl =
+        `https://www.sec.gov/Archives/edgar/data/${cikNum}/${accNoDashes}/${accession}-index.htm`
+      const fileDate = source.file_date
+      const filedAt = fileDate ? Date.parse(fileDate) : Date.now()
+      const cite: import('../database/companyValueChains').CompanyValueChainEdgeCitation = {
+        kind: 'filing',
+        accession,
+        cik,
+        formType: formType.toUpperCase(),
+        filedAt: Number.isFinite(filedAt) ? filedAt : Date.now(),
+        url: archivesUrl
+      }
+      const e = next[t.index]
+      const existing = e.citations ?? []
+      if (existing.some((c) => c.kind === 'filing' && c.accession === accession)) continue
+      next[t.index] = {
+        ...e,
+        source: 'filings' as const,
+        citations: [...existing, cite]
+      }
+      attached += 1
+    } catch (err) {
+      console.warn(
+        `[companyChain] EDGAR FTS failed for ${focus}↔${t.counterparty}:`,
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
+  console.log(
+    `[companyChain] edgarFullTextSearchAugmentCitations: queried ${cap}/${targets.length} cite-less edges, ${zeroHits} zero-hit, +${attached} cites attached`
+  )
+  return next
 }
 
 // Whitelisted primary-source domains that the web-search augment will
@@ -1568,27 +1882,29 @@ async function webSearchAugmentCitations(
     lastCallAt = Date.now()
     const system =
       `You are a citation finder. For the relationship described below, ` +
-      `search the web ONCE for a PRIMARY-SOURCE URL that documents it. ` +
+      `search the web ONCE for a PRIMARY-SOURCE article URL that ` +
+      `documents it. SEC filings have already been searched separately ` +
+      `via EDGAR — focus your search on TRADE-PRESS articles and ` +
+      `corporate-comms pages.\n` +
+      `\n` +
       `Acceptable source types:\n` +
-      `1. SEC filing on sec.gov (10-K, 10-Q, 8-K, etc.)\n` +
-      `2. Trade-press / wire-service article (Reuters, Bloomberg, FT, ` +
+      `1. Trade-press / wire-service article (Reuters, Bloomberg, FT, ` +
       `WSJ, Nikkei, CNBC, MarketWatch, AP, Forbes, The Information, ` +
       `SemiWiki, EE Times, FreightWaves, Tom's Hardware, AnandTech, ` +
       `TechCrunch, The Register, Ars Technica, The Verge, ` +
       `BusinessInsider, Fortune)\n` +
-      `3. Press-wire announcement (PR Newswire, Business Wire, ` +
+      `2. Press-wire announcement (PR Newswire, Business Wire, ` +
       `GlobeNewswire, AccessWire) — these are first-party press releases\n` +
-      `4. Company's own investor-relations / press / media page. Two ` +
+      `3. Company's own investor-relations / press / media page. Two ` +
       `valid forms: (a) URL on a corporate-comms subdomain like ` +
       `ir.<company>.com, investors.<company>.com, pr.<company>.com, ` +
       `press.<company>.com, newsroom.<company>.com, news.<company>.com, ` +
       `media.<company>.com, or corporate.<company>.com; (b) URL on the ` +
       `company root domain whose PATH is a press-release page (e.g. ` +
-      `asml.com/en/news/press-releases/..., intel.com/.../newsroom/..., ` +
-      `samsung.com/.../press-releases/...).\n` +
+      `asml.com/en/news/press-releases/..., intel.com/.../newsroom/...,` +
+      ` samsung.com/.../press-releases/...).\n` +
       `\n` +
-      `Return STRICT JSON only, one of these shapes:\n` +
-      `- SEC: {"kind":"filing","url":"https://www.sec.gov/...","formType":"10-K","year":2024}\n` +
+      `Return STRICT JSON only:\n` +
       `- Article: {"kind":"article","url":"https://www.reuters.com/...","title":"...","publisher":"Reuters","date":"2024-03-15"}\n` +
       `- None: {"kind":"none"}\n` +
       `\n` +
@@ -1600,14 +1916,13 @@ async function webSearchAugmentCitations(
       `counterparty) AT LEAST ONCE — even in passing, even in a ` +
       `customer/supplier list, even just as part of a partnership ` +
       `announcement. ${focus} (or ${focusCompanyName}) doesn't have ` +
-      `to appear if the URL is on ${focus}'s own corporate site (it's ` +
-      `implicitly first-party there). Generic statements like "the ` +
-      `company has many customers" with NO specific names are NOT ` +
-      `acceptable.\n` +
+      `to appear if the URL is on ${focus}'s own corporate site.\n` +
       `- The relationship being described or implied should match the ` +
       `${t.relationship} type (supplier/customer/competitor/partner). ` +
       `Don't return a press release about an unrelated event that ` +
       `merely mentions the counterparty.\n` +
+      `- Skip SEC filings (.sec.gov URLs) — those are searched ` +
+      `elsewhere; we want a complementary article source here.\n` +
       `- If you genuinely can't find a primary source naming ` +
       `${t.counterparty}, return {"kind":"none"}.`
     const user =
@@ -2216,12 +2531,12 @@ export async function generateCompanyChain(input: {
       err instanceof Error ? err.message : err
     )
   }
-  // Step 3.5: 8-K Item 1.01 material-agreement parser. Companies file
-  // 8-K Item 1.01 within 4 business days of signing a material contract
-  // and must name the counterparty. This catches deals (supply
-  // agreements, licenses, JVs, partnerships) that don't rise to a 10-K
-  // concentration disclosure but ARE individually material — e.g.
-  // "KLA enters into Manufacturing Agreement with TSMC."
+  // Step 3.5: 8-K material-disclosure parser. Scans Items 1.01, 1.02,
+  // 2.03, and 7.01 — all four classes of 8-K disclosure that name
+  // counterparties (material agreement entry / termination, debt
+  // obligations, Reg FD partnership announcements). Apple files
+  // Foxconn / TSMC partnership news under 7.01 (not 1.01), so
+  // covering all four is what makes this work for AAPL-like filers.
   try {
     citedEdges = await materialAgreementAugmentCitations(citedEdges, sym, resolvedNodes)
   } catch (err) {
@@ -2230,11 +2545,41 @@ export async function generateCompanyChain(input: {
       err instanceof Error ? err.message : err
     )
   }
-  // Step 4: Claude web-search fallback. Only fires for edges still
-  // cite-less after the first 3 passes — typically competitor edges
-  // where neither party's filings name the other. Capped at 3 searches
-  // per chain to keep the cost-per-regen predictable. Only sec.gov hits
-  // are accepted.
+  // Step 3.7: 10-K Item 1A (Risk Factors) parser. Catches counterparty
+  // concentration narratives that fall under the formal 10% disclosure
+  // threshold ("we depend on a small number of suppliers, including
+  // X..."). Only fires when a sentence pairs a relationship cue word
+  // with a counterparty mention so we don't false-positive on macro
+  // boilerplate.
+  try {
+    citedEdges = await riskFactorsAugmentCitations(citedEdges, sym, resolvedNodes)
+  } catch (err) {
+    console.warn(
+      `[companyChain] riskFactorsAugmentCitations failed for ${sym}:`,
+      err instanceof Error ? err.message : err
+    )
+  }
+  // Step 3.9: EDGAR full-text search direct API. Queries efts.sec.gov
+  // for filings that mention BOTH the focus and counterparty company
+  // names. Free (no LLM cost), reliable (returns canonical Archives
+  // URLs by definition), and replaces what Claude's web-search tool
+  // was unreliably trying to do for SEC sources. Web-search now
+  // handles trade-press articles only.
+  try {
+    citedEdges = await edgarFullTextSearchAugmentCitations(
+      citedEdges,
+      sym,
+      input.companyName,
+      resolvedNodes
+    )
+  } catch (err) {
+    console.warn(
+      `[companyChain] edgarFullTextSearchAugmentCitations failed for ${sym}:`,
+      err instanceof Error ? err.message : err
+    )
+  }
+  // Step 4: Claude web-search fallback. Now article-only — SEC sources
+  // are exhausted via the cheap EDGAR FTS path above.
   try {
     citedEdges = await webSearchAugmentCitations(citedEdges, sym, input.companyName)
   } catch (err) {
@@ -2243,7 +2588,7 @@ export async function generateCompanyChain(input: {
       err instanceof Error ? err.message : err
     )
   }
-  // Strict-mode drop: any edge that survived all 4 augmentation passes
+  // Strict-mode drop: any edge that survived every augmentation pass
   // without getting a cite is unlinkable and gets removed.
   citedEdges = dropUncitedEdges(citedEdges)
   const graph: CompanyValueChain = {
