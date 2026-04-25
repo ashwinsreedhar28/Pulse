@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import type { FredFormat, FredSeriesSnapshot } from '../../preload'
+import { CollapseChevron, useCollapsedSection } from './collapseUI'
 
 type Group = FredSeriesSnapshot['group']
 
@@ -165,7 +166,7 @@ function Tile({ snap }: { snap: FredSeriesSnapshot }): JSX.Element {
 export function MacroPanel(): JSX.Element | null {
   const [snapshot, setSnapshot] = useState<FredSeriesSnapshot[] | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useCollapsedSection('macroPanel', false)
 
   useEffect(() => {
     let cancelled = false
@@ -286,13 +287,10 @@ export function MacroPanel(): JSX.Element | null {
             type="button"
             onClick={() => setCollapsed((c) => !c)}
             title={collapsed ? 'Expand panel' : 'Collapse panel'}
-            className={`text-[9.5px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full ring-1 ring-inset transition-colors ${
-              collapsed
-                ? 'bg-amber-500/10 text-amber-300 ring-amber-500/40 hover:bg-amber-500/20'
-                : 'bg-zinc-800/70 text-zinc-300 ring-zinc-700 hover:bg-zinc-700'
-            }`}
+            aria-expanded={!collapsed}
+            className="flex items-center text-zinc-500 hover:text-zinc-300 px-1.5 py-1"
           >
-            {collapsed ? 'Expand ▾' : 'Collapse ▴'}
+            <CollapseChevron open={!collapsed} />
           </button>
         </div>
       </header>

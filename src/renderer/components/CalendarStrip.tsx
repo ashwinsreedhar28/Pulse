@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CalendarEvent, CalendarStrip as CalendarStripData } from '../../preload'
+import { CollapseChevron, useCollapsedSection } from './collapseUI'
 
 export type CalendarFilter = 'all' | 'finance' | 'news'
 
@@ -41,23 +42,12 @@ const NEWS_KINDS: ReadonlySet<Kind> = new Set<Kind>([
   'worldEvent'
 ])
 
-// Persistence key for the collapsed state. Keeping it in localStorage rather
-// than PulseConfig avoids a schema bump for pure UI chrome — the state is
-// device-local and non-critical.
-const COLLAPSE_KEY = 'pulse:calendarCollapsed'
-
-// Default collapsed=true: user explicitly flagged that the strip takes up
-// too much screen real estate, so we optimize for screen reclaim on first
-// run. One click re-expands.
-function readInitialCollapsed(): boolean {
-  try {
-    const raw = localStorage.getItem(COLLAPSE_KEY)
-    if (raw === 'false') return false
-    return true
-  } catch {
-    return true
-  }
-}
+// Persistence key for the collapsed state. Default collapsed=true: user
+// explicitly flagged that the strip takes up too much screen real estate,
+// so we optimize for screen reclaim on first run. One click re-expands.
+// Uses the shared useCollapsedSection hook from collapseUI so all top-of-
+// page panels (Calendar / Macro / Brief) persist their state under the
+// same `pulse:collapsed:*` namespace and survive page navigation.
 
 export function CalendarStrip({
   filter,
@@ -68,7 +58,7 @@ export function CalendarStrip({
 }: Props): JSX.Element | null {
   const [data, setData] = useState<CalendarStripData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [collapsed, setCollapsed] = useState<boolean>(readInitialCollapsed)
+  const [collapsed, setCollapsed] = useCollapsedSection('calendar', true)
 
   useEffect(() => {
     let alive = true
@@ -85,15 +75,6 @@ export function CalendarStrip({
       alive = false
     }
   }, [])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(COLLAPSE_KEY, collapsed ? 'true' : 'false')
-    } catch {
-      // localStorage unavailable — silently accept the loss; next session
-      // falls back to the default.
-    }
-  }, [collapsed])
 
   const filteredEvents = useMemo(() => {
     if (!data) return []
@@ -136,7 +117,7 @@ export function CalendarStrip({
         )}
         <span className="h-px flex-1 bg-edge/60 mx-1" />
         <span className="text-[11px] tabular-nums text-zinc-500">{rangeLabel}</span>
-        <Chevron open={!collapsed} />
+        <CollapseChevron open={!collapsed} className="text-zinc-500" />
       </button>
       {!collapsed && (
         <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 pt-2">
@@ -170,21 +151,6 @@ export function CalendarStrip({
   )
 }
 
-function Chevron({ open }: { open: boolean }): JSX.Element {
-  return (
-    <svg
-      className={`w-3 h-3 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`}
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3 4.5l3 3 3-3" />
-    </svg>
-  )
-}
 
 // Collapsed summary: one horizontal row of per-day chips showing the day
 // label and a stack of kind icons from that day. Each chip re-expands the

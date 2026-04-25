@@ -12,6 +12,7 @@ import type {
   BriefSection,
   MorningBriefRow
 } from '../../preload'
+import { CollapseChevron, useCollapsedSection } from './collapseUI'
 
 interface Props {
   // Article-id click handler — opens the in-app reader (FeedView already
@@ -170,16 +171,18 @@ function Section({
 export function MorningBrief({ onOpenArticle, onOpenSymbol }: Props): JSX.Element | null {
   const [row, setRow] = useState<MorningBriefRow | null | undefined>(undefined)
   const [refreshing, setRefreshing] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useCollapsedSection('morningBrief', false)
 
   // Auto-collapse if the existing brief is more than 6h old — by then the
   // morning frame has passed, so it's clutter rather than headline space.
+  // Respects the persisted preference: if the user explicitly opened a
+  // stale brief in this session, we don't fight them on every refresh.
   useEffect(() => {
     if (row && row.generatedAt > 0) {
       const ageMs = Date.now() - row.generatedAt
       if (ageMs > 6 * 60 * 60 * 1000) setCollapsed(true)
     }
-  }, [row])
+  }, [row, setCollapsed])
 
   useEffect(() => {
     let cancelled = false
@@ -279,9 +282,10 @@ export function MorningBrief({ onOpenArticle, onOpenSymbol }: Props): JSX.Elemen
             type="button"
             onClick={() => setCollapsed((c) => !c)}
             title={collapsed ? 'Expand' : 'Collapse'}
-            className="text-[10px] text-zinc-500 hover:text-zinc-300 px-1.5"
+            aria-expanded={!collapsed}
+            className="flex items-center text-zinc-500 hover:text-zinc-300 px-1.5 py-1"
           >
-            {collapsed ? '▾' : '▴'}
+            <CollapseChevron open={!collapsed} />
           </button>
         </div>
       </header>
