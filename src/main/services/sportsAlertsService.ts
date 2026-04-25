@@ -204,10 +204,18 @@ function fireScoreChangeIfAny(game: Game, prev: GameState, curr: GameState): voi
   const scoreLine = `${awayAbbr} ${curr.awayScore ?? 0} – ${homeAbbr} ${curr.homeScore ?? 0}`
   dispatchNotification({
     category: 'sport',
-    // Identity key includes the new scoreline so each unique score state
-    // fires once. A re-tick that re-reads the same scoreline no-ops; a
-    // subsequent score change has a different key and fires.
-    identityKey: `sport-score:${game.id}:H${curr.homeScore}-A${curr.awayScore}`,
+    // Identity key encodes the FULL TRANSITION (prev → curr) so every
+    // distinct score change is unique. Earlier shape only included the
+    // new scoreline, which under-fired on legitimate reversals — e.g.
+    // baseball replay-review correction (2-2 → 2-1, where 2-1 was an
+    // earlier scoreline already in the log) or soccer disallowed-goal
+    // toggles (3-0 → 2-0 → 3-0 silently dropped the second 3-0).
+    // Encoding the prev side lets the same scoreline fire again when
+    // it's reached via a different transition.
+    identityKey:
+      `sport-score:${game.id}:` +
+      `H${prev.homeScore ?? '∅'}-A${prev.awayScore ?? '∅'}` +
+      `→H${curr.homeScore}-A${curr.awayScore}`,
     title: `${league}: ${scoredBy} scored`,
     body: scoreLine,
     importance: 'urgent',
