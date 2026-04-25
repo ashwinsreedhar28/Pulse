@@ -506,6 +506,7 @@ function isAggregatorFeed(feedTitle: string | null): boolean {
 
 function fetchRecentNews(symbol: string, companyName?: string): RecentNewsRow[] {
   const upper = symbol.toUpperCase()
+  const matchedCount = { matched: 0, fallback: 0, final: 0 }
   const matched = getDb()
     .prepare<[string, number], RecentNewsRow>(
       `SELECT a.id        AS articleId,
@@ -530,6 +531,7 @@ function fetchRecentNews(symbol: string, companyName?: string): RecentNewsRow[] 
   // article counts get ZERO news refs in the prompt and edges that
   // should cite Reuters fall back to model-knowledge cites that the
   // strict-cite gate then drops.
+  matchedCount.matched = matched.length
   let candidates: RecentNewsRow[] = matched
   if (candidates.length < 8) {
     const seenIds = new Set(candidates.map((c) => c.articleId))
@@ -568,14 +570,22 @@ function fetchRecentNews(symbol: string, companyName?: string): RecentNewsRow[] 
           LIMIT 50`
       )
       .all(...params) as RecentNewsRow[]
+    let added = 0
     for (const row of fallback) {
       if (seenIds.has(row.articleId)) continue
       seenIds.add(row.articleId)
       candidates.push(row)
+      added += 1
       if (candidates.length >= 60) break
     }
+    matchedCount.fallback = added
   }
-  if (candidates.length === 0) return candidates
+  if (candidates.length === 0) {
+    console.log(
+      `[companyChain] fetchRecentNews ${upper}: matched=0, fallback=0, final=0 (no articles in DB mention ticker or company-name)`
+    )
+    return candidates
+  }
   // Score: relationship-keyword hits earn points, aggregator-feed hits
   // lose points, recency tiebreaks. Goal is to surface trade-press
   // primary sources (Reuters direct, FT, Bloomberg, FreightWaves) above
@@ -596,7 +606,12 @@ function fetchRecentNews(symbol: string, companyName?: string): RecentNewsRow[] 
     if (a.score !== b.score) return b.score - a.score
     return b.ts - a.ts
   })
-  return scored.slice(0, 15).map((s) => s.row)
+  const final = scored.slice(0, 15).map((s) => s.row)
+  matchedCount.final = final.length
+  console.log(
+    `[companyChain] fetchRecentNews ${upper}: matched=${matchedCount.matched}, fallback=${matchedCount.fallback}, final=${matchedCount.final}`
+  )
+  return final
 }
 
 function broadcastUpdated(symbol: string): void {
@@ -1216,13 +1231,65 @@ async function concentrationAugmentCitations(
   return out
 }
 
+// Whitelisted primary-press domains that the web-search augment will
+// accept as kind:'article' citations when no sec.gov filing is findable.
+// Restricted to first-party trade press / wire services so we don't
+// degrade to citing aggregator reposts. Domains are matched as
+// case-insensitive suffixes against the URL's host — "reuters.com" hits
+// both "www.reuters.com" and "reuters.com/business/...".
+const PRIMARY_PRESS_DOMAINS = [
+  'reuters.com',
+  'bloomberg.com',
+  'ft.com',
+  'wsj.com',
+  'nikkei.com',
+  'asia.nikkei.com',
+  'forbes.com',
+  'cnbc.com',
+  'marketwatch.com',
+  'apnews.com',
+  'theinformation.com',
+  'semianalysis.com',
+  'semiwiki.com',
+  'eetimes.com',
+  'electronicdesign.com',
+  'freightwaves.com',
+  'foxbusiness.com',
+  'businessinsider.com',
+  'fortune.com',
+  'theverge.com',
+  'arstechnica.com',
+  'tomshardware.com',
+  'anandtech.com',
+  'techcrunch.com',
+  'theregister.com',
+  'eenewseurope.com'
+]
+
+function matchesPrimaryPress(url: string): { ok: true; host: string } | { ok: false } {
+  try {
+    const u = new URL(url)
+    const host = u.hostname.toLowerCase()
+    for (const domain of PRIMARY_PRESS_DOMAINS) {
+      if (host === domain || host.endsWith('.' + domain) || host === 'www.' + domain) {
+        return { ok: true, host }
+      }
+    }
+    return { ok: false }
+  } catch {
+    return { ok: false }
+  }
+}
+
 // Web-search augment: for any edge STILL missing a citation after the
-// ref-resolver, bilateral, and concentration passes, ask Claude (with the
-// web_search tool enabled) to find a primary-source URL on sec.gov that
-// documents the relationship. Only sec.gov hits are accepted — we extract
-// the accession from the URL and attach as a kind:'filing' citation.
-// Bounded by `maxSearches` to keep cost predictable: typical chain has
-// 3-5 cite-less edges after the prior passes, and each search is one
+// ref-resolver, bilateral, and concentration passes, ask Claude (with
+// the web_search tool enabled) to find a primary-source URL — either
+// an SEC filing on sec.gov/Archives OR a trade-press article from a
+// whitelisted publisher (Reuters, Bloomberg, FT, WSJ, etc.). Web search
+// rarely lands on canonical Archives URLs reliably, so accepting trade
+// press as a backup unlocks the path for the bulk of cite-less edges.
+//
+// Bounded by `maxSearches` to keep cost predictable: each search is one
 // Haiku call (~$0.01) plus the per-search cost from Anthropic's web tool.
 async function webSearchAugmentCitations(
   edges: import('../database/companyValueChains').CompanyValueChainEdge[],
@@ -1273,21 +1340,33 @@ async function webSearchAugmentCitations(
     lastCallAt = Date.now()
     const system =
       `You are a citation finder. For the relationship described below, ` +
-      `search the web ONCE for an SEC filing on sec.gov that documents ` +
-      `the relationship. Return STRICT JSON only:\n` +
-      `{"url": "https://www.sec.gov/...", "formType": "10-K"|"10-Q"|"8-K", "year": 2024} ` +
-      `or {"url": null} if no SEC primary source is findable.\n` +
+      `search the web ONCE for a primary-source URL that documents the ` +
+      `relationship. Two acceptable source types:\n` +
+      `1. SEC filing — URL on sec.gov/Archives (10-K, 10-Q, 8-K, etc.)\n` +
+      `2. Trade-press article — URL on one of: Reuters, Bloomberg, FT, ` +
+      `WSJ, Nikkei, CNBC, MarketWatch, AP, Forbes, The Information, ` +
+      `SemiWiki, EE Times, FreightWaves, Tom's Hardware, AnandTech, ` +
+      `TechCrunch, The Register, Ars Technica, The Verge, ` +
+      `BusinessInsider, Fortune.\n` +
+      `\n` +
+      `Return STRICT JSON only, one of these shapes:\n` +
+      `- SEC: {"kind":"filing","url":"https://www.sec.gov/Archives/...","formType":"10-K","year":2024}\n` +
+      `- Article: {"kind":"article","url":"https://www.reuters.com/...","title":"...","publisher":"Reuters","date":"2024-03-15"}\n` +
+      `- None: {"kind":"none"}\n` +
+      `\n` +
       `Hard rules:\n` +
-      `- The URL MUST start with https://www.sec.gov/Archives/ — reject ` +
-      `EDGAR full-text-search results, sec.gov landing pages, and any ` +
-      `non-Archives sec.gov URL.\n` +
-      `- The cited filing must actually mention BOTH ${focus} (or ${focusCompanyName}) ` +
+      `- SEC URLs MUST start with https://www.sec.gov/Archives/ (not ` +
+      `EDGAR search results, not landing pages).\n` +
+      `- Article URLs MUST be on one of the publisher domains listed ` +
+      `above. Aggregator reposts (Yahoo Finance, MSN Money, Seeking ` +
+      `Alpha) are NOT acceptable — find the primary source.\n` +
+      `- The source MUST actually mention BOTH ${focus} (or ${focusCompanyName}) ` +
       `and ${t.counterparty} in the context of the ${t.relationship} relationship.\n` +
-      `- If you can only find news articles, blog posts, or analyst notes, ` +
-      `return {"url": null}. We only accept SEC primary documents here.`
+      `- If you genuinely can't find either, return {"kind":"none"}.`
     const user =
-      `Find an SEC filing URL that documents the ${t.relationship} relationship ` +
-      `between ${focusCompanyName} (${focus}) and ${t.counterparty}.`
+      `Find a primary-source URL (SEC filing OR trade-press article) ` +
+      `documenting the ${t.relationship} relationship between ` +
+      `${focusCompanyName} (${focus}) and ${t.counterparty}.`
     const result = await callClaudeWithWebSearch({
       model: CLAUDE_MODELS.classifier,
       system,
@@ -1316,7 +1395,15 @@ async function webSearchAugmentCitations(
       )
       continue
     }
-    let parsed: { url?: string | null; formType?: string; year?: number }
+    let parsed: {
+      kind?: 'filing' | 'article' | 'none'
+      url?: string | null
+      formType?: string
+      year?: number
+      title?: string
+      publisher?: string
+      date?: string
+    }
     try {
       parsed = JSON.parse(m[0]) as typeof parsed
     } catch {
@@ -1325,55 +1412,88 @@ async function webSearchAugmentCitations(
       )
       continue
     }
+    if (parsed.kind === 'none' || !parsed.url) {
+      console.log(
+        `[companyChain] web-search ${focus}↔${t.counterparty}: no primary source found`
+      )
+      continue
+    }
     const url = typeof parsed.url === 'string' ? parsed.url.trim() : ''
     if (!url) {
       console.log(
-        `[companyChain] web-search ${focus}↔${t.counterparty}: model returned url=null (no SEC source found)`
+        `[companyChain] web-search ${focus}↔${t.counterparty}: empty URL`
       )
       continue
     }
-    if (!/^https:\/\/www\.sec\.gov\/Archives\//i.test(url)) {
-      console.log(
-        `[companyChain] web-search ${focus}↔${t.counterparty}: rejected non-Archives URL "${url}"`
-      )
-      continue
+
+    // Build the citation. Two acceptable shapes:
+    //  1. SEC filing on sec.gov/Archives → kind:'filing'
+    //  2. Trade-press article on a whitelisted domain → kind:'article'
+    let cite: import('../database/companyValueChains').CompanyValueChainEdgeCitation | null = null
+
+    if (/^https:\/\/www\.sec\.gov\/Archives\//i.test(url)) {
+      const urlMatch = url.match(/\/Archives\/edgar\/data\/(\d+)\/([0-9]{18}|[0-9-]{20})/i)
+      if (!urlMatch) {
+        console.log(
+          `[companyChain] web-search ${focus}↔${t.counterparty}: Archives URL didn't match accession pattern — "${url}"`
+        )
+        continue
+      }
+      const cik = urlMatch[1]
+      const accessionRaw = urlMatch[2]
+      const accession =
+        accessionRaw.includes('-')
+          ? accessionRaw
+          : `${accessionRaw.slice(0, 10)}-${accessionRaw.slice(10, 12)}-${accessionRaw.slice(12)}`
+      const formType =
+        typeof parsed.formType === 'string' && parsed.formType.trim()
+          ? parsed.formType.trim().toUpperCase()
+          : 'SEC filing'
+      const year = typeof parsed.year === 'number' ? parsed.year : null
+      const filedAt = year ? Date.UTC(year, 0, 1) : Date.now()
+      cite = { kind: 'filing', accession, cik, formType, filedAt, url }
+    } else {
+      const press = matchesPrimaryPress(url)
+      if (!press.ok) {
+        console.log(
+          `[companyChain] web-search ${focus}↔${t.counterparty}: rejected non-Archives, non-whitelisted URL "${url}"`
+        )
+        continue
+      }
+      const title =
+        typeof parsed.title === 'string' && parsed.title.trim()
+          ? parsed.title.trim().slice(0, 200)
+          : `${focusCompanyName} ↔ ${t.counterparty}`
+      const publisher =
+        typeof parsed.publisher === 'string' && parsed.publisher.trim()
+          ? parsed.publisher.trim().slice(0, 80)
+          : press.host
+      const dateStr = typeof parsed.date === 'string' ? parsed.date.trim() : ''
+      const publishedAt = dateStr && /^\d{4}-\d{2}-\d{2}/.test(dateStr)
+        ? Date.parse(dateStr)
+        : null
+      cite = {
+        kind: 'article',
+        // null articleId signals "external" — renderer opens via system
+        // browser since Pulse doesn't have a local article row for this URL.
+        articleId: null,
+        title,
+        url,
+        publishedAt: Number.isFinite(publishedAt) ? publishedAt : null,
+        feedTitle: publisher
+      }
     }
-    // Extract CIK + accession from a canonical Archives URL of the form:
-    //   https://www.sec.gov/Archives/edgar/data/{CIK}/{ACCESSION-NO-DASHES}/{file}
-    const urlMatch = url.match(/\/Archives\/edgar\/data\/(\d+)\/([0-9]{18}|[0-9-]{20})/i)
-    if (!urlMatch) {
-      console.log(
-        `[companyChain] web-search ${focus}↔${t.counterparty}: Archives URL didn't match accession pattern — "${url}"`
-      )
-      continue
-    }
-    const cik = urlMatch[1]
-    const accessionRaw = urlMatch[2]
-    // Normalize accession to dashed form (XXXXXXXXXX-XX-XXXXXX).
-    const accession =
-      accessionRaw.includes('-')
-        ? accessionRaw
-        : `${accessionRaw.slice(0, 10)}-${accessionRaw.slice(10, 12)}-${accessionRaw.slice(12)}`
-    const formType =
-      typeof parsed.formType === 'string' && parsed.formType.trim()
-        ? parsed.formType.trim().toUpperCase()
-        : 'SEC filing'
-    const year = typeof parsed.year === 'number' ? parsed.year : null
-    const filedAt = year ? Date.UTC(year, 0, 1) : Date.now()
-    const cite: import('../database/companyValueChains').CompanyValueChainEdgeCitation = {
-      kind: 'filing',
-      accession,
-      cik,
-      formType,
-      filedAt,
-      url
-    }
+
+    if (!cite) continue
     const e = next[t.index]
     const existing = e.citations ?? []
-    if (existing.some((c) => c.kind === 'filing' && c.accession === accession)) continue
+    // Dedupe by URL across kinds — same web-page surfaced twice should
+    // never appear twice on one edge.
+    if (existing.some((c) => 'url' in c && c.url === url)) continue
+    const newSource: 'filings' | 'news' = cite.kind === 'filing' ? 'filings' : 'news'
     next[t.index] = {
       ...e,
-      source: 'filings' as const,
+      source: newSource,
       citations: [...existing, cite]
     }
     attached += 1

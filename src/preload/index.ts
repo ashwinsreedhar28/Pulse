@@ -569,7 +569,10 @@ export type CompanyValueChainEdgeCitation =
     }
   | {
       kind: 'article'
-      articleId: number
+      // null = external (web-searched) article without a local DB row.
+      // Renderer opens via system browser when null; otherwise routes
+      // through the in-app reader.
+      articleId: number | null
       title: string
       url: string | null
       publishedAt: number | null

@@ -52,12 +52,13 @@ export type CompanyValueChainEdgeCitation =
     }
   | {
       kind: 'article'
-      // Pulse article id — opens the in-app reader. articleId is the
-      // primary key into the articles table; the rest is denormalized
-      // here so the renderer doesn't need a second IPC to display the
-      // citation chip (URL/title come from the same row but only the id
-      // is needed to navigate).
-      articleId: number
+      // Pulse article id when the article was matched from the local
+      // article DB — the renderer can route through the in-app reader.
+      // NULL for "external" articles surfaced via Claude's web-search
+      // augment (Reuters / Bloomberg / FT / WSJ URLs Pulse doesn't yet
+      // index): the renderer falls back to opening the URL directly via
+      // the system browser. URL is required when articleId is null.
+      articleId: number | null
       title: string
       url: string | null
       publishedAt: number | null

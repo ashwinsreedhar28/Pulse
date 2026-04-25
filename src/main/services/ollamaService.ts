@@ -1496,7 +1496,7 @@ export async function generateCompanyValueChain(input: {
   console.log(
     `[ollama] generateCompanyValueChain: ${input.symbol} "${input.companyName}" ` +
       `(context: ${groundingContext.length} chars, profile=${!!input.profileDescription}, ` +
-      `10K=${!!input.tenKExcerpt}, news=${input.newsSnippets?.length ?? 0})`
+      `filings=${input.filings?.length ?? 0}, articles=${input.articles?.length ?? 0})`
   )
 
   try {
