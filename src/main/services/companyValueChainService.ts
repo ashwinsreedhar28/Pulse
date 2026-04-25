@@ -1281,12 +1281,23 @@ const PRIMARY_PRESS_DOMAINS = [
   'newswire.ca'
 ]
 
-// Subdomain prefixes that identify an investor-relations site. When the
-// URL's host starts with one of these, treat it as a first-party source
-// regardless of the parent domain — companies routinely host material
-// announcements at ir.<company>.com that are functionally identical to
-// 8-K disclosures (and often filed as 8-K Item 7.01 too).
-const IR_SUBDOMAIN_PREFIXES = ['ir.', 'investors.', 'investor.']
+// Subdomain prefixes that identify a first-party corporate-comms site.
+// When the URL's host starts with one of these, treat it as a primary
+// source regardless of the parent domain — companies routinely host
+// material announcements at ir.<company>.com / pr.<company>.com /
+// news.<company>.com that are functionally identical to 8-K Item 7.01
+// disclosures.
+const IR_SUBDOMAIN_PREFIXES = [
+  'ir.',
+  'investors.',
+  'investor.',
+  'pr.',          // pr.tsmc.com — press release pages
+  'press.',
+  'newsroom.',
+  'news.',        // news.intel.com etc.
+  'media.',       // media.gm.com / media.ford.com
+  'corporate.'    // corporate.exxonmobil.com
+]
 
 function matchesPrimaryPress(url: string): { ok: true; host: string } | { ok: false } {
   try {
@@ -1351,11 +1362,11 @@ async function webSearchAugmentCitations(
   // minute Haiku tier-1 limit. Each web-search call burns more tokens
   // than the system prompt suggests because the tool_result block from
   // the web search itself counts as input on the model's follow-up turn
-  // (often 5-15K tokens). 6s pacing was hitting 429s on every call;
-  // bumped to 10s gives us ~6 calls/min ≈ 30-90K tokens/min — still over
-  // the soft limit on the high end but the per-call retry handles spikes
-  // gracefully. If 429s still recur, knock it down to 5 max searches.
-  const PACING_MS = 10_000
+  // (often 5-15K tokens). 10s pacing was still hitting 429 retries at
+  // 4-29s sleeps. 14s gives ~4 calls/min × ~12K tokens = ~48K/min —
+  // safely below the soft limit on average and the per-call retry
+  // handles tool-result spikes when they fire.
+  const PACING_MS = 14_000
   let lastCallAt = 0
   for (let i = 0; i < cap; i++) {
     const t = targets[i]
