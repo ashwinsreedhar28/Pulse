@@ -1989,8 +1989,13 @@ function FocusCashflowStrip({
       <div className="ml-auto flex items-center gap-3">
         {hasHistory && <EarningsBeatMiss history={earnings!.history} variant="strip" />}
         {hasFinancials && (
-          <div className="flex items-center gap-1.5" title="Quarterly FCF (oldest → newest)">
-            <span className="text-[9px] uppercase tracking-[0.18em] text-zinc-500">FCF 8Q</span>
+          <div
+            className="flex items-center gap-1.5"
+            title="Quarterly FCF (oldest → newest, up to 8 quarters)"
+          >
+            <span className="text-[9px] uppercase tracking-[0.18em] text-zinc-500">
+              QTR FCF
+            </span>
             <FcfSparkline financials={financials} variant="strip" />
           </div>
         )}
