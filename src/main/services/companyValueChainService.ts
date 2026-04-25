@@ -1231,6 +1231,134 @@ async function concentrationAugmentCitations(
   return out
 }
 
+// Material-agreement augment: scan focus's recent 8-K filings for
+// "Item 1.01 Entry into a Material Definitive Agreement" disclosures.
+// 8-K Item 1.01 is filed within 4 business days of signing a material
+// contract (supply agreement, manufacturing agreement, license deal,
+// JV, etc.) — by SEC rule it must name the counterparty. Highest-
+// confidence relationship signal we can extract from filings: the
+// company explicitly says "we entered into a [Type] Agreement with X."
+//
+// For each match we attach the 8-K as a kind:'filing' citation on the
+// edge whose counterparty matches the named party. Counterparty match
+// is by company name (8-Ks rarely use ticker symbols in body text).
+async function materialAgreementAugmentCitations(
+  edges: import('../database/companyValueChains').CompanyValueChainEdge[],
+  focusSymbol: string,
+  resolvedNodes: CompanyValueChainNode[]
+): Promise<import('../database/companyValueChains').CompanyValueChainEdge[]> {
+  const focus = focusSymbol.toUpperCase()
+  // Pull the most recent 8 8-Ks (covers ~6-12 months of filings for an
+  // active filer). 8-K Item 1.01 announcements sit at the top of the
+  // body so per-filing scan is cheap.
+  const eightKs = getFilingsForSymbol(focus, 8, new Set(['8-K', '8-K/A']))
+  if (eightKs.length === 0) {
+    console.log(
+      `[companyChain] materialAgreementAugmentCitations: no 8-K available for ${focus}`
+    )
+    return edges
+  }
+
+  // Build counterparty lookup: name (cleaned + uppercased) + symbol →
+  // resolved symbol. Skip the focus and unverified nodes (they don't
+  // round-trip back to a real ticker the renderer can link to).
+  const stopSuffix = /\b(Inc\.?|Incorporated|Corp\.?|Corporation|Ltd\.?|Limited|LLC|Company|Co\.?|Holdings|Group|PLC|N\.V\.|S\.A\.|AG)\b/gi
+  type CounterpartyKey = { symbol: string; needles: string[] }
+  const counterparties: CounterpartyKey[] = []
+  for (const n of resolvedNodes) {
+    if (n.kind !== 'ticker') continue
+    const sym = n.symbol.toUpperCase()
+    if (sym === focus) continue
+    const cleaned = n.name.replace(stopSuffix, '').trim()
+    const fullName = n.name.trim().toUpperCase()
+    const cleanedUpper = cleaned.toUpperCase()
+    const head = cleaned.split(/\s+/)[0]?.trim().toUpperCase() ?? ''
+    const needles: string[] = []
+    if (fullName.length >= 5) needles.push(fullName)
+    if (cleanedUpper.length >= 5 && cleanedUpper !== fullName) needles.push(cleanedUpper)
+    // Head needs to be ≥4 to avoid false positives like "AMD" matching
+    // "Adam" via word-boundary slip. We include it because 8-Ks often
+    // shorten "KLA Corporation" → "KLA" within a paragraph.
+    if (head.length >= 4) needles.push(head)
+    if (needles.length === 0) continue
+    counterparties.push({ symbol: sym, needles })
+  }
+  if (counterparties.length === 0) return edges
+
+  let scanned = 0
+  let withItem101 = 0
+  // First match per counterparty wins so we attach the MOST RECENT 8-K
+  // mentioning each. Ordering by filedAt DESC is already guaranteed by
+  // getFilingsForSymbol.
+  const matchByCounterparty = new Map<string, { filing: SecFiling; url: string }>()
+
+  for (const filing of eightKs) {
+    const body = await fetchFilingBody(filing)
+    if (!body) continue
+    scanned += 1
+    // Slice out the Item 1.01 block. 8-K items run from "Item X.Y …"
+    // until the next item heading, the signature block, or the exhibit
+    // index. Cap the slice at 12K chars to bound regex cost on long
+    // 8-Ks that bundle multiple items.
+    const item101 = body.text.match(
+      /\bitem\s+1\.01[^a-z][\s\S]{0,12000}?(?=\bitem\s+\d+\.\d+|signatures?\b|exhibit\s+index|\Z)/i
+    )
+    if (!item101) continue
+    withItem101 += 1
+    const sectionUpper = item101[0].toUpperCase()
+    for (const cp of counterparties) {
+      if (matchByCounterparty.has(cp.symbol)) continue
+      // Word-boundary match on each needle so "AMD" doesn't hit "Adam".
+      const hit = cp.needles.some((needle) => {
+        const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        return new RegExp(`\\b${escaped}\\b`).test(sectionUpper)
+      })
+      if (hit) {
+        matchByCounterparty.set(cp.symbol, { filing, url: body.url })
+      }
+    }
+  }
+
+  if (matchByCounterparty.size === 0) {
+    console.log(
+      `[companyChain] materialAgreementAugmentCitations: scanned ${scanned} 8-K(s), ${withItem101} with Item 1.01, 0 counterparty mention(s)`
+    )
+    return edges
+  }
+
+  let attached = 0
+  const out = edges.map((e) => {
+    const from = e.from.toUpperCase()
+    const to = e.to.toUpperCase()
+    const counterparty = from !== focus ? from : to
+    if (!counterparty || counterparty === focus) return e
+    const hit = matchByCounterparty.get(counterparty)
+    if (!hit) return e
+    const cite: import('../database/companyValueChains').CompanyValueChainEdgeCitation = {
+      kind: 'filing',
+      accession: hit.filing.accessionNumber,
+      cik: hit.filing.cik,
+      formType: hit.filing.formType,
+      filedAt: hit.filing.filedAt,
+      url: hit.url
+    }
+    const existing = e.citations ?? []
+    if (existing.some((c) => c.kind === 'filing' && c.accession === hit.filing.accessionNumber)) {
+      return e
+    }
+    attached += 1
+    return {
+      ...e,
+      source: 'filings' as const,
+      citations: [...existing, cite]
+    }
+  })
+  console.log(
+    `[companyChain] materialAgreementAugmentCitations: scanned ${scanned} 8-K(s), ${withItem101} with Item 1.01, found ${matchByCounterparty.size} counterparty match(es), +${attached} cites attached`
+  )
+  return out
+}
+
 // Whitelisted primary-source domains that the web-search augment will
 // accept as kind:'article' citations when no sec.gov filing is findable.
 // Buckets:
@@ -1381,29 +1509,44 @@ async function webSearchAugmentCitations(
     lastCallAt = Date.now()
     const system =
       `You are a citation finder. For the relationship described below, ` +
-      `search the web ONCE for a primary-source URL that documents the ` +
-      `relationship. Two acceptable source types:\n` +
-      `1. SEC filing — URL on sec.gov/Archives (10-K, 10-Q, 8-K, etc.)\n` +
-      `2. Trade-press article — URL on one of: Reuters, Bloomberg, FT, ` +
+      `search the web ONCE for a PRIMARY-SOURCE URL that documents it. ` +
+      `Acceptable source types:\n` +
+      `1. SEC filing on sec.gov (10-K, 10-Q, 8-K, etc.)\n` +
+      `2. Trade-press / wire-service article (Reuters, Bloomberg, FT, ` +
       `WSJ, Nikkei, CNBC, MarketWatch, AP, Forbes, The Information, ` +
       `SemiWiki, EE Times, FreightWaves, Tom's Hardware, AnandTech, ` +
       `TechCrunch, The Register, Ars Technica, The Verge, ` +
-      `BusinessInsider, Fortune.\n` +
+      `BusinessInsider, Fortune)\n` +
+      `3. Press-wire announcement (PR Newswire, Business Wire, ` +
+      `GlobeNewswire, AccessWire) — these are first-party press releases\n` +
+      `4. Company's own investor-relations / press / media page (any ` +
+      `URL on ir.<company>.com, investors.<company>.com, ` +
+      `pr.<company>.com, press.<company>.com, newsroom.<company>.com, ` +
+      `news.<company>.com, media.<company>.com, corporate.<company>.com)\n` +
       `\n` +
       `Return STRICT JSON only, one of these shapes:\n` +
-      `- SEC: {"kind":"filing","url":"https://www.sec.gov/Archives/...","formType":"10-K","year":2024}\n` +
+      `- SEC: {"kind":"filing","url":"https://www.sec.gov/...","formType":"10-K","year":2024}\n` +
       `- Article: {"kind":"article","url":"https://www.reuters.com/...","title":"...","publisher":"Reuters","date":"2024-03-15"}\n` +
       `- None: {"kind":"none"}\n` +
       `\n` +
       `Hard rules:\n` +
-      `- SEC URLs MUST start with https://www.sec.gov/Archives/ (not ` +
-      `EDGAR search results, not landing pages).\n` +
-      `- Article URLs MUST be on one of the publisher domains listed ` +
-      `above. Aggregator reposts (Yahoo Finance, MSN Money, Seeking ` +
-      `Alpha) are NOT acceptable — find the primary source.\n` +
-      `- The source MUST actually mention BOTH ${focus} (or ${focusCompanyName}) ` +
-      `and ${t.counterparty} in the context of the ${t.relationship} relationship.\n` +
-      `- If you genuinely can't find either, return {"kind":"none"}.`
+      `- The URL MUST be on one of the source types listed above. ` +
+      `Aggregator reposts (Yahoo Finance, MSN Money, Seeking Alpha) ` +
+      `are NEVER acceptable — find the primary source.\n` +
+      `- The source MUST specifically NAME ${t.counterparty} (the ` +
+      `counterparty) AT LEAST ONCE — even in passing, even in a ` +
+      `customer/supplier list, even just as part of a partnership ` +
+      `announcement. ${focus} (or ${focusCompanyName}) doesn't have ` +
+      `to appear if the URL is on ${focus}'s own corporate site (it's ` +
+      `implicitly first-party there). Generic statements like "the ` +
+      `company has many customers" with NO specific names are NOT ` +
+      `acceptable.\n` +
+      `- The relationship being described or implied should match the ` +
+      `${t.relationship} type (supplier/customer/competitor/partner). ` +
+      `Don't return a press release about an unrelated event that ` +
+      `merely mentions the counterparty.\n` +
+      `- If you genuinely can't find a primary source naming ` +
+      `${t.counterparty}, return {"kind":"none"}.`
     const user =
       `Find a primary-source URL (SEC filing OR trade-press article) ` +
       `documenting the ${t.relationship} relationship between ` +
@@ -2007,6 +2150,20 @@ export async function generateCompanyChain(input: {
   } catch (err) {
     console.warn(
       `[companyChain] concentrationAugmentCitations failed for ${sym}:`,
+      err instanceof Error ? err.message : err
+    )
+  }
+  // Step 3.5: 8-K Item 1.01 material-agreement parser. Companies file
+  // 8-K Item 1.01 within 4 business days of signing a material contract
+  // and must name the counterparty. This catches deals (supply
+  // agreements, licenses, JVs, partnerships) that don't rise to a 10-K
+  // concentration disclosure but ARE individually material — e.g.
+  // "KLA enters into Manufacturing Agreement with TSMC."
+  try {
+    citedEdges = await materialAgreementAugmentCitations(citedEdges, sym, resolvedNodes)
+  } catch (err) {
+    console.warn(
+      `[companyChain] materialAgreementAugmentCitations failed for ${sym}:`,
       err instanceof Error ? err.message : err
     )
   }
