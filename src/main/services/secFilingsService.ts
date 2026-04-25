@@ -17,6 +17,7 @@ import { BrowserWindow } from 'electron'
 import {
   getAllFilingsLastFetched,
   getCikMapLastFetched,
+  getFilingsForSymbol,
   lookupCik,
   replaceFormerNames,
   upsertCikMap,
@@ -25,8 +26,14 @@ import {
 import { listTickers } from '../database/tickers'
 import { normalizeCompanyName } from './companyNameResolver'
 import { processRecentEarnings } from './earningsReleasesService'
-import { fetchSubmissions, fetchTickerMap } from './secService'
+import {
+  buildFilingUrl,
+  fetchSubmissions,
+  fetchTickerMap,
+  INTERESTING_FORMS
+} from './secService'
 import { processRecentTenKs } from './tenKConcentrationService'
+import { dispatchNotification } from './notificationService'
 
 // CIK map refreshes monthly — new listings are rare enough that a stale
 // mapping hurts only recent IPOs, which tend to show up on earnings
@@ -95,6 +102,17 @@ export async function refreshFilings(symbol: string): Promise<number | null> {
     if (ticker?.isActive) {
       void processRecentEarnings(sym, ticker.companyName ?? sym)
       void processRecentTenKs(sym, ticker.companyName ?? sym)
+      // Phase 4: dispatch notification for any "interesting" filings that
+      // landed in the last 24h. The notification_log dedups by accession,
+      // so a re-sweep that re-reads the same filings no-ops.
+      try {
+        notifyRecentInterestingFilings(sym)
+      } catch (err) {
+        console.warn(
+          `[sec] filing notify failed for ${sym}:`,
+          err instanceof Error ? err.message : err
+        )
+      }
     }
     return count
   } catch (err) {
@@ -172,4 +190,51 @@ export function stopSecFilingsScheduler(): void {
 export async function forceRefreshFilings(symbol: string): Promise<number | null> {
   await refreshCikMapIfStale()
   return refreshFilings(symbol)
+}
+
+// Phase 4: notify on recent interesting filings. Pulls the last 5 INTERESTING
+// filings, drops anything older than 24h or older than the most recent
+// fetched-at timestamp tracked by the central log. Each filing's accession
+// is its identityKey, so notification_log dedups across re-sweeps and
+// across restarts. Form 4s in particular fire frequently for routine
+// insider trades; we'd over-notify without strict per-accession dedup.
+const NOTIFY_FILING_WINDOW_MS = 24 * 60 * 60 * 1000
+
+function notifyRecentInterestingFilings(symbol: string): void {
+  const sym = symbol.toUpperCase()
+  const recent = getFilingsForSymbol(sym, 8, INTERESTING_FORMS)
+  if (recent.length === 0) return
+  const cutoff = Date.now() - NOTIFY_FILING_WINDOW_MS
+  for (const f of recent) {
+    if (f.filedAt < cutoff) continue
+    const formLabel = formatFormLabel(f.formType)
+    const dateStr = new Date(f.filedAt).toISOString().slice(0, 10)
+    dispatchNotification({
+      category: 'filing',
+      // identityKey is the accession — globally unique per filing across
+      // all SEC filers, so we never double-fire even if a filing gets
+      // re-fetched on a subsequent sweep.
+      identityKey: `filing:${sym}:${f.accessionNumber}`,
+      title: `${sym}: New ${formLabel} filing`,
+      body: `${formLabel} filed ${dateStr}.`,
+      // Form 4 / SC 13G are routine — keep at normal importance so quiet
+      // hours suppress them. 8-K/10-K are material; mark urgent so the
+      // user catches a same-day 8-K even after hours.
+      importance: isMaterialForm(f.formType) ? 'urgent' : 'normal',
+      clickAction: { kind: 'url', url: buildFilingUrl(f.cik, f.accessionNumber) }
+    })
+  }
+}
+
+function formatFormLabel(formType: string): string {
+  // Trim "/A" amendments to keep the title compact; users can read the
+  // detail page for the full form code.
+  return formType.replace(/\/A$/, ' (amended)')
+}
+
+// Material vs routine forms. 8-K is material disclosure; 10-K/10-Q earnings;
+// DEF 14A proxy; SC 13D activist stake. Form 4 is routine insider trade,
+// SC 13G passive 5%+ holder — both common and noisy.
+function isMaterialForm(formType: string): boolean {
+  return /^(8-K|10-K|10-Q|DEF 14A|SC 13D)/.test(formType)
 }

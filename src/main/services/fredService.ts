@@ -19,6 +19,7 @@ import {
   upsertObservations,
   type FredObservation
 } from '../database/fredObservations'
+import { dispatchNotification } from './notificationService'
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred'
 const FETCH_TIMEOUT_MS = 12_000
@@ -191,6 +192,19 @@ export async function refreshAllFredSeries(): Promise<void> {
         upsertObservations(series.id, observations)
         const lastDate =
           observations.length > 0 ? observations[observations.length - 1].observationDate : null
+        // Phase 4: macro shock detection. Compares the latest observation
+        // to the prior one and dispatches a notification when a configured
+        // threshold is crossed. Identity-keyed by observation date so a
+        // re-fetch can't double-fire — and so a 6-month-old past spike
+        // discovered on first cold-start doesn't notify.
+        try {
+          notifyMacroShock(series.id, observations)
+        } catch (err) {
+          console.warn(
+            `[fred] macro notify failed for ${series.id}:`,
+            err instanceof Error ? err.message : err
+          )
+        }
         let info: { title: string; units: string; frequency: string } | null = null
         if (!meta?.title) {
           await sleep(INTRA_CALL_DELAY_MS)
@@ -346,4 +360,55 @@ export function stopFredScheduler(): void {
     timer = null
   }
   started = false
+}
+
+// Phase 4: macro-shock detection. Compares the latest observation to the
+// prior valid one and fires a notification when a configured threshold
+// is crossed. Identity-keyed by observation date so a re-fetch can't
+// double-fire and a stale historic spike rediscovered on cold start
+// doesn't notify.
+//
+// Thresholds (chosen to match retail-investor "this is news" intuition):
+//   VIXCLS: ±15% day-over-day → "VIX spiked / fell"
+//   DGS10:  ±10 basis points day-over-day → "10Y yield moved"
+// Other series are silent for v1; user can add more in a future config UI.
+function notifyMacroShock(seriesId: string, observations: FredObservation[]): void {
+  const valid = observations.filter((o) => o.value !== null) as Array<{
+    observationDate: string
+    value: number
+  }>
+  if (valid.length < 2) return
+  const latest = valid[valid.length - 1]
+  const prev = valid[valid.length - 2]
+
+  if (seriesId === 'VIXCLS') {
+    const pct = ((latest.value - prev.value) / prev.value) * 100
+    if (Math.abs(pct) < 15) return
+    const dir = pct >= 0 ? 'spiked' : 'fell'
+    const sign = pct >= 0 ? '+' : ''
+    dispatchNotification({
+      category: 'macro',
+      identityKey: `macro:VIXCLS:${latest.observationDate}:shock`,
+      title: `VIX ${dir} ${sign}${pct.toFixed(1)}%`,
+      body: `${prev.value.toFixed(2)} → ${latest.value.toFixed(2)} on ${latest.observationDate}.`,
+      importance: 'urgent',
+      clickAction: { kind: 'route', route: 'home' }
+    })
+    return
+  }
+  if (seriesId === 'DGS10') {
+    // DGS10 is in percent (e.g., 4.30 = 4.30%). 1bp = 0.01.
+    const bps = (latest.value - prev.value) * 100
+    if (Math.abs(bps) < 10) return
+    const sign = bps >= 0 ? '+' : ''
+    dispatchNotification({
+      category: 'macro',
+      identityKey: `macro:DGS10:${latest.observationDate}:shock`,
+      title: `10Y yield ${bps >= 0 ? 'jumped' : 'dropped'} ${sign}${bps.toFixed(0)}bps`,
+      body: `${prev.value.toFixed(2)}% → ${latest.value.toFixed(2)}% on ${latest.observationDate}.`,
+      importance: 'urgent',
+      clickAction: { kind: 'route', route: 'home' }
+    })
+    return
+  }
 }
