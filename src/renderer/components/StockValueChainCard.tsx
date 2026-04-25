@@ -54,10 +54,14 @@ export interface Counterparty {
   // / 'profile' are real groundings; 'model' means the LLM claimed the
   // relationship from training knowledge without any supplied context.
   source?: CompanyValueChainEdgeSource | null
-  // Specific document the model cited as the basis for this edge. When
-  // present, the source badge becomes a clickable link — opens the SEC
-  // archive URL externally for filings, the in-app reader for articles.
-  // Absent on legacy chains generated before this feature shipped.
+  // Multi-citation array — each entry is one document supporting this
+  // edge. Renderer stacks them as multiple clickable pills. When empty
+  // or absent, falls back to the legacy single `citation` field on
+  // chains generated before multi-cite shipped.
+  citations?: CompanyValueChainEdgeCitation[]
+  // DEPRECATED: legacy single-citation. Read paths normalize this into
+  // citations: [...] before passing to the renderer; kept here only for
+  // any caller still building Counterparty manually with the old shape.
   citation?: CompanyValueChainEdgeCitation | null
   // True when this counterparty is a Claude-named entity that didn't
   // resolve to a real public ticker (private companies, brand labels
@@ -125,8 +129,24 @@ function SourceBadge({
   citation?: CompanyValueChainEdgeCitation | null
   onOpen?: (url: string, title: string, subtitle?: string | null) => void
 }): JSX.Element | null {
-  if (!source) return null
-  const meta = SOURCE_BADGE[source]
+  // Derive the source CATEGORY from the citation kind when we have a
+  // citation — that's truer than the edge's overall `source` field which
+  // is just the model's "dominant" pick. Multi-cite means each pill can
+  // be a different category (e.g., 10-K + Bloomberg = filings + news,
+  // each with its own color).
+  const derivedSource: CompanyValueChainEdgeSource | null = citation
+    ? citation.kind === 'filing'
+      ? 'filings'
+      : citation.kind === 'article'
+        ? 'news'
+        : citation.kind === 'analyst'
+          ? 'analyst'
+          : citation.kind === 'profile'
+            ? 'profile'
+            : 'model'
+    : (source ?? null)
+  if (!derivedSource) return null
+  const meta = SOURCE_BADGE[derivedSource]
   if (!meta) return null
 
   let label = meta.label
@@ -594,19 +614,32 @@ export function TransactionCluster({
                           {item.note}
                         </div>
                       )}
-                      {/* Citation pill on its own row below the note so it
-                          stays readable even with long wrapping notes, and
-                          renders even when there's no note (citation alone
-                          is meaningful provenance). */}
-                      {item.source && (
-                        <div className="mt-1">
-                          <SourceBadge
-                            source={item.source}
-                            citation={item.citation}
-                            onOpen={onOpenCitation}
-                          />
-                        </div>
-                      )}
+                      {/* Citation pills — multi-citation when the model
+                          cited more than one document. Stacked vertically
+                          so each is independently scannable + clickable.
+                          Falls back to the single legacy `citation` field
+                          for chains generated before multi-cite shipped. */}
+                      {(() => {
+                        const cites: CompanyValueChainEdgeCitation[] =
+                          item.citations && item.citations.length > 0
+                            ? item.citations
+                            : item.citation
+                              ? [item.citation]
+                              : []
+                        if (cites.length === 0) return null
+                        return (
+                          <div className="mt-1 flex flex-col gap-1">
+                            {cites.map((c, i) => (
+                              <SourceBadge
+                                key={i}
+                                source={item.source}
+                                citation={c}
+                                onOpen={onOpenCitation}
+                              />
+                            ))}
+                          </div>
+                        )
+                      })()}
                     </div>
                   </li>
                 )

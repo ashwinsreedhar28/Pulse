@@ -3,6 +3,8 @@ import type {
   AnalystEstimates,
   ChainCorrection,
   CompanyValueChain,
+  CompanyValueChainEdgeCitation,
+  CompanyValueChainEdgeSource,
   EarningsBadge,
   FinancialsSnapshot,
   GraphEdgeOverride,
@@ -57,6 +59,13 @@ interface ValueChainEdge {
   from: string
   to: string
   note?: string
+  // Multi-cite array forwarded from graph_edge_overrides. Empty for static
+  // CHAIN.edges (no citations attached) and for legacy override rows that
+  // were absorbed pre-multi-cite.
+  citations?: CompanyValueChainEdgeCitation[]
+  // Edge-level source category (filings / news / analyst / profile / model).
+  // Used by the focus panel's pill-tone fallback when a citation is absent.
+  source?: CompanyValueChainEdgeSource | null
 }
 interface ValueChainGraph {
   sectors: ValueChainSector[]
@@ -707,17 +716,43 @@ export function ValueChain({
     // duplicates don't render the same counterparty twice.
     const out: ValueChainEdge[] = [...CHAIN.edges]
     for (const o of edgeOverrides) {
+      // Pull citations from override; fall back to legacy single-cite shape.
+      const cites: CompanyValueChainEdgeCitation[] =
+        o.citations && o.citations.length > 0
+          ? o.citations
+          : o.citation
+            ? [o.citation]
+            : []
+      // Derive a coarse source category for the pill-tone fallback. The
+      // override's `source` field is a comma-separated provenance list
+      // ("chain_gen_AAPL,sec_10k_concentration") — pick the most specific
+      // hint, with chain-cite kinds preferred when citations exist.
+      const inferredSource: CompanyValueChainEdgeSource | null = cites[0]
+        ? cites[0].kind === 'filing'
+          ? 'filings'
+          : cites[0].kind === 'article'
+            ? 'news'
+            : cites[0].kind === 'analyst'
+              ? 'analyst'
+              : cites[0].kind === 'profile'
+                ? 'profile'
+                : 'model'
+        : null
       if (o.relationship === 'supplier' || o.relationship === 'partner') {
         out.push({
           from: o.fromSymbol.toUpperCase(),
           to: o.toSymbol.toUpperCase(),
-          note: o.note ?? undefined
+          note: o.note ?? undefined,
+          citations: cites,
+          source: inferredSource
         })
       } else if (o.relationship === 'customer') {
         out.push({
           from: o.toSymbol.toUpperCase(),
           to: o.fromSymbol.toUpperCase(),
-          note: o.note ?? undefined
+          note: o.note ?? undefined,
+          citations: cites,
+          source: inferredSource
         })
       }
     }
@@ -1085,7 +1120,12 @@ export function ValueChain({
   // Reshape the focus panel's counterparties into the Counterparty structure
   // used by TransactionCluster so the panel body reads identically to the
   // stock-detail page's value-chain card. Stage sort lives inside the cluster.
-  const buildCounterparty = (sym: string, note: string | null): Counterparty => {
+  const buildCounterparty = (
+    sym: string,
+    note: string | null,
+    citations?: CompanyValueChainEdgeCitation[],
+    source?: CompanyValueChainEdgeSource | null
+  ): Counterparty => {
     const n = nodeBySymbol.get(sym)
     const stage = n?.stage ?? ''
     // Cross-sector badge: show the counterparty's top-level sector name
@@ -1113,16 +1153,24 @@ export function ValueChain({
       stageLabel: stage ? stageLabelById.get(stage) ?? stage : '—',
       companyName: tickerBySymbol.get(sym.toUpperCase())?.companyName ?? n?.name ?? sym,
       note,
-      crossSectorLabel
+      crossSectorLabel,
+      citations: citations && citations.length > 0 ? citations : undefined,
+      source: source ?? null
     }
   }
   const customerItems = useMemo(
-    () => focusEdgesOut.map((e) => buildCounterparty(e.to, e.note ?? null)),
+    () =>
+      focusEdgesOut.map((e) =>
+        buildCounterparty(e.to, e.note ?? null, e.citations, e.source ?? null)
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [focusEdgesOut, nodeBySymbol, stageLabelById, tickerBySymbol]
   )
   const supplierItems = useMemo(
-    () => focusEdgesIn.map((e) => buildCounterparty(e.from, e.note ?? null)),
+    () =>
+      focusEdgesIn.map((e) =>
+        buildCounterparty(e.from, e.note ?? null, e.citations, e.source ?? null)
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [focusEdgesIn, nodeBySymbol, stageLabelById, tickerBySymbol]
   )
@@ -1157,7 +1205,12 @@ export function ValueChain({
       })
     }
     if (unverifiedSymbols.size === 0) return empty
-    const make = (symbol: string, note: string | null): Counterparty => {
+    const make = (
+      symbol: string,
+      note: string | null,
+      citations: CompanyValueChainEdgeCitation[] | undefined,
+      source: CompanyValueChainEdgeSource | null
+    ): Counterparty => {
       const meta = unverifiedSymbols.get(symbol)
       const stage = meta?.stage ?? ''
       return {
@@ -1166,16 +1219,24 @@ export function ValueChain({
         stageLabel: stage ? stageLabelById.get(stage) ?? stage : '—',
         companyName: meta?.name ?? symbol,
         note,
-        unverified: true
+        unverified: true,
+        citations: citations && citations.length > 0 ? citations : undefined,
+        source
       }
     }
     const out = { suppliers: [] as Counterparty[], customers: [] as Counterparty[], competitors: [] as Counterparty[] }
     const seen = new Set<string>()
-    const push = (bucket: keyof typeof out, sym: string, note: string | null): void => {
+    const push = (
+      bucket: keyof typeof out,
+      sym: string,
+      note: string | null,
+      citations: CompanyValueChainEdgeCitation[] | undefined,
+      source: CompanyValueChainEdgeSource | null
+    ): void => {
       const k = `${bucket}:${sym}`
       if (seen.has(k)) return
       seen.add(k)
-      out[bucket].push(make(sym, note))
+      out[bucket].push(make(sym, note, citations, source))
     }
     for (const e of focusChain.edges) {
       const from = e.from.toUpperCase()
@@ -1186,15 +1247,25 @@ export function ValueChain({
       const counter = from === focus ? to : from
       if (!unverifiedSymbols.has(counter)) continue
       const rel = e.relationship
+      // Forward the per-ticker chain's multi-cite array straight through.
+      // Falls back to the legacy single-cite shape for chains generated
+      // before multi-cite shipped.
+      const cites: CompanyValueChainEdgeCitation[] | undefined =
+        e.citations && e.citations.length > 0
+          ? e.citations
+          : e.citation
+            ? [e.citation]
+            : undefined
+      const src: CompanyValueChainEdgeSource | null = e.source ?? null
       if (rel === 'competitor') {
-        push('competitors', counter, e.note ?? null)
+        push('competitors', counter, e.note ?? null, cites, src)
         continue
       }
       if (rel === 'partner') {
         // Symmetric: fold into customers when focus is `from`, suppliers
         // otherwise — matches UnifiedValueChainCard's convention so the
         // two surfaces agree on where partners land.
-        push(from === focus ? 'customers' : 'suppliers', counter, e.note ?? null)
+        push(from === focus ? 'customers' : 'suppliers', counter, e.note ?? null, cites, src)
         continue
       }
       // supplier/customer: translate to focus perspective.
@@ -1202,12 +1273,12 @@ export function ValueChain({
       // counter is buying from focus → customer. If focus is `to`,
       // counter supplies focus → supplier.
       if (rel === 'supplier') {
-        push(from === focus ? 'customers' : 'suppliers', counter, e.note ?? null)
+        push(from === focus ? 'customers' : 'suppliers', counter, e.note ?? null, cites, src)
       } else if (rel === 'customer') {
         // rel==='customer' means `from` buys from `to`. If focus is `from`,
         // counter supplies focus. If focus is `to`, counter is buying from
         // focus → customer.
-        push(from === focus ? 'suppliers' : 'customers', counter, e.note ?? null)
+        push(from === focus ? 'suppliers' : 'customers', counter, e.note ?? null, cites, src)
       }
       void other
     }

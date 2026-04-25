@@ -488,10 +488,14 @@ export interface GraphEdgeOverride {
   // this edge naturally lives in. Nullable on pre-v35 rows until the
   // bootstrap service backfills.
   sectorId?: string | null
-  // Per-edge citation lifted from the per-ticker chain that the absorber
-  // pulled this edge from. Renders as a clickable badge in the diagram
-  // tooltip — same UX as the per-ticker chain card. Null on legacy rows
+  // Per-edge citations array. Multi-cite chains can carry several documents
+  // per edge (10-K + news article + analyst action); the renderer stacks
+  // them so the user can pick which source to open. Empty on legacy rows
   // and on hand-curated overrides.
+  citations?: CompanyValueChainEdgeCitation[]
+  // DEPRECATED: legacy single-citation field kept so any caller using the
+  // pre-multi-cite shape still compiles. Hydrate populates this with the
+  // first entry of citations.
   citation?: CompanyValueChainEdgeCitation | null
 }
 
@@ -593,6 +597,13 @@ export interface CompanyValueChainEdge {
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
   source: CompanyValueChainEdgeSource | null
+  // Multi-citation array — each entry is a clickable source pill. Old
+  // chains generated before multi-cite shipped used a single `citation`
+  // field; main-process hydrate normalizes both shapes into this array
+  // before the renderer ever sees them.
+  citations?: CompanyValueChainEdgeCitation[]
+  // DEPRECATED: legacy single-citation (kept for type compat with
+  // pre-multi-cite chains; never set on new writes).
   citation?: CompanyValueChainEdgeCitation | null
 }
 

@@ -233,7 +233,8 @@ export function applyCorrectionsToChain(chain: CompanyValueChain): CompanyValueC
             to: focus,
             relationship: 'supplier',
             note: e.note,
-            source: e.source ?? null
+            source: e.source ?? null,
+            citations: e.citations
           }
         }
         if (target === 'customer') {
@@ -244,7 +245,8 @@ export function applyCorrectionsToChain(chain: CompanyValueChain): CompanyValueC
             to: counterparty as string,
             relationship: 'supplier',
             note: e.note,
-            source: e.source ?? null
+            source: e.source ?? null,
+            citations: e.citations
           }
         }
         // competitor/partner are symmetric; keep the original (from, to)

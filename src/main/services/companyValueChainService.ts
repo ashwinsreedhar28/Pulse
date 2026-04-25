@@ -435,14 +435,17 @@ type ChainEdge = {
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
   source: 'filings' | 'news' | 'profile' | 'model' | null
-  // Stable id of the supplied context item the model cited as its source.
-  // Resolved into a structured CompanyValueChainEdgeCitation by
-  // attachCitations after canonicalizeEdges runs. Null when the model
-  // didn't cite anything (typically when source='model').
-  sourceRef?: string | null
+  // Array of refs the model cited as supporting this edge. attachCitations
+  // resolves each to a CompanyValueChainEdgeCitation; the renderer stacks
+  // them as multiple clickable pills under the edge note. Null / empty
+  // means the model didn't cite anything (typically source='model').
+  // Accepts null too so GeneratedValueChainEdge (which carries the same
+  // optional-or-null shape from the parser) flows through without a
+  // narrowing copy.
+  sourceRefs?: string[] | null
   // Free-text training-source attribution emitted when source='model'.
-  // Used by attachCitations to populate citation.attribution so the user
-  // sees a real source name instead of the generic "Model" label.
+  // Used by attachCitations to pattern-resolve into a real citation;
+  // strict mode drops edges where this can't be resolved.
   modelSource?: string | null
 }
 
@@ -625,6 +628,90 @@ function patternResolveModelSource(
   return null
 }
 
+// Resolve a single ref string into a citation. Returns null when the ref
+// doesn't match anything we supplied (caller decides whether to drop or
+// fall through to pattern-resolution).
+function resolveRef(
+  ref: string,
+  filingsByRef: Map<string, FilingCitationData>,
+  articlesByRef: Map<string, ArticleCitationData>,
+  analystByRef: Map<string, AnalystCitationData>
+): import('../database/companyValueChains').CompanyValueChainEdgeCitation | null {
+  const upper = ref.toUpperCase()
+  if (upper.startsWith('F') && filingsByRef.has(upper)) {
+    const f = filingsByRef.get(upper)!
+    return {
+      kind: 'filing',
+      accession: f.accession,
+      cik: f.cik,
+      formType: f.formType,
+      filedAt: f.filedAt,
+      url: f.url
+    }
+  }
+  if (upper === 'P') return { kind: 'profile' }
+  if (upper.startsWith('N') && articlesByRef.has(upper)) {
+    const a = articlesByRef.get(upper)!
+    return {
+      kind: 'article',
+      articleId: a.articleId,
+      title: a.title,
+      url: a.url,
+      publishedAt: a.publishedAt,
+      feedTitle: a.feedTitle
+    }
+  }
+  if (upper.startsWith('A') && analystByRef.has(upper)) {
+    const a = analystByRef.get(upper)!
+    return {
+      kind: 'analyst',
+      firm: a.firm,
+      url: a.url,
+      date: a.date
+    }
+  }
+  return null
+}
+
+// Auto-augmentation: scan the supplied article context for any pieces
+// that mention BOTH endpoints of the edge (or the focus + the
+// counterparty). Add those as additional supporting citations beyond
+// what the model picked. Catches the common case where the model
+// grounded an edge in the 10-K and forgot that Bloomberg also covered
+// it. Capped at 2 extra cites per edge to keep the pill stack readable.
+function autoAugmentArticleCitations(
+  edge: ChainEdge,
+  articlesByRef: Map<string, ArticleCitationData>,
+  alreadyCited: Set<string>
+): import('../database/companyValueChains').CompanyValueChainEdgeCitation[] {
+  const fromUpper = edge.from.toUpperCase()
+  const toUpper = edge.to.toUpperCase()
+  const extras: import('../database/companyValueChains').CompanyValueChainEdgeCitation[] = []
+  for (const [refId, a] of articlesByRef) {
+    if (extras.length >= 2) break
+    if (alreadyCited.has(refId)) continue // model already cited this
+    const articleIdKey = `__articleId:${a.articleId}`
+    if (alreadyCited.has(articleIdKey)) continue
+    const haystack = `${a.title} ${a.feedTitle ?? ''}`.toUpperCase()
+    // Article mentions both endpoints by symbol — strong signal it
+    // covers this exact relationship. We don't try to match by company
+    // name (too many false positives without a name resolver here).
+    if (haystack.includes(fromUpper) && haystack.includes(toUpper)) {
+      extras.push({
+        kind: 'article',
+        articleId: a.articleId,
+        title: a.title,
+        url: a.url,
+        publishedAt: a.publishedAt,
+        feedTitle: a.feedTitle
+      })
+      alreadyCited.add(refId)
+      alreadyCited.add(articleIdKey)
+    }
+  }
+  return extras
+}
+
 function attachCitations(
   edges: ChainEdge[],
   filingsByRef: Map<string, FilingCitationData>,
@@ -634,54 +721,42 @@ function attachCitations(
 ): import('../database/companyValueChains').CompanyValueChainEdge[] {
   const out: import('../database/companyValueChains').CompanyValueChainEdge[] = []
   let dropped = 0
+  let augmented = 0
   for (const edge of edges) {
-    let citation: import('../database/companyValueChains').CompanyValueChainEdgeCitation | null = null
-    const ref = (edge.sourceRef ?? '').toUpperCase()
-    // Direct ref-supplied citations (the primary path — most edges land here).
-    if (ref.startsWith('F') && filingsByRef.has(ref)) {
-      const f = filingsByRef.get(ref)!
-      citation = {
-        kind: 'filing',
-        accession: f.accession,
-        cik: f.cik,
-        formType: f.formType,
-        filedAt: f.filedAt,
-        url: f.url
+    const citations: import('../database/companyValueChains').CompanyValueChainEdgeCitation[] = []
+    const seenRefs = new Set<string>()
+    // Resolve every ref the model emitted into a citation. Skip refs
+    // that don't match anything we supplied (NEVER fabricate).
+    for (const rawRef of edge.sourceRefs ?? []) {
+      const upper = rawRef.toUpperCase()
+      if (seenRefs.has(upper)) continue
+      const cite = resolveRef(upper, filingsByRef, articlesByRef, analystByRef)
+      if (cite) {
+        citations.push(cite)
+        seenRefs.add(upper)
+        // Track article-id dedup separately since auto-augment uses it.
+        if (cite.kind === 'article') {
+          seenRefs.add(`__articleId:${cite.articleId}`)
+        }
       }
-    } else if (ref === 'P') {
-      citation = { kind: 'profile' }
-    } else if (ref.startsWith('N') && articlesByRef.has(ref)) {
-      const a = articlesByRef.get(ref)!
-      citation = {
-        kind: 'article',
-        articleId: a.articleId,
-        title: a.title,
-        url: a.url,
-        publishedAt: a.publishedAt,
-        feedTitle: a.feedTitle
-      }
-    } else if (ref.startsWith('A') && analystByRef.has(ref)) {
-      const a = analystByRef.get(ref)!
-      citation = {
-        kind: 'analyst',
-        firm: a.firm,
-        url: a.url,
-        date: a.date
-      }
-    } else if (edge.source === 'model' && edge.modelSource) {
-      // Phase B: try to resolve the modelSource string to a real
-      // citation via pattern matching against the local SEC cache,
-      // analyst firms, and news feeds. If resolution succeeds, the
-      // edge is upgraded to a clickable citation; if it fails, citation
-      // stays null and the edge is dropped below in strict mode.
-      citation = patternResolveModelSource(edge.modelSource, focusSymbol)
     }
-
-    // Strict-citation mode: edges with no resolvable link are dropped.
-    // The model is instructed to omit such edges in the prompt; this
-    // catches anything that slips through (vague modelSource, ref that
-    // doesn't match anything we supplied, ref-less model attributions).
-    if (!citation) {
+    // If nothing resolved AND source='model' with a free-text attribution,
+    // try pattern-matching as a last resort (10-K patterns, named analyst
+    // firms, publisher names → local article DB).
+    if (citations.length === 0 && edge.source === 'model' && edge.modelSource) {
+      const patternCite = patternResolveModelSource(edge.modelSource, focusSymbol)
+      if (patternCite) citations.push(patternCite)
+    }
+    // Auto-augment: scan supplied articles for ones mentioning BOTH
+    // endpoints. Adds up to 2 extra citations beyond what the model
+    // chose — catches "the 10-K AND Bloomberg covered this" for free.
+    const extras = autoAugmentArticleCitations(edge, articlesByRef, seenRefs)
+    if (extras.length > 0) {
+      citations.push(...extras)
+      augmented += extras.length
+    }
+    // Strict mode: drop edges with no resolvable citation.
+    if (citations.length === 0) {
       dropped += 1
       continue
     }
@@ -691,12 +766,14 @@ function attachCitations(
       relationship: edge.relationship,
       note: edge.note,
       source: edge.source,
-      citation
+      citations
     })
   }
-  if (dropped > 0) {
+  if (dropped > 0 || augmented > 0) {
     console.log(
-      `[companyChain] attachCitations: dropped ${dropped} edge(s) without resolvable citation (strict mode)`
+      `[companyChain] attachCitations: ${out.length} kept, ` +
+        `${dropped} dropped (no resolvable cite), ` +
+        `+${augmented} auto-augmented from article cross-references`
     )
   }
   return out
@@ -798,7 +875,7 @@ function canonicalizeEdges(
       relationship: edge.relationship,
       note: edge.note,
       source: edge.source,
-      sourceRef: edge.sourceRef ?? null,
+      sourceRefs: edge.sourceRefs ?? [],
       modelSource: edge.modelSource ?? null
     })
   }

@@ -91,9 +91,21 @@ export interface CompanyValueChainEdge {
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
   source: CompanyValueChainEdgeSource | null
-  // Specific document pointer. Present on edges from chains regenerated
-  // after the citation feature shipped; null on legacy edges and on
-  // 'model'-grounded edges where there's no document to point at.
+  // Multi-citation array. Each entry is one document the user can click
+  // through to. Multiple citations on a single edge mean cross-referenced
+  // claims — "this is in the 10-K AND Bloomberg covered it" is a stronger
+  // signal than just the 10-K alone. Renderer stacks these as multiple
+  // pills under the edge note.
+  //
+  // Backward compat: chains generated before multi-cite shipped used a
+  // single `citation` field. Read paths normalize old shape into
+  // citations: [oldCitation] at hydrate time so the renderer always sees
+  // an array.
+  citations?: CompanyValueChainEdgeCitation[]
+  // DEPRECATED: legacy single-citation field on older chains. Kept on
+  // the type for read-path normalization; new writes always use
+  // citations[]. Will be removed in a future cleanup once old chains
+  // have aged out via regeneration.
   citation?: CompanyValueChainEdgeCitation | null
 }
 
@@ -127,6 +139,17 @@ function hydrate(row: RawRow): CompanyValueChainRow {
   if (row.graphJson) {
     try {
       graph = JSON.parse(row.graphJson) as CompanyValueChain
+      // Backward-compat normalization: old chains stored a single
+      // `citation` per edge; new chains use `citations: []`. Lift any
+      // legacy single-citation into the array form so the renderer never
+      // has to handle two shapes.
+      if (graph?.edges) {
+        for (const e of graph.edges) {
+          if (!e.citations || e.citations.length === 0) {
+            e.citations = e.citation ? [e.citation] : []
+          }
+        }
+      }
     } catch {
       graph = null
     }

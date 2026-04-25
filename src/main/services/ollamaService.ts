@@ -1179,12 +1179,12 @@ export interface GeneratedValueChainEdge {
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
   source: GeneratedValueChainEdgeSource | null
-  // Stable id of the supplied context item the model cited as its source.
-  // 'F' for the filing, 'P' for the profile, 'N1'/'N2'/... for articles.
-  // Resolved to a CompanyValueChainEdgeCitation in companyValueChainService
-  // before the chain is persisted. Null when the model emitted no ref
-  // (typically because source='model').
-  sourceRef?: string | null
+  // Array of refs the model emitted as supporting this edge. Each gets
+  // resolved into a CompanyValueChainEdgeCitation by attachCitations.
+  // Null/empty when the model emitted no refs (typically source='model').
+  // Earlier prompts emitted a single 'sourceRef' string — the parser
+  // accepts either shape and normalizes into this array.
+  sourceRefs?: string[] | null
   // Free-text source attribution emitted by the model when source='model'.
   // E.g. "Apple FY2023 10-K", "Bloomberg coverage 2022-2024". Surfaced as
   // the citation badge label in the renderer instead of the generic "Model"
@@ -1404,7 +1404,7 @@ export async function generateCompanyValueChain(input: {
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
     `      "note": "one short sentence, <120 chars",\n` +
     `      "source": "filings" | "news" | "profile" | "analyst" | "model",\n` +
-    `      "sourceRef": "F" | "F2" | "F3" | "P" | "N1"-"N15" | "A1"-"A5" (when source != "model"),\n` +
+    `      "sourceRefs": ["F", "N3"]   ← ARRAY of supporting refs,\n` +
     `      "modelSource": "concrete attribution" (REQUIRED when source = "model")\n` +
     `    }\n` +
     `  ]\n` +
@@ -1477,8 +1477,13 @@ export async function generateCompanyValueChain(input: {
     `- "profile" — from the company profile text (P).\n` +
     `- "model" — from training knowledge. STRICT RULES BELOW.\n` +
     `\n` +
-    `Edge "sourceRef" field — point to the SPECIFIC ref tag from above. ` +
-    `NEVER fabricate. If no matching ref exists, downgrade source to "model".\n` +
+    `Edge "sourceRefs" field — ARRAY of refs supporting this edge. ` +
+    `Multiple refs encouraged for cross-referenced claims:\n` +
+    `- ["F"] — only the 10-K\n` +
+    `- ["F", "N3"] — 10-K plus article N3\n` +
+    `- ["N1", "N5"] — two articles\n` +
+    `- ["F2", "A1"] — 8-K plus analyst event\n` +
+    `Only use refs that appeared in [ref X] tags. NEVER fabricate.\n` +
     `\n` +
     `Edge "modelSource" — REQUIRED when source="model". Pulse drops edges ` +
     `whose modelSource doesn't match a resolvable pattern, so use:\n` +
@@ -1695,7 +1700,8 @@ export async function generateCompanyValueChain(input: {
                 relationship?: unknown
                 note?: unknown
                 source?: unknown
-                sourceRef?: unknown
+                sourceRef?: unknown // legacy single-ref shape
+                sourceRefs?: unknown // current multi-ref shape
                 modelSource?: unknown
               }
           )
@@ -1712,10 +1718,15 @@ export async function generateCompanyValueChain(input: {
             const source = validSources.includes(sourceRaw)
               ? (sourceRaw as GeneratedValueChainEdgeSource)
               : null
-            const sourceRef =
-              typeof e.sourceRef === 'string' && (e.sourceRef as string).trim()
-                ? (e.sourceRef as string).trim()
-                : null
+            const sourceRefs: string[] = []
+            if (Array.isArray(e.sourceRefs)) {
+              for (const r of e.sourceRefs) {
+                if (typeof r === 'string' && r.trim()) sourceRefs.push(r.trim())
+                if (sourceRefs.length >= 6) break
+              }
+            } else if (typeof e.sourceRef === 'string' && (e.sourceRef as string).trim()) {
+              sourceRefs.push((e.sourceRef as string).trim())
+            }
             const modelSource =
               typeof e.modelSource === 'string' && (e.modelSource as string).trim()
                 ? (e.modelSource as string).trim().slice(0, 80)
@@ -1726,7 +1737,7 @@ export async function generateCompanyValueChain(input: {
               relationship: e.relationship as GeneratedValueChainEdge['relationship'],
               note: typeof e.note === 'string' ? (e.note as string).trim().slice(0, 180) : null,
               source,
-              sourceRef,
+              sourceRefs,
               modelSource
             }
           })

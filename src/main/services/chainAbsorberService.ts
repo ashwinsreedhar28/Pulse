@@ -235,12 +235,17 @@ export function absorbGeneratedChain(
       source,
       acceptedAt: now,
       sectorId,
-      // Forward the per-edge citation so the diagram tooltip + unified-
-      // graph chips can show clickable provenance (10-K URL, article URL,
-      // or model attribution string). Citations carry through ConsensusMerge
-      // via COALESCE — second-source merges keep the first citation rather
-      // than overwrite.
-      citation: edge.citation ?? null
+      // Forward the entire multi-cite array. graph_edge_overrides.citationJson
+      // now serializes the full array so the diagram tooltip + unified-graph
+      // focus panel can stack pills the same way the per-ticker chain card
+      // does. Falls back to the legacy single citation field for chains
+      // generated before multi-cite shipped.
+      citations:
+        edge.citations && edge.citations.length > 0
+          ? edge.citations
+          : edge.citation
+            ? [edge.citation]
+            : []
     })
     edgesAdded += 1
   }

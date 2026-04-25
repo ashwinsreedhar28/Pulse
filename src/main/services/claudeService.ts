@@ -419,8 +419,8 @@ export async function generateCompanyValueChain(input: {
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
     `      "note": "one sentence, <120 chars, grounded in facts",\n` +
     `      "source": "filings" | "news" | "profile" | "analyst" | "model",\n` +
-    `      "sourceRef": "F" | "F2" | "F3" | "P" | "N1"-"N15" | "A1"-"A5" (when source != "model"),\n` +
-    `      "modelSource": "concrete attribution string" (REQUIRED when source = "model")\n` +
+    `      "sourceRefs": ["F", "N3"]   ← ARRAY of refs supporting this edge,\n` +
+    `      "modelSource": "concrete attribution" (REQUIRED when source = "model")\n` +
     `    }\n` +
     `  ]\n` +
     `}\n\n` +
@@ -500,10 +500,22 @@ export async function generateCompanyValueChain(input: {
     `- "profile" — from the company profile text above (sourceRef "P").\n` +
     `- "model" — from your training knowledge. SEE STRICT RULES BELOW.\n` +
     `\n` +
-    `Edge "sourceRef" field — point to the SPECIFIC document. ONLY use ` +
-    `refs that appeared in [ref X] tags above. NEVER fabricate a refId. ` +
+    `Edge "sourceRefs" field — ARRAY of refs supporting this edge. ` +
+    `MULTIPLE REFS ARE STRONGLY ENCOURAGED when an edge is supported by ` +
+    `more than one document — cross-referenced claims are more trustworthy ` +
+    `than single-source ones. Pulse renders one clickable pill per ref, ` +
+    `stacked under the edge note. Examples:\n` +
+    `- ["F"] — supported only by the 10-K\n` +
+    `- ["F", "N3"] — supported by both the 10-K and article N3\n` +
+    `- ["N1", "N5", "N9"] — three articles all describe this relationship\n` +
+    `- ["F2", "A1"] — 8-K (e.g. earnings call) plus an analyst rating\n` +
+    `\n` +
+    `ONLY use refs that appeared in [ref X] tags above. NEVER fabricate. ` +
     `If you set source="filings"/"news"/"profile"/"analyst" but no matching ` +
-    `ref exists, downgrade source to "model" and follow the strict rules below.\n` +
+    `ref exists, downgrade source to "model" and follow strict rules below.\n` +
+    `Set "source" to whichever ref category is dominant (the one most ` +
+    `responsible for the claim); the other refs in the array can be from ` +
+    `different categories — Pulse handles mixed-source rendering.\n` +
     `\n` +
     `Edge "modelSource" field + STRICT-CITATION MODE — this is critical:\n` +
     `When source="model" you have NOT been given a clickable document. ` +
@@ -649,7 +661,8 @@ export async function generateCompanyValueChain(input: {
         relationship?: unknown
         note?: unknown
         source?: unknown
-        sourceRef?: unknown
+        sourceRef?: unknown // legacy single-ref shape
+        sourceRefs?: unknown // current multi-ref shape
         modelSource?: unknown
       }
       const from = typeof row.from === 'string' ? row.from.trim().toUpperCase() : ''
@@ -690,10 +703,17 @@ export async function generateCompanyValueChain(input: {
         rawSource === 'model'
           ? rawSource
           : null
-      const sourceRef =
-        typeof row.sourceRef === 'string' && row.sourceRef.trim()
-          ? row.sourceRef.trim()
-          : null
+      // Accept either sourceRefs (array) or sourceRef (legacy single).
+      // Cap at 6 refs to keep the rendered pill stack sane.
+      const sourceRefs: string[] = []
+      if (Array.isArray(row.sourceRefs)) {
+        for (const r of row.sourceRefs) {
+          if (typeof r === 'string' && r.trim()) sourceRefs.push(r.trim())
+          if (sourceRefs.length >= 6) break
+        }
+      } else if (typeof row.sourceRef === 'string' && row.sourceRef.trim()) {
+        sourceRefs.push(row.sourceRef.trim())
+      }
       const modelSource =
         typeof row.modelSource === 'string' && row.modelSource.trim()
           ? row.modelSource.trim().slice(0, 80)
@@ -704,7 +724,7 @@ export async function generateCompanyValueChain(input: {
         relationship: rel,
         note: typeof row.note === 'string' ? row.note.trim().slice(0, 200) : null,
         source,
-        sourceRef,
+        sourceRefs,
         modelSource
       })
     }

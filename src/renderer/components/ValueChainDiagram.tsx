@@ -30,9 +30,13 @@ interface ChainEdge {
   // comma-joined consensus list) — drives which tone modifier the diagram
   // applies so 10-K-backed edges can render slightly more prominently.
   source?: string | null
-  // Per-edge citation lifted from the per-ticker chain that the absorber
-  // pulled this edge from. Surfaces in the hover/pinned tooltip as a
-  // clickable badge that opens the cited document in the in-app reader.
+  // Per-edge citations lifted from the per-ticker chain. Multi-cite chains
+  // can attach more than one document per edge (10-K + news article); the
+  // tooltip stacks them vertically. Empty array on static-JSON edges and
+  // on legacy override rows that were absorbed before multi-cite shipped.
+  citations?: import('../../preload').CompanyValueChainEdgeCitation[]
+  // DEPRECATED: legacy single-citation field. Kept while older callers
+  // still reference it; tooltip prefers `citations` when both are present.
   citation?: import('../../preload').CompanyValueChainEdgeCitation | null
 }
 interface ChainGraph {
@@ -148,9 +152,9 @@ interface LaidOutEdge {
   // Source chain ("news_cooccurrence,sec_10k_concentration" for multi-source
   // consensus edges). Null for static edges.
   source: string | null
-  // Per-edge citation (10-K filing, news article, model attribution).
-  // Surfaced in the hover/pinned tooltip as a clickable badge.
-  citation: import('../../preload').CompanyValueChainEdgeCitation | null
+  // Per-edge citations array — multi-cite chains stack pills in the
+  // tooltip. Empty for static graph edges and pre-multi-cite override rows.
+  citations: import('../../preload').CompanyValueChainEdgeCitation[]
 }
 
 // Pinned tooltips are anchored in SVG coordinates so they move with pan/zoom.
@@ -163,9 +167,9 @@ interface PinnedTooltip {
   svgX: number
   svgY: number
   tone: EdgeTone
-  // Citation pulled from the source edge so the user can click through to
-  // the actual SEC filing / news article from the pinned tooltip too.
-  citation: import('../../preload').CompanyValueChainEdgeCitation | null
+  // Citations pulled from the source edge so the user can click through to
+  // any of the cited SEC filings / news articles from the pinned tooltip.
+  citations: import('../../preload').CompanyValueChainEdgeCitation[]
 }
 
 export function ValueChainDiagram({
@@ -254,6 +258,13 @@ export function ValueChainDiagram({
     // write time; the swap branch below catches any legacy pre-normalization
     // rows still in the override table.
     for (const o of edgeOverrides) {
+      // Multi-cite array preferred; legacy single-cite folded in for
+      // chains absorbed before the array shape landed.
+      const cites = o.citations && o.citations.length > 0
+        ? o.citations
+        : o.citation
+          ? [o.citation]
+          : []
       if (o.relationship === 'supplier' || o.relationship === 'partner') {
         const key = `${o.fromSymbol.toUpperCase()}→${o.toSymbol.toUpperCase()}`
         if (seen.has(key)) continue
@@ -264,7 +275,7 @@ export function ValueChainDiagram({
           note: o.note ?? undefined,
           weight: o.weight,
           source: o.source,
-          citation: o.citation ?? null
+          citations: cites
         })
       } else if (o.relationship === 'customer') {
         const key = `${o.toSymbol.toUpperCase()}→${o.fromSymbol.toUpperCase()}`
@@ -276,7 +287,7 @@ export function ValueChainDiagram({
           note: o.note ?? undefined,
           weight: o.weight,
           source: o.source,
-          citation: o.citation ?? null
+          citations: cites
         })
       }
     }
@@ -287,7 +298,7 @@ export function ValueChainDiagram({
       const key = `${e.from}→${e.to}`
       if (seen.has(key)) continue
       seen.add(key)
-      out.push({ ...e, weight: null, source: null })
+      out.push({ ...e, weight: null, source: null, citations: [] })
     }
     return out
   }, [edgeOverrides])
@@ -413,7 +424,7 @@ export function ValueChainDiagram({
         notesByFocus: Map<string, string | null>
         weightByFocus: Map<string, number | null>
         sourceByFocus: Map<string, string | null>
-        citationByFocus: Map<string, EdgeCitation | null>
+        citationsByFocus: Map<string, EdgeCitation[]>
       }
     >()
     const customerUnion = new Map<
@@ -423,7 +434,7 @@ export function ValueChainDiagram({
         notesByFocus: Map<string, string | null>
         weightByFocus: Map<string, number | null>
         sourceByFocus: Map<string, string | null>
-        citationByFocus: Map<string, EdgeCitation | null>
+        citationsByFocus: Map<string, EdgeCitation[]>
       }
     >()
     // First-column-seen wins — a node that supplies one focus and buys from
@@ -436,19 +447,25 @@ export function ValueChainDiagram({
       fromSym: string
       toSym: string
       note: string | null
-      citation: EdgeCitation | null
+      citations: EdgeCitation[]
     }[] = []
 
     for (const e of mergedEdges) {
       const fromIsFocus = focusSet.has(e.from)
       const toIsFocus = focusSet.has(e.to)
       if (!fromIsFocus && !toIsFocus) continue
+      const edgeCites: EdgeCitation[] =
+        e.citations && e.citations.length > 0
+          ? e.citations
+          : e.citation
+            ? [e.citation]
+            : []
       if (fromIsFocus && toIsFocus) {
         focusToFocus.push({
           fromSym: e.from,
           toSym: e.to,
           note: e.note ?? null,
-          citation: e.citation ?? null
+          citations: edgeCites
         })
         continue
       }
@@ -472,14 +489,14 @@ export function ValueChainDiagram({
             notesByFocus: new Map(),
             weightByFocus: new Map(),
             sourceByFocus: new Map(),
-            citationByFocus: new Map()
+            citationsByFocus: new Map()
           }
           supplierUnion.set(otherSym, entry)
         }
         entry.notesByFocus.set(focusSym, e.note ?? null)
         entry.weightByFocus.set(focusSym, e.weight ?? null)
         entry.sourceByFocus.set(focusSym, e.source ?? null)
-        entry.citationByFocus.set(focusSym, e.citation ?? null)
+        entry.citationsByFocus.set(focusSym, edgeCites)
       } else {
         let entry = customerUnion.get(otherSym)
         if (!entry) {
@@ -488,14 +505,14 @@ export function ValueChainDiagram({
             notesByFocus: new Map(),
             weightByFocus: new Map(),
             sourceByFocus: new Map(),
-            citationByFocus: new Map()
+            citationsByFocus: new Map()
           }
           customerUnion.set(otherSym, entry)
         }
         entry.notesByFocus.set(focusSym, e.note ?? null)
         entry.weightByFocus.set(focusSym, e.weight ?? null)
         entry.sourceByFocus.set(focusSym, e.source ?? null)
-        entry.citationByFocus.set(focusSym, e.citation ?? null)
+        entry.citationsByFocus.set(focusSym, edgeCites)
       }
     }
 
@@ -622,7 +639,7 @@ export function ValueChainDiagram({
         note: string | null
         weight: number | null
         source: string | null
-        citation: EdgeCitation | null
+        citations: EdgeCitation[]
       }[] = []
       for (const entry of supplierUnion.values()) {
         if (entry.notesByFocus.has(focusSym)) {
@@ -633,7 +650,7 @@ export function ValueChainDiagram({
               note: entry.notesByFocus.get(focusSym) ?? null,
               weight: entry.weightByFocus.get(focusSym) ?? null,
               source: entry.sourceByFocus.get(focusSym) ?? null,
-              citation: entry.citationByFocus.get(focusSym) ?? null
+              citations: entry.citationsByFocus.get(focusSym) ?? []
             })
         }
       }
@@ -650,7 +667,7 @@ export function ValueChainDiagram({
           tone: 'supplier',
           weight: item.weight,
           source: item.source,
-          citation: item.citation
+          citations: item.citations
         })
       })
 
@@ -659,7 +676,7 @@ export function ValueChainDiagram({
         note: string | null
         weight: number | null
         source: string | null
-        citation: EdgeCitation | null
+        citations: EdgeCitation[]
       }[] = []
       for (const entry of customerUnion.values()) {
         if (entry.notesByFocus.has(focusSym)) {
@@ -670,7 +687,7 @@ export function ValueChainDiagram({
               note: entry.notesByFocus.get(focusSym) ?? null,
               weight: entry.weightByFocus.get(focusSym) ?? null,
               source: entry.sourceByFocus.get(focusSym) ?? null,
-              citation: entry.citationByFocus.get(focusSym) ?? null
+              citations: entry.citationsByFocus.get(focusSym) ?? []
             })
         }
       }
@@ -687,7 +704,7 @@ export function ValueChainDiagram({
           tone: 'customer',
           weight: item.weight,
           source: item.source,
-          citation: item.citation
+          citations: item.citations
         })
       })
     }
@@ -727,7 +744,7 @@ export function ValueChainDiagram({
         tone,
         weight: null,
         source: null,
-        citation: ff.citation
+        citations: ff.citations
       })
     }
 
@@ -776,7 +793,7 @@ export function ValueChainDiagram({
     svgX: number
     svgY: number
     tone: EdgeTone
-    citation: import('../../preload').CompanyValueChainEdgeCitation | null
+    citations: import('../../preload').CompanyValueChainEdgeCitation[]
   } | null>(null)
   const [pinned, setPinned] = useState<PinnedTooltip[]>([])
   const pinnedIdRef = useRef(0)
@@ -1019,7 +1036,7 @@ export function ValueChainDiagram({
         svgX: pt.x,
         svgY: pt.y,
         tone: edge.tone,
-        citation: edge.citation
+        citations: edge.citations
       }
     ])
   }
@@ -1227,7 +1244,7 @@ export function ValueChainDiagram({
                           svgX: pt.x,
                           svgY: pt.y,
                           tone: e.tone,
-                          citation: e.citation
+                          citations: e.citations
                         })
                     }
                   }}
@@ -1240,7 +1257,7 @@ export function ValueChainDiagram({
                           svgX: pt.x,
                           svgY: pt.y,
                           tone: e.tone,
-                          citation: e.citation
+                          citations: e.citations
                         })
                     }
                   }}
@@ -1300,9 +1317,11 @@ export function ValueChainDiagram({
                 }}
               >
                 <div>{hoverTip.note}</div>
-                {hoverTip.citation && (
-                  <div className="mt-1.5 text-[10px] opacity-80">
-                    <DiagramCitationLabel citation={hoverTip.citation} />
+                {hoverTip.citations.length > 0 && (
+                  <div className="mt-1.5 text-[10px] opacity-80 flex flex-col gap-0.5">
+                    {hoverTip.citations.map((c, i) => (
+                      <DiagramCitationLabel key={i} citation={c} />
+                    ))}
                   </div>
                 )}
               </div>
@@ -1330,9 +1349,11 @@ export function ValueChainDiagram({
               }}
             >
               <div>{p.note}</div>
-              {p.citation && (
-                <div className="mt-1.5">
-                  <DiagramCitationButton citation={p.citation} onOpen={onOpenURL} />
+              {p.citations.length > 0 && (
+                <div className="mt-1.5 flex flex-col gap-1">
+                  {p.citations.map((c, i) => (
+                    <DiagramCitationButton key={i} citation={c} onOpen={onOpenURL} />
+                  ))}
                 </div>
               )}
               <button

@@ -19,20 +19,35 @@ export interface GraphEdgeOverride {
   // sector at the time the edge was proposed). Nullable because rows
   // predating v35 may not have one until the bootstrap backfills.
   sectorId?: string | null
-  // Per-edge citation lifted from the per-ticker chain that the absorber
-  // pulled this edge from. Renders as a clickable badge in the diagram
-  // tooltip + counterparty chip — opens the cited 10-K / article in the
-  // in-app reader. Null on legacy rows and on edges not absorbed from a
-  // chain (e.g. hand-curated overrides). Schema is migration v41.
+  // Per-edge citations lifted from the per-ticker chain the absorber
+  // pulled this edge from. Multi-cite means each edge can carry several
+  // documents (10-K + 10-Q + a news article + an analyst action), and
+  // the renderer stacks them so the user can pick which source to open.
+  // Empty array on legacy rows and on edges not absorbed from a chain.
+  // Stored in the existing citationJson column as either a JSON array
+  // (new shape) or a JSON object (legacy single-cite shape) — hydrate
+  // normalizes both into the array form.
+  citations?: CompanyValueChainEdgeCitation[]
+  // DEPRECATED: legacy single-citation field. Read paths normalize the
+  // old citationJson object into citations: [oldCitation]; this remains
+  // only so existing callers building a GraphEdgeOverride manually with
+  // the old shape compile until they migrate.
   citation?: CompanyValueChainEdgeCitation | null
 }
 
 export function upsertEdgeOverride(input: GraphEdgeOverride): void {
-  // Citation persists as JSON. Null when the absorber didn't get one (legacy
-  // chains pre-citation-feature, or hand-curated overrides). Conflict path
-  // prefers the new citation only when present so a re-absorption with
-  // null citation doesn't blow away an earlier richer one.
-  const citationJson = input.citation ? JSON.stringify(input.citation) : null
+  // Citations persist as a JSON array in citationJson. Multi-cite chains
+  // produce more than one entry per edge (e.g. 10-K + a news article).
+  // Legacy callers passing a single `citation` field are folded into a
+  // singleton array so the on-disk shape converges. Empty array becomes
+  // null so the COALESCE in the conflict path leaves richer existing
+  // citations alone when a re-absorption arrives without any.
+  const merged = input.citations && input.citations.length > 0
+    ? input.citations
+    : input.citation
+      ? [input.citation]
+      : []
+  const citationJson = merged.length > 0 ? JSON.stringify(merged) : null
   getDb()
     .prepare(
       `INSERT INTO graph_edge_overrides
@@ -82,7 +97,7 @@ export function upsertEdgeOverrideWithConsensus(input: GraphEdgeOverride): {
   const existing = db
     .prepare<
       [string, string, string],
-      Omit<GraphEdgeOverride, 'citation'>
+      Omit<GraphEdgeOverride, 'citation' | 'citations'>
     >(
       `SELECT fromSymbol, toSymbol, relationship, note, weight, source, acceptedAt, sectorId
          FROM graph_edge_overrides
@@ -173,12 +188,20 @@ interface RawEdgeOverrideRow {
 }
 
 function hydrateEdgeOverride(row: RawEdgeOverrideRow): GraphEdgeOverride {
-  let citation: CompanyValueChainEdgeCitation | null = null
+  // citationJson can be either a JSON array (new multi-cite shape) or a
+  // single JSON object (legacy v41 shape). Normalize to an array so the
+  // renderer always sees one shape.
+  let citations: CompanyValueChainEdgeCitation[] = []
   if (row.citationJson) {
     try {
-      citation = JSON.parse(row.citationJson) as CompanyValueChainEdgeCitation
+      const parsed = JSON.parse(row.citationJson)
+      if (Array.isArray(parsed)) {
+        citations = parsed as CompanyValueChainEdgeCitation[]
+      } else if (parsed && typeof parsed === 'object') {
+        citations = [parsed as CompanyValueChainEdgeCitation]
+      }
     } catch {
-      citation = null
+      citations = []
     }
   }
   return {
@@ -190,7 +213,10 @@ function hydrateEdgeOverride(row: RawEdgeOverrideRow): GraphEdgeOverride {
     source: row.source,
     acceptedAt: row.acceptedAt,
     sectorId: row.sectorId,
-    citation
+    citations,
+    // Keep legacy `citation` populated to the first entry for any caller
+    // still reading the old field — drop once renderers all migrate.
+    citation: citations[0] ?? null
   }
 }
 

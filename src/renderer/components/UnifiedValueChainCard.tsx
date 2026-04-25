@@ -345,7 +345,7 @@ function prepareFromGenerated(
     sym: string,
     note: string | null,
     source: CompanyValueChainEdgeSource | null,
-    citation: import('../../preload').CompanyValueChainEdgeCitation | null
+    citations: import('../../preload').CompanyValueChainEdgeCitation[]
   ): Counterparty => {
     const n = nodeBySymbol.get(sym)
     const stage = n?.stage ?? ''
@@ -356,7 +356,7 @@ function prepareFromGenerated(
       companyName: nameBySymbol.get(sym) ?? n?.name ?? sym,
       note,
       source,
-      citation
+      citations
     }
   }
 
@@ -377,13 +377,20 @@ function prepareFromGenerated(
     const rel = e.relationship
     const note = e.note ?? null
     const source = e.source ?? null
-    const citation = e.citation ?? null
+    // Multi-cite array — falls back to legacy single citation when the
+    // chain predates multi-cite. Read-time hydrate normalizes most cases
+    // but defense-in-depth here.
+    const citations = e.citations && e.citations.length > 0
+      ? e.citations
+      : e.citation
+        ? [e.citation]
+        : []
     if (rel === 'competitor') {
       if (from === focus && !seenCompetitors.has(to)) {
-        competitors.push(toCounterparty(to, note, source, citation))
+        competitors.push(toCounterparty(to, note, source, citations))
         seenCompetitors.add(to)
       } else if (to === focus && !seenCompetitors.has(from)) {
-        competitors.push(toCounterparty(from, note, source, citation))
+        competitors.push(toCounterparty(from, note, source, citations))
         seenCompetitors.add(from)
       }
       continue
@@ -391,10 +398,10 @@ function prepareFromGenerated(
     if (rel === 'supplier') {
       // from supplies to.
       if (to === focus && !seenSuppliers.has(from)) {
-        suppliers.push(toCounterparty(from, note, source, citation))
+        suppliers.push(toCounterparty(from, note, source, citations))
         seenSuppliers.add(from)
       } else if (from === focus && !seenCustomers.has(to)) {
-        customers.push(toCounterparty(to, note, source, citation))
+        customers.push(toCounterparty(to, note, source, citations))
         seenCustomers.add(to)
       }
       continue
@@ -402,10 +409,10 @@ function prepareFromGenerated(
     if (rel === 'customer') {
       // from is customer of to (so to supplies from).
       if (from === focus && !seenSuppliers.has(to)) {
-        suppliers.push(toCounterparty(to, note, source, citation))
+        suppliers.push(toCounterparty(to, note, source, citations))
         seenSuppliers.add(to)
       } else if (to === focus && !seenCustomers.has(from)) {
-        customers.push(toCounterparty(from, note, source, citation))
+        customers.push(toCounterparty(from, note, source, citations))
         seenCustomers.add(from)
       }
       continue
@@ -414,10 +421,10 @@ function prepareFromGenerated(
       // Symmetric — fold into customers when focus is `from`, suppliers
       // otherwise. This matches ValueChain's logic.
       if (from === focus && !seenCustomers.has(to)) {
-        customers.push(toCounterparty(to, note, source, citation))
+        customers.push(toCounterparty(to, note, source, citations))
         seenCustomers.add(to)
       } else if (to === focus && !seenSuppliers.has(from)) {
-        suppliers.push(toCounterparty(from, note, source, citation))
+        suppliers.push(toCounterparty(from, note, source, citations))
         seenSuppliers.add(from)
       }
     }
