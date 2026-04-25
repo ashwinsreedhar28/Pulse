@@ -1009,21 +1009,22 @@ function SportsReel({ onOpenGame }: { onOpenGame: (g: Game) => void }): JSX.Elem
     | { kind: 'header'; league: SportsLeague; key: string }
     | { kind: 'game'; game: Game; key: string }
     | { kind: 'sep'; key: string }
-  // No inter-game dividers within a league — game cells are now natural-
-  // width (no min-w padding) and the wrapper gap-6 between every cell
-  // gives clear visual separation. The previous design (2px divider with
-  // gap-4 padding) ended up looking like the divider was "inside" a
-  // game when the previous cell had trailing space from a min-width.
+  // Inter-game dividers ARE rendered now that cells are natural-width
+  // (the original "divider in the middle" problem came from min-w
+  // padding that left trailing whitespace inside cells before the
+  // divider — gone now). Wider wrapper gap-5 keeps games legibly
+  // separated even with the divider's natural padding.
   const cells: Cell[] = []
   for (const g of groups) {
     cells.push({ kind: 'header', league: g.league, key: `h-${g.league.id}` })
-    g.games.forEach((game) => {
+    g.games.forEach((game, i) => {
+      if (i > 0) cells.push({ kind: 'sep', key: `s-${g.league.id}-${i}` })
       cells.push({ kind: 'game', game, key: `g-${game.id}` })
     })
   }
   const doubled = [...cells, ...cells.map((c) => ({ ...c, key: `${c.key}-x` }))]
   return (
-    <div className="flex items-center gap-6 whitespace-nowrap animate-ticker pl-8">
+    <div className="flex items-center gap-5 whitespace-nowrap animate-ticker pl-8">
       {doubled.map((cell) => {
         if (cell.kind === 'header') {
           return <LeagueHeaderChip key={cell.key} league={cell.league} />
