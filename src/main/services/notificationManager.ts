@@ -1,5 +1,19 @@
-import { BrowserWindow, Notification } from 'electron'
+// Article-specific notification helpers. Wraps the central
+// notificationService so existing call sites (feedPoller, etc.) stay drop-
+// in compatible while gaining cross-source dedup, the daily cap, and
+// click-routing through the central path.
+//
+// Two surfaces remain:
+//   - notifyUrgent(p): fires immediately for high-urgency articles
+//     (single-article notification; identityKey = `article:<id>` so
+//     re-promoting the same article is now a no-op)
+//   - trackMedium / startDigestTimer: buffered "N new stories" digest
+
 import { getPreferences } from '../database/preferences'
+import {
+  dispatchNotification,
+  setNotificationWindowOpener
+} from './notificationService'
 
 export interface UrgentPayload {
   articleId: number
@@ -17,51 +31,30 @@ export interface DigestItem {
 
 let digestQueue: DigestItem[] = []
 let digestInterval: NodeJS.Timeout | null = null
-let showMainWindowFn: (() => void) | null = null
 
+// Re-export the central setter so the existing main/index.ts wiring keeps
+// working. The notificationService is the source of truth for the show-
+// main-window callback now.
 export function setWindowOpener(fn: () => void): void {
-  showMainWindowFn = fn
-}
-
-function broadcastOpen(articleId: number): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('articles:open', articleId)
-  }
-}
-
-function isInQuietHours(): boolean {
-  try {
-    const prefs = getPreferences()
-    if (!prefs.quietHoursEnabled) return false
-    const now = new Date()
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    const start = prefs.quietHoursStart
-    const end = prefs.quietHoursEnd
-    if (start <= end) return hhmm >= start && hhmm < end
-    return hhmm >= start || hhmm < end
-  } catch {
-    return false
-  }
+  setNotificationWindowOpener(fn)
 }
 
 export function notifyUrgent(p: UrgentPayload): void {
-  if (!Notification.isSupported() || isInQuietHours()) return
   const summary = p.summary?.replace(/\s+/g, ' ').trim()
   const body = summary
     ? summary.length > 240
       ? `${summary.slice(0, 237)}…`
       : summary
-    : p.urgencyReason?.trim() ?? ''
-  const notif = new Notification({
+    : (p.urgencyReason?.trim() ?? '')
+  dispatchNotification({
+    category: 'article',
+    identityKey: `article:${p.articleId}`,
     title: p.title,
+    body,
     subtitle: p.feedTitle,
-    body
+    importance: 'urgent',
+    clickAction: { kind: 'article', articleId: p.articleId }
   })
-  notif.on('click', () => {
-    showMainWindowFn?.()
-    broadcastOpen(p.articleId)
-  })
-  notif.show()
 }
 
 export function trackMedium(item: DigestItem): void {
@@ -69,7 +62,7 @@ export function trackMedium(item: DigestItem): void {
 }
 
 function flushDigest(): void {
-  if (digestQueue.length === 0 || !Notification.isSupported() || isInQuietHours()) return
+  if (digestQueue.length === 0) return
   const items = digestQueue
   digestQueue = []
   const byFeed = new Map<string, number>()
@@ -77,13 +70,21 @@ function flushDigest(): void {
   const top = [...byFeed.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
   const body = top.map(([feed, count]) => `${count} from ${feed}`).join(', ')
   const n = items.length
-  const notif = new Notification({
+  // Digest identityKey is keyed by the half-hour bucket so two flushes
+  // close together don't both fire (rare but possible if the digest timer
+  // is reset). Coarse bucket: floor(now / interval).
+  const prefs = getPreferences()
+  const intervalMs = (prefs.digestIntervalMin ?? 30) * 60 * 1000
+  const bucket = Math.floor(Date.now() / Math.max(intervalMs, 60_000))
+  dispatchNotification({
+    category: 'digest',
+    identityKey: `digest:${bucket}`,
     title: `Pulse: ${n} new ${n === 1 ? 'story' : 'stories'} to review`,
-    body: body || undefined,
-    silent: true
+    body: body || '',
+    importance: 'normal',
+    silent: true,
+    clickAction: { kind: 'route', route: 'home' }
   })
-  notif.on('click', () => showMainWindowFn?.())
-  notif.show()
 }
 
 export function startDigestTimer(intervalMs = 30 * 60 * 1000): void {

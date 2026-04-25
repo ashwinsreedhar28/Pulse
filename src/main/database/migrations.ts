@@ -1254,5 +1254,44 @@ export const migrations: Migration[] = [
         db.exec(`ALTER TABLE graph_edge_overrides ADD COLUMN citationJson TEXT`)
       }
     }
+  },
+  {
+    version: 42,
+    name: 'create notification_log for cross-source dedup + throughput cap',
+    // Central log of every OS notification dispatched. Keyed by
+    // (category, identityKey) so any source — feedPoller, stocksScheduler,
+    // sportsAlerts, etc. — can call dispatchNotification() with a stable
+    // identity and the central service short-circuits if we've already
+    // notified about this event. Also serves as the rolling window for the
+    // daily cap (count rows where sentAt > now - 24h).
+    //
+    // identityKey shapes by category:
+    //   article:42                            — by article id
+    //   stock-daily:AAPL:2026-04-25           — daily-move alert per ticker per market day
+    //   stock-intraday:AAPL:2026-04-25:1030   — intraday spike per ticker per minute window
+    //   stock-52wh:AAPL:2026-04-25            — 52-week high touch
+    //   sport-hr:GAMEID:HRID                  — baseball HR (per home-run event)
+    //   sport-goal:GAMEID:GOALID              — soccer goal
+    //   sport-milestone:LEBRON:GAMEID:30PTS   — NBA player milestone
+    //   filing:AAPL:0000320193-24-000123      — SEC filing accession
+    //   analyst:AAPL:2026-04-25:UG-MS         — analyst upgrade/downgrade
+    //   macro:VIX:2026-04-25:spike            — macro shock
+    //
+    // payloadJson preserves the OS notification body so a future "in-app
+    // notification feed" view can replay history without re-fetching from
+    // the source tables.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS notification_log (
+          category TEXT NOT NULL,
+          identityKey TEXT NOT NULL,
+          sentAt INTEGER NOT NULL,
+          payloadJson TEXT,
+          PRIMARY KEY (category, identityKey)
+        );
+        CREATE INDEX IF NOT EXISTS idx_notification_log_sentAt
+          ON notification_log(sentAt DESC);
+      `)
+    }
   }
 ]

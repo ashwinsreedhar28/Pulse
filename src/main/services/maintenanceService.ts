@@ -1,5 +1,6 @@
 import { getDb } from '../database/connection'
 import { purgeOlderThan } from '../database/articles'
+import { purgeOldNotifications } from '../database/notificationLog'
 import { purgeStaleReaderCache } from './readerService'
 import { purgeStaleSmartLookups } from './smartLookupService'
 
@@ -30,7 +31,19 @@ export function runMaintenance(): void {
   }
   const readerDeleted = purgeStaleReaderCache()
   const lookupDeleted = purgeStaleSmartLookups()
-  const totalDeleted = deleted + readerDeleted + lookupDeleted
+  // Notification log keeps dedup state. 30 days is plenty — events older
+  // than a month won't realistically re-fire under any current identity
+  // scheme (article ids are monotonic, dates roll over, game ids unique).
+  let notificationsDeleted = 0
+  try {
+    notificationsDeleted = purgeOldNotifications(cutoff)
+  } catch (err) {
+    console.warn(
+      '[maintenance] purgeOldNotifications failed:',
+      err instanceof Error ? err.message : err
+    )
+  }
+  const totalDeleted = deleted + readerDeleted + lookupDeleted + notificationsDeleted
   if (totalDeleted >= VACUUM_THRESHOLD) {
     try {
       // VACUUM can't run inside a transaction and takes an exclusive lock, but
@@ -42,7 +55,7 @@ export function runMaintenance(): void {
   }
   if (totalDeleted > 0) {
     console.log(
-      `[maintenance] purged ${deleted} articles, ${readerDeleted} reader cache, ${lookupDeleted} smart lookups` +
+      `[maintenance] purged ${deleted} articles, ${readerDeleted} reader cache, ${lookupDeleted} smart lookups, ${notificationsDeleted} notifications` +
         (totalDeleted >= VACUUM_THRESHOLD ? ' (vacuumed)' : '')
     )
   }

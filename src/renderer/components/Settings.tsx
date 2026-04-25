@@ -1108,7 +1108,13 @@ const CORE_PREF_KEYS: (keyof Preferences)[] = [
   'density',
   'theme',
   'favoriteTeamAlertsEnabled',
-  'launchAtLogin'
+  'launchAtLogin',
+  'notificationDailyCap',
+  'notifyArticlesEnabled',
+  'notifyStocksEnabled',
+  'notifySportsEnabled',
+  'notifyFilingsEnabled',
+  'notifyMacroEnabled'
 ]
 const REELS_PREF_KEYS: (keyof Preferences)[] = [
   'ttsEngine',
@@ -1210,6 +1216,49 @@ function PreferencesTab(): JSX.Element {
             onChange={(v) => patch('digestIntervalMin', v)}
           />
         </PrefRow>
+        <PrefRow label="Daily cap (across all categories)">
+          <NumberInput
+            value={draft.notificationDailyCap}
+            min={0}
+            max={50}
+            onChange={(v) => patch('notificationDailyCap', v)}
+          />
+        </PrefRow>
+        <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
+          Total OS notifications per rolling 24h. 0 disables notifications
+          entirely. Default 5 keeps signal high; bump up if you want to be
+          more in-the-loop.
+        </div>
+        <PrefRow label="Articles (breaking news, digests)">
+          <ToggleSwitch
+            checked={draft.notifyArticlesEnabled}
+            onChange={(v) => patch('notifyArticlesEnabled', v)}
+          />
+        </PrefRow>
+        <PrefRow label="Stocks (price moves, analyst alerts)">
+          <ToggleSwitch
+            checked={draft.notifyStocksEnabled}
+            onChange={(v) => patch('notifyStocksEnabled', v)}
+          />
+        </PrefRow>
+        <PrefRow label="Sports (HRs, goals, NBA milestones)">
+          <ToggleSwitch
+            checked={draft.notifySportsEnabled}
+            onChange={(v) => patch('notifySportsEnabled', v)}
+          />
+        </PrefRow>
+        <PrefRow label="SEC filings (8-K, Form 4 large insider)">
+          <ToggleSwitch
+            checked={draft.notifyFilingsEnabled}
+            onChange={(v) => patch('notifyFilingsEnabled', v)}
+          />
+        </PrefRow>
+        <PrefRow label="Macro (VIX spikes, rate moves)">
+          <ToggleSwitch
+            checked={draft.notifyMacroEnabled}
+            onChange={(v) => patch('notifyMacroEnabled', v)}
+          />
+        </PrefRow>
         <PrefRow label="Quiet hours">
           <ToggleSwitch
             checked={draft.quietHoursEnabled}
@@ -1223,6 +1272,11 @@ function PreferencesTab(): JSX.Element {
             <TimeInput value={draft.quietHoursEnd} onChange={(v) => patch('quietHoursEnd', v)} />
           </div>
         )}
+        <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
+          Quiet hours suppress non-urgent notifications. Urgent alerts
+          (game scores, breaking news, big intraday moves) still come
+          through.
+        </div>
       </PrefSection>
 
       <PrefSection title="Display">

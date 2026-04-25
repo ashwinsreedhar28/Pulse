@@ -196,6 +196,15 @@ export interface Preferences {
   // Free, no charges. Empty string disables the panel with a "configure
   // in Settings" hint instead of empty data.
   fredApiKey: string
+  // Notification dispatcher settings (Phase 1 of the central notification
+  // overhaul). Daily cap is enforced across all categories; per-category
+  // toggles disable specific sources independently.
+  notificationDailyCap: number
+  notifyArticlesEnabled: boolean
+  notifyStocksEnabled: boolean
+  notifySportsEnabled: boolean
+  notifyFilingsEnabled: boolean
+  notifyMacroEnabled: boolean
 }
 
 export interface SportsTeam {

@@ -1,7 +1,7 @@
-import { Notification, BrowserWindow } from 'electron'
 import { listFavoriteTeams, type FavoriteTeam } from '../database/favoriteTeams'
 import { listGames, LEAGUES, type Game, type GameStatus } from './sportsService'
 import { getPreferences } from '../database/preferences'
+import { dispatchNotification, setNotificationWindowOpener } from './notificationService'
 
 const POLL_INTERVAL_MS = 90_000
 // Games only alerted within this window of "now" so stale finals don't spam.
@@ -19,32 +19,13 @@ interface GameState {
 
 const lastSeen = new Map<string, GameState>()
 let timer: NodeJS.Timeout | null = null
-let showMainWindowFn: (() => void) | null = null
 let armed = false
 
 export function setAlertsWindowOpener(fn: () => void): void {
-  showMainWindowFn = fn
-}
-
-function isInQuietHours(): boolean {
-  try {
-    const prefs = getPreferences()
-    if (!prefs.quietHoursEnabled) return false
-    const now = new Date()
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    const { quietHoursStart: s, quietHoursEnd: e } = prefs
-    return s <= e ? hhmm >= s && hhmm < e : hhmm >= s || hhmm < e
-  } catch {
-    return false
-  }
-}
-
-function broadcastOpenGame(leagueId: string, leaguePath: string, eventId: string): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('sports:openGame', { leagueId, leaguePath, eventId })
-    }
-  }
+  // Forward to the central notification service. Both this and
+  // notificationManager call setNotificationWindowOpener; whichever runs
+  // last wins, but they're handed the same callback by main/index.ts.
+  setNotificationWindowOpener(fn)
 }
 
 function fireNotification(
@@ -52,7 +33,6 @@ function fireNotification(
   game: Game,
   favorite: FavoriteTeam
 ): void {
-  if (!Notification.isSupported() || isInQuietHours()) return
   const league = LEAGUES.find((l) => l.id === game.leagueId)?.shortName ?? game.leagueId.toUpperCase()
   const favSide = game.home.id === favorite.teamId ? 'home' : 'away'
   const opponent = favSide === 'home' ? game.away.shortName : game.home.shortName
@@ -72,19 +52,26 @@ function fireNotification(
         ? favScore > oppScore
           ? 'Win'
           : favScore < oppScore
-          ? 'Loss'
-          : 'Tie'
+            ? 'Loss'
+            : 'Tie'
         : 'Final'
     title = `${league}: ${favAbbr} ${favScore ?? '–'} – ${oppScore ?? '–'} ${oppAbbr} · ${outcome}`
     body = game.statusDetail || `Final score vs ${opponent}.`
   }
 
-  const notif = new Notification({ title, body })
-  notif.on('click', () => {
-    showMainWindowFn?.()
-    broadcastOpenGame(game.leagueId, game.leaguePath, game.id)
+  // Route through the central dispatcher. identityKey scopes to the
+  // (gameId, kind) pair so a re-poll that re-detects the same start/final
+  // doesn't double-fire — the in-memory notifiedStarted/notifiedFinal
+  // flags handle that within a single process lifetime; the central log
+  // covers crash-recovery and same-day re-emission.
+  dispatchNotification({
+    category: 'sport',
+    identityKey: `sport-${kind}:${game.id}`,
+    title,
+    body,
+    importance: 'urgent',
+    clickAction: { kind: 'game', gameId: game.id }
   })
-  notif.show()
 }
 
 async function tick(): Promise<void> {

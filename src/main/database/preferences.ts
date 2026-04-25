@@ -35,6 +35,18 @@ export interface Preferences {
   // string disables the macro panel (renders an "add key in Settings"
   // hint instead of empty data).
   fredApiKey: string
+  // Notification system (Phase 1+ — central dispatcher with dedup/cap).
+  // Total daily cap across ALL categories. Default 5 keeps notifications
+  // signal-only on first run; user can crank up in Settings.
+  notificationDailyCap: number
+  // Per-category enable flags. Disabling a category stops the dispatcher
+  // from firing OS notifications for that source — the source still runs
+  // (it might be needed for other features) but its notify call is a no-op.
+  notifyArticlesEnabled: boolean
+  notifyStocksEnabled: boolean // covers price moves + analyst alerts (Phase 2)
+  notifySportsEnabled: boolean // covers HRs / goals / NBA milestones (Phase 3)
+  notifyFilingsEnabled: boolean // covers SEC 8-K / Form 4 (Phase 4)
+  notifyMacroEnabled: boolean // VIX spike / DGS10 moves (Phase 4)
 }
 
 const DEFAULTS: Preferences = {
@@ -52,7 +64,13 @@ const DEFAULTS: Preferences = {
   mediaPipelineEnabled: true,
   aiProvider: 'auto',
   anthropicApiKey: '',
-  fredApiKey: ''
+  fredApiKey: '',
+  notificationDailyCap: 5,
+  notifyArticlesEnabled: true,
+  notifyStocksEnabled: true,
+  notifySportsEnabled: true,
+  notifyFilingsEnabled: true,
+  notifyMacroEnabled: true
 }
 
 export function getPreferences(): Preferences {
@@ -82,8 +100,27 @@ export function getPreferences(): Preferences {
         : map.get('mediaPipelineEnabled') === 'true',
     aiProvider: normalizeAiProvider(map.get('aiProvider')),
     anthropicApiKey: (map.get('anthropicApiKey') ?? DEFAULTS.anthropicApiKey).trim(),
-    fredApiKey: (map.get('fredApiKey') ?? DEFAULTS.fredApiKey).trim()
+    fredApiKey: (map.get('fredApiKey') ?? DEFAULTS.fredApiKey).trim(),
+    // Notification preferences. Booleans default to true so existing users
+    // don't silently lose notifications when these keys land. Cap clamps
+    // 0..50 — 0 disables notifications entirely without needing a master
+    // toggle, 50 caps a single very-noisy day.
+    notificationDailyCap: clamp(
+      Number(map.get('notificationDailyCap') ?? DEFAULTS.notificationDailyCap),
+      0,
+      50
+    ),
+    notifyArticlesEnabled: boolPref(map.get('notifyArticlesEnabled'), DEFAULTS.notifyArticlesEnabled),
+    notifyStocksEnabled: boolPref(map.get('notifyStocksEnabled'), DEFAULTS.notifyStocksEnabled),
+    notifySportsEnabled: boolPref(map.get('notifySportsEnabled'), DEFAULTS.notifySportsEnabled),
+    notifyFilingsEnabled: boolPref(map.get('notifyFilingsEnabled'), DEFAULTS.notifyFilingsEnabled),
+    notifyMacroEnabled: boolPref(map.get('notifyMacroEnabled'), DEFAULTS.notifyMacroEnabled)
   }
+}
+
+function boolPref(raw: string | undefined, fallback: boolean): boolean {
+  if (raw === undefined) return fallback
+  return raw === 'true'
 }
 
 function normalizeAiProvider(raw: string | undefined): AiProvider {
