@@ -1009,17 +1009,21 @@ function SportsReel({ onOpenGame }: { onOpenGame: (g: Game) => void }): JSX.Elem
     | { kind: 'header'; league: SportsLeague; key: string }
     | { kind: 'game'; game: Game; key: string }
     | { kind: 'sep'; key: string }
+  // No inter-game dividers within a league — game cells are now natural-
+  // width (no min-w padding) and the wrapper gap-6 between every cell
+  // gives clear visual separation. The previous design (2px divider with
+  // gap-4 padding) ended up looking like the divider was "inside" a
+  // game when the previous cell had trailing space from a min-width.
   const cells: Cell[] = []
   for (const g of groups) {
     cells.push({ kind: 'header', league: g.league, key: `h-${g.league.id}` })
-    g.games.forEach((game, i) => {
-      if (i > 0) cells.push({ kind: 'sep', key: `s-${g.league.id}-${i}` })
+    g.games.forEach((game) => {
       cells.push({ kind: 'game', game, key: `g-${game.id}` })
     })
   }
   const doubled = [...cells, ...cells.map((c) => ({ ...c, key: `${c.key}-x` }))]
   return (
-    <div className="flex items-center gap-4 whitespace-nowrap animate-ticker pl-8">
+    <div className="flex items-center gap-6 whitespace-nowrap animate-ticker pl-8">
       {doubled.map((cell) => {
         if (cell.kind === 'header') {
           return <LeagueHeaderChip key={cell.key} league={cell.league} />
@@ -1124,7 +1128,7 @@ function GameTickerItem({
       type="button"
       onClick={onOpen}
       title={`${game.away.shortName} @ ${game.home.shortName}`}
-      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors min-w-[185px]"
+      className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors shrink-0"
     >
       <span className={`font-bold uppercase tracking-[0.16em] tabular-nums shrink-0 w-[52px] ${statusColor}`}>
         {timeLabel}
