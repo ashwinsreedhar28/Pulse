@@ -19,6 +19,16 @@ const GROUP_LABEL: Record<Group, string> = {
   volatility: 'Volatility'
 }
 
+// Per-group accent dot. Each tile carries a tiny colored dot so the user
+// can scan groups without needing explicit section dividers — frees the
+// horizontal real estate to fit all 9 tiles in 1-2 dense rows.
+const GROUP_DOT: Record<Group, string> = {
+  rates: 'bg-sky-400',
+  inflation: 'bg-amber-400',
+  labor: 'bg-emerald-400',
+  volatility: 'bg-violet-400'
+}
+
 function formatLatest(value: number | null, format: FredFormat): string {
   if (value === null || !Number.isFinite(value)) return '—'
   switch (format) {
@@ -68,35 +78,42 @@ function deltaTone(
 }
 
 function Sparkline({ points }: { points: Array<{ date: string; value: number | null }> }): JSX.Element | null {
-  // Render a 60×16 svg so the tile stays compact. Skip if we don't have
-  // at least 2 real points — a single dot doesn't communicate a trend.
+  // 140×36 — large enough to read trend at a glance, small enough that
+  // 9 tiles still fit comfortably in 2 rows on a 1440-wide window.
   const real = points.filter((p) => p.value !== null) as Array<{ date: string; value: number }>
   if (real.length < 2) return null
-  const width = 60
-  const height = 16
+  const width = 140
+  const height = 36
   const values = real.map((p) => p.value)
   const min = Math.min(...values)
   const max = Math.max(...values)
   const range = max - min || 1
   const stepX = width / (real.length - 1)
-  const path = real
-    .map((p, i) => {
-      const x = i * stepX
-      const y = height - ((p.value - min) / range) * height
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`
-    })
+  const points2 = real.map((p, i) => ({
+    x: i * stepX,
+    y: height - ((p.value - min) / range) * height
+  }))
+  const path = points2
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
     .join(' ')
-  // Colored end-cap to telegraph the latest direction.
+  // Subtle area fill under the line — gives the tile visual weight at
+  // the larger size without dominating the tile's primary value text.
+  const areaPath =
+    `M${points2[0].x.toFixed(1)} ${height} ` +
+    points2.map((p) => `L${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ') +
+    ` L${points2[points2.length - 1].x.toFixed(1)} ${height} Z`
   const lastTwo = values.slice(-2)
   const isUp = lastTwo[1] > lastTwo[0]
-  const stroke = 'rgba(161,161,170,0.7)'
+  const stroke = isUp ? 'rgba(74,222,128,0.85)' : 'rgba(248,113,113,0.85)'
+  const fill = isUp ? 'rgba(74,222,128,0.10)' : 'rgba(248,113,113,0.10)'
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-      <path d={path} fill="none" stroke={stroke} strokeWidth={1.2} strokeLinejoin="round" />
+      <path d={areaPath} fill={fill} />
+      <path d={path} fill="none" stroke={stroke} strokeWidth={1.4} strokeLinejoin="round" />
       <circle
         cx={width}
-        cy={height - ((values[values.length - 1] - min) / range) * height}
-        r={1.5}
+        cy={points2[points2.length - 1].y}
+        r={2}
         fill={isUp ? 'rgb(74,222,128)' : 'rgb(248,113,113)'}
       />
     </svg>
@@ -109,7 +126,7 @@ function Tile({ snap }: { snap: FredSeriesSnapshot }): JSX.Element {
   const tone = deltaTone(snap.delta, snap.preferredDirection)
   return (
     <div
-      className="flex items-center gap-3 px-3 py-2 rounded-lg border border-edge/60 bg-surface-1/60 min-w-[180px]"
+      className="flex items-center gap-3 px-3.5 py-2.5 rounded-lg border border-edge/60 bg-surface-1/70 hover:bg-surface-1 transition-colors w-[280px] flex-shrink-0"
       title={
         snap.units
           ? `${snap.label} · ${snap.units}${snap.latestDate ? ` · as of ${snap.latestDate}` : ''}`
@@ -117,13 +134,21 @@ function Tile({ snap }: { snap: FredSeriesSnapshot }): JSX.Element {
       }
     >
       <div className="flex flex-col min-w-0 flex-1">
-        <span className="text-[9.5px] font-semibold uppercase tracking-[0.22em] text-zinc-500 truncate">
-          {snap.label}
-        </span>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-[14px] font-semibold tabular-nums text-zinc-100">{value}</span>
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span
+            className={`shrink-0 w-1.5 h-1.5 rounded-full ${GROUP_DOT[snap.group]}`}
+            aria-hidden="true"
+          />
+          <span className="text-[9.5px] font-semibold uppercase tracking-[0.22em] text-zinc-500 truncate">
+            {snap.label}
+          </span>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-[18px] font-semibold tabular-nums text-zinc-100 leading-none">
+            {value}
+          </span>
           {delta && (
-            <span className={`text-[10px] tabular-nums ${tone}`}>{delta}</span>
+            <span className={`text-[10.5px] tabular-nums ${tone}`}>{delta}</span>
           )}
         </div>
       </div>
@@ -163,17 +188,6 @@ export function MacroPanel(): JSX.Element | null {
     }
   }, [])
 
-  const grouped = useMemo(() => {
-    if (!snapshot) return null
-    const map = new Map<Group, FredSeriesSnapshot[]>()
-    for (const g of GROUP_ORDER) map.set(g, [])
-    for (const s of snapshot) {
-      const bucket = map.get(s.group)
-      if (bucket) bucket.push(s)
-    }
-    return map
-  }, [snapshot])
-
   if (!snapshot) return null
 
   // Cold state: snapshot resolved, but every series has no data. Most
@@ -209,17 +223,45 @@ export function MacroPanel(): JSX.Element | null {
     }
   }
 
+  // Order tiles by group so the colored dots cluster naturally even though
+  // there's no explicit section divider — left-to-right reads as a small
+  // legend matching the group order.
+  const orderedTiles = useMemo(() => {
+    if (!snapshot) return []
+    const out: FredSeriesSnapshot[] = []
+    for (const g of GROUP_ORDER) {
+      for (const s of snapshot) if (s.group === g) out.push(s)
+    }
+    return out
+  }, [snapshot])
+
   return (
     <div className="mx-6 mt-3 mb-2 rounded-xl border border-edge/60 bg-surface-1/40">
       <header className="px-4 pt-3 pb-2 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-300">
             σ Macro Panel
           </span>
           <span className="text-[10px] text-zinc-600">·</span>
           <span className="text-[10px] text-zinc-500">via FRED</span>
+          {/* Inline color legend so users learn the dot scheme without */}
+          {/* needing explicit section dividers in the body. */}
+          <span className="text-[10px] text-zinc-600">·</span>
+          <div className="flex items-center gap-2.5">
+            {GROUP_ORDER.map((g) => (
+              <div key={g} className="flex items-center gap-1">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${GROUP_DOT[g]}`}
+                  aria-hidden="true"
+                />
+                <span className="text-[9px] uppercase tracking-[0.18em] text-zinc-500">
+                  {GROUP_LABEL[g]}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
             onClick={handleRefresh}
@@ -236,31 +278,22 @@ export function MacroPanel(): JSX.Element | null {
           <button
             type="button"
             onClick={() => setCollapsed((c) => !c)}
-            title={collapsed ? 'Expand' : 'Collapse'}
-            className="text-[10px] text-zinc-500 hover:text-zinc-300 px-1.5"
+            title={collapsed ? 'Expand panel' : 'Collapse panel'}
+            className={`text-[9.5px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full ring-1 ring-inset transition-colors ${
+              collapsed
+                ? 'bg-amber-500/10 text-amber-300 ring-amber-500/40 hover:bg-amber-500/20'
+                : 'bg-zinc-800/70 text-zinc-300 ring-zinc-700 hover:bg-zinc-700'
+            }`}
           >
-            {collapsed ? '▾' : '▴'}
+            {collapsed ? 'Expand ▾' : 'Collapse ▴'}
           </button>
         </div>
       </header>
-      {!collapsed && grouped && (
-        <div className="px-4 pb-3 pt-1 space-y-3">
-          {GROUP_ORDER.map((g) => {
-            const items = grouped.get(g) ?? []
-            if (items.length === 0) return null
-            return (
-              <div key={g}>
-                <div className="text-[9px] uppercase tracking-[0.22em] text-zinc-500 mb-1.5">
-                  {GROUP_LABEL[g]}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {items.map((s) => (
-                    <Tile key={s.id} snap={s} />
-                  ))}
-                </div>
-              </div>
-            )
-          })}
+      {!collapsed && (
+        <div className="px-4 pb-3 pt-1 flex flex-wrap gap-2">
+          {orderedTiles.map((s) => (
+            <Tile key={s.id} snap={s} />
+          ))}
         </div>
       )}
     </div>
