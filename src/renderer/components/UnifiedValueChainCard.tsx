@@ -10,8 +10,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type {
+  CompanyValueChainEdgeCitation,
   CompanyValueChainEdgeSource,
   CompanyValueChainRow,
+  GraphEdgeOverride,
   Ticker
 } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
@@ -83,6 +85,7 @@ export function UnifiedValueChainCard({
 }): JSX.Element | null {
   const upper = symbol.toUpperCase()
   const [row, setRow] = useState<CompanyValueChainRow | null | undefined>(undefined)
+  const [overrides, setOverrides] = useState<GraphEdgeOverride[]>([])
   const [working, setWorking] = useState(false)
 
   const reload = useCallback((): Promise<void> => {
@@ -92,10 +95,28 @@ export function UnifiedValueChainCard({
       .catch(() => setRow(null))
   }, [upper])
 
+  // Cross-chain mentions on the detail page: pull every override edge,
+  // filter to ones touching this focus, and render them alongside the
+  // focus's own chain edges. This keeps the detail and unified views
+  // symmetric — both surface neighboring chains' claims about the focus.
+  const reloadOverrides = useCallback((): Promise<void> => {
+    return window.api.graph
+      .listOverrides()
+      .then((list) => {
+        setOverrides(list.filter((o) => {
+          const from = o.fromSymbol.toUpperCase()
+          const to = o.toSymbol.toUpperCase()
+          return from === upper || to === upper
+        }))
+      })
+      .catch(() => setOverrides([]))
+  }, [upper])
+
   useEffect(() => {
     setRow(undefined)
     void reload()
-  }, [reload])
+    void reloadOverrides()
+  }, [reload, reloadOverrides])
 
   useEffect(() => {
     return window.api.stocks.onCompanyChainUpdated((updated) => {
@@ -103,6 +124,13 @@ export function UnifiedValueChainCard({
       void reload()
     })
   }, [reload, upper])
+  // graph:updated fires whenever the override table changes (any chain
+  // regen anywhere absorbs into it). Refresh cross-chain mentions then.
+  useEffect(() => {
+    return window.api.graph.onUpdated(() => {
+      void reloadOverrides()
+    })
+  }, [reloadOverrides])
 
   const onGenerate = async (force = false): Promise<void> => {
     setWorking(true)
@@ -123,11 +151,11 @@ export function UnifiedValueChainCard({
     // back." Once the regen finishes, status flips to 'ready' and the
     // saved graph swaps in cleanly.
     if (row?.graph && row.graph.edges.length > 0) {
-      return prepareFromGenerated(row, tickers)
+      return prepareFromGenerated(row, tickers, overrides, upper)
     }
     // Fallback: curated supplyChainGraph.json entry, if any.
     return prepareFromCurated(upper, tickers)
-  }, [row, tickers, upper])
+  }, [row, tickers, upper, overrides])
 
   // Still waiting on the first getCompanyChain() response — render a
   // silent placeholder to avoid flashing the cold state then immediately
@@ -339,11 +367,20 @@ function prepareFromCurated(upper: string, tickers: Ticker[]): PreparedChain | n
 
 function prepareFromGenerated(
   row: CompanyValueChainRow,
-  tickers: Ticker[]
+  tickers: Ticker[],
+  // Cross-chain overrides touching this focus. We pass them in so the
+  // detail page can render edges other tickers' chains absorbed about
+  // this focus, matching what the unified Value Chain page shows.
+  // Edges already represented in the focus's own chain (same from→to)
+  // are deduped — focus's own edge wins because it has the model's
+  // intended note + citation set.
+  crossChainOverrides: GraphEdgeOverride[],
+  upper: string
 ): PreparedChain | null {
   const graph = row.graph
   if (!graph) return null
   const focus = graph.focus.toUpperCase()
+  void upper
 
   const stageLabelById = new Map<string, string>()
   for (const s of graph.stages) stageLabelById.set(s.id, s.label)
@@ -445,6 +482,89 @@ function prepareFromGenerated(
       } else if (to === focus && !seenSuppliers.has(from)) {
         suppliers.push(toCounterparty(from, note, source, citations))
         seenSuppliers.add(from)
+      }
+    }
+  }
+
+  // Cross-chain mentions: walk override edges that touch this focus
+  // and add any counterparty the focus's own chain didn't already
+  // include. The seen sets already track every counterparty the focus
+  // has covered, so dedupe by symbol keeps each chip unique. Skip
+  // cross-chain edges contributed by the focus's own chain (already
+  // represented above) to avoid duplicating them with weaker note text.
+  for (const o of crossChainOverrides) {
+    const sources = (o.source ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+    if (sources.includes(`chain_gen_${focus}`)) continue
+    const from = o.fromSymbol.toUpperCase()
+    const to = o.toSymbol.toUpperCase()
+    if (from !== focus && to !== focus) continue
+    const counterparty = from === focus ? to : from
+    if (counterparty === focus) continue
+    const note = o.note ?? null
+    // Pull citations off the override (multi-cite array preferred,
+    // legacy single-cite fallback).
+    const cites: CompanyValueChainEdgeCitation[] =
+      o.citations && o.citations.length > 0
+        ? o.citations
+        : o.citation
+          ? [o.citation]
+          : []
+    // Source category derived from the first citation (matches the
+    // focus's own edges' SourceBadge color logic).
+    const inferredSource: CompanyValueChainEdgeSource | null = cites[0]
+      ? cites[0].kind === 'filing'
+        ? 'filings'
+        : cites[0].kind === 'article'
+          ? 'news'
+          : 'model'
+      : null
+    if (o.relationship === 'competitor') {
+      if (seenCompetitors.has(counterparty)) continue
+      competitors.push(toCounterparty(counterparty, note, inferredSource, cites))
+      seenCompetitors.add(counterparty)
+      continue
+    }
+    if (o.relationship === 'supplier') {
+      // from supplies to. Counterparty role relative to focus:
+      //   - focus is `to` → counterparty (`from`) supplies focus
+      //   - focus is `from` → counterparty (`to`) is buying from focus
+      const role: 'supplier' | 'customer' = to === focus ? 'supplier' : 'customer'
+      if (role === 'supplier') {
+        if (seenSuppliers.has(counterparty)) continue
+        suppliers.push(toCounterparty(counterparty, note, inferredSource, cites))
+        seenSuppliers.add(counterparty)
+      } else {
+        if (seenCustomers.has(counterparty)) continue
+        customers.push(toCounterparty(counterparty, note, inferredSource, cites))
+        seenCustomers.add(counterparty)
+      }
+      continue
+    }
+    if (o.relationship === 'customer') {
+      // from buys from to.
+      const role: 'supplier' | 'customer' = from === focus ? 'supplier' : 'customer'
+      if (role === 'supplier') {
+        if (seenSuppliers.has(counterparty)) continue
+        suppliers.push(toCounterparty(counterparty, note, inferredSource, cites))
+        seenSuppliers.add(counterparty)
+      } else {
+        if (seenCustomers.has(counterparty)) continue
+        customers.push(toCounterparty(counterparty, note, inferredSource, cites))
+        seenCustomers.add(counterparty)
+      }
+      continue
+    }
+    if (o.relationship === 'partner') {
+      // Match focus-page convention: focus=from → fold to customers,
+      // focus=to → fold to suppliers.
+      if (from === focus) {
+        if (seenCustomers.has(counterparty)) continue
+        customers.push(toCounterparty(counterparty, note, inferredSource, cites))
+        seenCustomers.add(counterparty)
+      } else {
+        if (seenSuppliers.has(counterparty)) continue
+        suppliers.push(toCounterparty(counterparty, note, inferredSource, cites))
+        seenSuppliers.add(counterparty)
       }
     }
   }
