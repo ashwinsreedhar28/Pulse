@@ -216,6 +216,11 @@ export async function generateCompanyValueChain(input: {
       | 'partners-with-focus'
     note: string | null
   }>
+  // Pre-formatted block of user-flagged corrections for this focus's chain.
+  // Built by chainCorrectionsService.formatCorrectionsForPrompt; null when
+  // there are no active corrections. Injected into the system prompt as
+  // ground-truth that overrides cross-chain mentions and model priors.
+  userCorrectionsBlock?: string | null
 }): Promise<GeneratedValueChain | null> {
   if (!input.companyName.trim()) return null
   if (!(await checkClaudeHealth())) return null
@@ -363,6 +368,11 @@ export async function generateCompanyValueChain(input: {
     `none of the supplied context mentions it. Use this honestly — over-` +
     `claiming grounding degrades user trust.\n` +
     `\n` +
+    (input.userCorrectionsBlock
+      ? `\n${input.userCorrectionsBlock}\n\n` +
+        `These user corrections OVERRIDE everything else. If a cross-chain ` +
+        `mention contradicts a user correction, the user wins.\n`
+      : '') +
     `- If the value chain is genuinely unclear from the context, return ` +
     `{"focus":"${input.symbol}","stages":[],"nodes":[],"edges":[]}.`
 

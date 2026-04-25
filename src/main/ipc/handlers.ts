@@ -550,6 +550,44 @@ export function registerDbIpc(): void {
     return { ok: true }
   })
 
+  // ---- Chain corrections ---------------------------------------------------
+  // User-flagged fixes to per-ticker value chains. Applied in two places:
+  // (1) at chain-read time to mutate the rendered focus panel immediately,
+  // and (2) injected into the Claude generator prompt on the next regen so
+  // the model honors the verdict instead of repeating the original mistake.
+  // 'chainCorrections:updated' broadcasts on every write so the renderer's
+  // focus panel can re-fetch.
+  ipcMain.handle('chainCorrections:list', async (_e, focusSymbol: string) => {
+    const { listForFocus } = await import('../services/chainCorrectionsService')
+    return listForFocus(focusSymbol)
+  })
+  ipcMain.handle(
+    'chainCorrections:upsert',
+    async (
+      _e,
+      input: import('../services/chainCorrectionsService').UpsertCorrectionInput
+    ) => {
+      const { applyCorrection } = await import('../services/chainCorrectionsService')
+      return applyCorrection(input)
+    }
+  )
+  ipcMain.handle(
+    'chainCorrections:delete',
+    async (
+      _e,
+      input: {
+        focusSymbol: string
+        subjectType: import('../services/chainCorrectionsService').ChainCorrectionSubjectType
+        subjectKey: string
+        correctionType: import('../services/chainCorrectionsService').ChainCorrectionType
+      }
+    ) => {
+      const { removeCorrection } = await import('../services/chainCorrectionsService')
+      removeCorrection(input)
+      return { ok: true }
+    }
+  )
+
   // Value-chain growth pipeline. Renderer surfaces the audit log + overlay
   // list in Settings, lets users trigger a sweep manually, and hit Undo on
   // any auto-accepted edge they disagree with. The Undo flow deletes the

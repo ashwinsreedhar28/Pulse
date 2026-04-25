@@ -1219,6 +1219,10 @@ export async function generateCompanyValueChain(input: {
       | 'partners-with-focus'
     note: string | null
   }>
+  // Pre-formatted user-flagged corrections block. Mirrors the claudeService
+  // input — when present, injected into the system prompt as ground-truth
+  // that overrides cross-chain mentions and model priors.
+  userCorrectionsBlock?: string | null
 }): Promise<GeneratedValueChain | null> {
   if (!input.companyName.trim()) {
     console.warn('[ollama] generateCompanyValueChain: empty companyName')
@@ -1368,6 +1372,11 @@ export async function generateCompanyValueChain(input: {
     `rather than any supplied context above. Be honest — over-claiming ` +
     `grounding degrades user trust.\n` +
     `\n` +
+    (input.userCorrectionsBlock
+      ? `\n${input.userCorrectionsBlock}\n\n` +
+        `These user corrections OVERRIDE everything else. If a cross-chain ` +
+        `mention contradicts a user correction, the user wins.\n\n`
+      : '') +
     `- If the company's value chain is genuinely unclear from the context, ` +
     `return {"focus": "SYMBOL", "stages": [], "nodes": [], "edges": []}.`
 

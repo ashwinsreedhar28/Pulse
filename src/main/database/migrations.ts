@@ -1122,5 +1122,39 @@ export const migrations: Migration[] = [
         );
       `)
     }
+  },
+  {
+    version: 39,
+    name: 'create chain_corrections for user-flagged value chain fixes',
+    // User corrections to per-ticker value chains. Each row is one user
+    // judgment on a counterparty in a specific focus's chain — "this isn't
+    // relevant", "this is a customer not a supplier", etc. Corrections are
+    // (1) applied client-side when rendering the focus panel and (2) fed
+    // back into the Claude generator prompt as ground-truth on the next
+    // regen so the model honors them instead of re-emitting the mistake.
+    //
+    // PK is (focusSymbol, subjectType, subjectKey, correctionType) — one
+    // user can only have one "not-relevant" verdict on a given chip; they
+    // can layer "wrong-direction" on top if both apply (rare but possible).
+    // correctedValueJson holds the fix payload (e.g., {"direction":"supplier"}
+    // or {"relationship":"competitor"}). null when the correction is purely
+    // negative (not-relevant).
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS chain_corrections (
+          focusSymbol TEXT NOT NULL,
+          subjectType TEXT NOT NULL,
+          subjectKey TEXT NOT NULL,
+          correctionType TEXT NOT NULL,
+          correctedValueJson TEXT,
+          note TEXT,
+          createdAt INTEGER NOT NULL,
+          appliedAt INTEGER,
+          PRIMARY KEY (focusSymbol, subjectType, subjectKey, correctionType)
+        );
+        CREATE INDEX IF NOT EXISTS idx_chain_corrections_focus
+          ON chain_corrections(focusSymbol);
+      `)
+    }
   }
 ]

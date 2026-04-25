@@ -31,6 +31,11 @@ import {
   getSector
 } from './sectorService'
 import { absorbGeneratedChain } from './chainAbsorberService'
+import {
+  applyCorrectionsToChain,
+  formatCorrectionsForPrompt
+} from './chainCorrectionsService'
+import { markCorrectionsApplied } from '../database/chainCorrections'
 
 const UA = 'Pulse Desktop (ashwin.sreedhar2003@gmail.com)'
 const FETCH_TIMEOUT_MS = 30_000
@@ -476,6 +481,13 @@ export async function generateCompanyChain(input: {
     note: m.note
   }))
 
+  // User-flagged corrections for this focus's chain. Pre-formatted as a
+  // ground-truth block; null when the user has no active corrections.
+  // Whatever the model emits, applyCorrectionsToChain re-applies the
+  // corrections to the result before persisting so the user's verdict is
+  // honored even if the model regresses on it.
+  const userCorrectionsBlock = formatCorrectionsForPrompt(sym)
+
   const { result: generated, provider } = await routedGenerate({
     symbol: sym,
     companyName: input.companyName,
@@ -484,7 +496,8 @@ export async function generateCompanyChain(input: {
     newsSnippets: news,
     canonicalStages,
     sectorName: sectorCatalogEntry?.name,
-    crossChainMentions: crossChain
+    crossChainMentions: crossChain,
+    userCorrectionsBlock
   })
 
   // Stamp the generated-by provider into the provenance string so the
@@ -506,12 +519,18 @@ export async function generateCompanyChain(input: {
 
   const resolvedNodes = resolveNodes(generated.nodes, sym)
   const canonicalEdges = canonicalizeEdges(generated.edges, resolvedNodes, generated.nodes)
-  const graph: CompanyValueChain = {
+  const rawGraph: CompanyValueChain = {
     focus: sym,
     stages: generated.stages,
     nodes: resolvedNodes,
     edges: canonicalEdges
   }
+  // Belt-and-suspenders: even though we passed userCorrectionsBlock into
+  // the generator prompt, re-apply the corrections to the model's output
+  // before persisting. The model may regress on a correction (especially
+  // Ollama, which honors instructions less consistently), and re-applying
+  // here guarantees the user's verdict survives every regen.
+  const graph = applyCorrectionsToChain(rawGraph)
 
   setCompanyValueChain({
     symbol: sym,
@@ -519,6 +538,18 @@ export async function generateCompanyChain(input: {
     graph,
     sourceContext
   })
+
+  // Stamp appliedAt on every correction tied to this focus — lets the UI
+  // distinguish "fix is pending the next regen" from "fix is now baked
+  // into the saved chain". Best-effort; failure here doesn't unwind the save.
+  try {
+    markCorrectionsApplied(sym)
+  } catch (err) {
+    console.warn(
+      `[companyChain] markCorrectionsApplied failed for ${sym}:`,
+      err instanceof Error ? err.message : err
+    )
+  }
 
   // Absorb the chain into the unified overlay tables so the sector-wide
   // renderer (Phase 4) can see it. Non-fatal: absorption failure doesn't
@@ -545,7 +576,13 @@ export async function generateCompanyChain(input: {
 }
 
 export function readCompanyChain(symbol: string): ReturnType<typeof getCompanyValueChain> {
-  return getCompanyValueChain(symbol)
+  const row = getCompanyValueChain(symbol)
+  if (!row || !row.graph) return row
+  // Apply user-flagged corrections so the focus panel reflects the fix
+  // immediately, before the next regen. The unmodified chain stays in the
+  // DB — corrections are layered on top at read time so removing a
+  // correction reveals the original chain without re-running generation.
+  return { ...row, graph: applyCorrectionsToChain(row.graph) }
 }
 
 export interface RegenerateAllProgress {

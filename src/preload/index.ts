@@ -1083,6 +1083,36 @@ export interface FredSeriesSnapshot {
   lastFetchedAt: number | null
 }
 
+// User-flagged corrections to per-ticker value chains. Mirror of types
+// from src/main/services/chainCorrectionsService.ts. Renderer applies
+// corrections via right-click on counterparty chips in the focus panel;
+// each verdict feeds back into the Claude generator prompt as ground-truth
+// on the next regen.
+export type ChainCorrectionSubjectType = 'counterparty' | 'edge' | 'node'
+export type ChainCorrectionType = 'not-relevant' | 'wrong-direction' | 'wrong-relationship'
+export interface ChainCorrectionValue {
+  direction?: 'supplier' | 'customer'
+  relationship?: 'supplier' | 'customer' | 'competitor' | 'partner'
+}
+export interface ChainCorrection {
+  focusSymbol: string
+  subjectType: ChainCorrectionSubjectType
+  subjectKey: string
+  correctionType: ChainCorrectionType
+  correctedValue: ChainCorrectionValue | null
+  note: string | null
+  createdAt: number
+  appliedAt: number | null
+}
+export interface UpsertChainCorrectionInput {
+  focusSymbol: string
+  subjectType: ChainCorrectionSubjectType
+  subjectKey: string
+  correctionType: ChainCorrectionType
+  correctedValue?: ChainCorrectionValue | null
+  note?: string | null
+}
+
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>
 
@@ -1353,6 +1383,25 @@ const api = {
       ipcRenderer.on('fred:updated', listener)
       return (): void => {
         ipcRenderer.off('fred:updated', listener)
+      }
+    }
+  },
+  chainCorrections: {
+    list: (focusSymbol: string): Promise<ChainCorrection[]> =>
+      invoke<ChainCorrection[]>('chainCorrections:list', focusSymbol),
+    upsert: (input: UpsertChainCorrectionInput): Promise<ChainCorrection> =>
+      invoke<ChainCorrection>('chainCorrections:upsert', input),
+    delete: (input: {
+      focusSymbol: string
+      subjectType: ChainCorrectionSubjectType
+      subjectKey: string
+      correctionType: ChainCorrectionType
+    }): Promise<{ ok: boolean }> => invoke<{ ok: boolean }>('chainCorrections:delete', input),
+    onUpdated: (cb: (focusSymbol: string) => void): (() => void) => {
+      const listener = (_e: unknown, sym: string): void => cb(sym)
+      ipcRenderer.on('chainCorrections:updated', listener)
+      return (): void => {
+        ipcRenderer.off('chainCorrections:updated', listener)
       }
     }
   },

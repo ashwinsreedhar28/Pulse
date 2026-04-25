@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type MouseEvent as ReactMouseEvent } from 'react'
 import type { CompanyValueChainEdgeSource, Ticker } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
 import { CollapsibleSection } from './CollapsibleSection'
@@ -344,13 +344,23 @@ export function TransactionCluster({
   items,
   onPick,
   onHover,
-  onLeave
+  onLeave,
+  onContextMenu,
+  correctedSymbols
 }: {
   category: Category
   items: Counterparty[]
   onPick?: (symbol: string) => void
   onHover?: (symbol: string) => void
   onLeave?: () => void
+  // Right-click handler for the symbol chip. When provided, chips become
+  // right-clickable to open the chain-correction menu. Coordinates are
+  // viewport-relative (clientX/Y) so the caller can position a menu.
+  onContextMenu?: (symbol: string, x: number, y: number) => void
+  // Set of symbols (uppercase) the user has corrected. Chips in this set
+  // get a small "user-corrected" badge so the user can see at a glance
+  // which entries are theirs vs Claude's original.
+  correctedSymbols?: Set<string>
 }): JSX.Element | null {
   const tone = TONE[category]
   const groups = useStageGroups(items)
@@ -386,10 +396,24 @@ export function TransactionCluster({
                 const unverifiedChipClasses = `inline-flex items-center justify-center shrink-0 px-2 py-[3px] rounded-md border border-dashed text-[10px] font-semibold tabular-nums tracking-[0.04em] min-w-[58px] max-w-[120px] truncate border-zinc-600 bg-zinc-800/40 text-zinc-400 opacity-80`
                 const isUnverified = Boolean(item.unverified)
                 const nameTone = isUnverified ? 'text-zinc-400 italic' : 'text-zinc-200'
+                const isCorrected = Boolean(
+                  correctedSymbols && correctedSymbols.has(item.symbol.toUpperCase())
+                )
+                const handleContextMenu = onContextMenu
+                  ? (e: ReactMouseEvent<HTMLElement>): void => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onContextMenu(item.symbol, e.clientX, e.clientY)
+                    }
+                  : undefined
                 return (
                   <li key={item.symbol} className="flex items-start gap-2.5">
                     {isUnverified ? (
-                      <span className={unverifiedChipClasses} title="Unverified — no public ticker">
+                      <span
+                        className={unverifiedChipClasses}
+                        title="Unverified — no public ticker"
+                        onContextMenu={handleContextMenu}
+                      >
                         {item.symbol}
                       </span>
                     ) : interactive ? (
@@ -398,12 +422,24 @@ export function TransactionCluster({
                         onClick={() => onPick?.(item.symbol)}
                         onMouseEnter={() => onHover?.(item.symbol)}
                         onMouseLeave={() => onLeave?.()}
-                        className={`${chipClasses} ${tone.chipHoverBg} transition-colors`}
+                        onContextMenu={handleContextMenu}
+                        className={`${chipClasses} ${tone.chipHoverBg} transition-colors ${
+                          isCorrected ? 'ring-2 ring-amber-400/50' : ''
+                        }`}
+                        title={
+                          isCorrected
+                            ? 'You corrected this entry — right-click to manage'
+                            : onContextMenu
+                              ? 'Right-click to correct this entry'
+                              : undefined
+                        }
                       >
                         {item.symbol}
                       </button>
                     ) : (
-                      <span className={chipClasses}>{item.symbol}</span>
+                      <span className={chipClasses} onContextMenu={handleContextMenu}>
+                        {item.symbol}
+                      </span>
                     )}
                     <div className="min-w-0 flex-1 pt-[1px]">
                       <div className="flex items-center gap-1.5 min-w-0">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AnalystEstimates,
+  ChainCorrection,
   CompanyValueChain,
   EarningsBadge,
   FinancialsSnapshot,
@@ -32,6 +33,7 @@ import { FcfSparkline } from './FcfSparkline'
 import { EarningsBeatMiss } from './EarningsBeatMiss'
 import { PeerCompareModal } from './PeerCompareModal'
 import { resolveDisplayQuote } from './quoteDisplay'
+import { ChainCorrectionMenu, type ChainCorrectionAction } from './ChainCorrectionMenu'
 
 interface ValueChainSector {
   id: string
@@ -816,6 +818,143 @@ export function ValueChain({
     })
   }, [focusSymbol])
 
+  // User-flagged corrections for the focused ticker's chain. Drives both the
+  // amber ring on corrected chips and the right-click menu's "Remove
+  // correction" option. Refetches on focus change and on chainCorrections
+  // broadcasts (so two windows or out-of-band IPC updates stay in sync).
+  const [focusCorrections, setFocusCorrections] = useState<ChainCorrection[]>([])
+  useEffect(() => {
+    if (!focusSymbol) {
+      setFocusCorrections([])
+      return
+    }
+    let cancelled = false
+    window.api.chainCorrections
+      .list(focusSymbol)
+      .then((rows) => {
+        if (!cancelled) setFocusCorrections(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setFocusCorrections([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [focusSymbol])
+  useEffect(() => {
+    return window.api.chainCorrections.onUpdated((sym) => {
+      if (!focusSymbol) return
+      if (sym.toUpperCase() !== focusSymbol.toUpperCase()) return
+      window.api.chainCorrections
+        .list(focusSymbol)
+        .then((rows) => setFocusCorrections(rows))
+        .catch(() => {
+          /* keep prior state */
+        })
+    })
+  }, [focusSymbol])
+
+  const correctedSymbolSet = useMemo(() => {
+    const s = new Set<string>()
+    for (const c of focusCorrections) s.add(c.subjectKey.toUpperCase())
+    return s
+  }, [focusCorrections])
+
+  // Hidden-by-user list — chips removed from the chain via "not relevant".
+  // Surfaced as a footer in the focus panel so the user can restore them
+  // (the chips themselves are no longer visible in the suppliers/customers
+  // clusters because applyCorrectionsToChain already filtered them out).
+  const hiddenCorrections = useMemo(
+    () => focusCorrections.filter((c) => c.correctionType === 'not-relevant'),
+    [focusCorrections]
+  )
+
+  // Right-click menu position + target. null when the menu is closed.
+  const [correctionMenu, setCorrectionMenu] = useState<{
+    symbol: string
+    category: Category
+    x: number
+    y: number
+  } | null>(null)
+
+  const openCorrectionMenu = (
+    symbol: string,
+    category: Category,
+    x: number,
+    y: number
+  ): void => {
+    setCorrectionMenu({ symbol, category, x, y })
+  }
+
+  const closeCorrectionMenu = (): void => setCorrectionMenu(null)
+
+  const handleCorrectionSelect = async (action: ChainCorrectionAction): Promise<void> => {
+    if (!correctionMenu || !focusSymbol) return
+    const { symbol } = correctionMenu
+    try {
+      if (action.type === 'remove') {
+        // Remove ALL corrections for this subject — there's at most a few
+        // and the UX intent of "Remove correction" is total reversion.
+        const targets = focusCorrections.filter(
+          (c) => c.subjectKey.toUpperCase() === symbol.toUpperCase()
+        )
+        await Promise.all(
+          targets.map((c) =>
+            window.api.chainCorrections.delete({
+              focusSymbol,
+              subjectType: c.subjectType,
+              subjectKey: c.subjectKey,
+              correctionType: c.correctionType
+            })
+          )
+        )
+      } else {
+        await window.api.chainCorrections.upsert({
+          focusSymbol,
+          subjectType: 'counterparty',
+          subjectKey: symbol,
+          correctionType: action.type,
+          correctedValue:
+            action.type === 'wrong-direction'
+              ? { direction: action.direction }
+              : action.type === 'wrong-relationship'
+                ? { relationship: action.relationship }
+                : null
+        })
+      }
+      // Optimistic refetch so the chain re-renders without waiting for the
+      // chainCorrections:updated broadcast (which fires from main but may
+      // race with the ticker-detail render path).
+      const fresh = await window.api.chainCorrections.list(focusSymbol)
+      setFocusCorrections(fresh)
+      // Also re-pull the chain itself — corrections are applied at chain
+      // read time on the main side, so we need a fresh chain to see the
+      // not-relevant filter / direction flip take effect.
+      const row = await window.api.stocks.getCompanyChain(focusSymbol)
+      setFocusChain(row?.status === 'ready' ? row.graph : null)
+    } catch (err) {
+      console.warn('[chainCorrection] failed to apply:', err)
+    }
+  }
+
+  const restoreHidden = async (subjectKey: string): Promise<void> => {
+    if (!focusSymbol) return
+    try {
+      await window.api.chainCorrections.delete({
+        focusSymbol,
+        subjectType: 'counterparty',
+        subjectKey,
+        correctionType: 'not-relevant'
+      })
+      const fresh = await window.api.chainCorrections.list(focusSymbol)
+      setFocusCorrections(fresh)
+      const row = await window.api.stocks.getCompanyChain(focusSymbol)
+      setFocusChain(row?.status === 'ready' ? row.graph : null)
+    } catch (err) {
+      console.warn('[chainCorrection] restore failed:', err)
+    }
+  }
+
   const openDetail = (symbol: string): void => {
     const t = tickerBySymbol.get(symbol.toUpperCase())
     if (t) onOpenTicker(t.id)
@@ -1044,18 +1183,107 @@ export function ValueChain({
     return out
   }, [focusSymbol, focusChain, stageLabelById])
 
-  const combinedCustomers = useMemo(
-    () => [...customerItems, ...unverifiedExtras.customers],
-    [customerItems, unverifiedExtras.customers]
-  )
-  const combinedSuppliers = useMemo(
-    () => [...supplierItems, ...unverifiedExtras.suppliers],
-    [supplierItems, unverifiedExtras.suppliers]
-  )
-  const combinedCompetitors = useMemo(
-    () => [...competitorItems, ...unverifiedExtras.competitors],
-    [competitorItems, unverifiedExtras.competitors]
-  )
+  // Merge unified-graph + unverified-chain buckets, then apply user
+  // corrections at the renderer level. Most counterparty chips come from
+  // the unified graph (overrides tables) which the main-side
+  // applyCorrectionsToChain doesn't touch — so without this merge-time
+  // correction pass, a "not relevant" verdict on a verified ticker chip
+  // would persist to the DB but the chip would still render. Three
+  // mutations apply here, mirroring the main-side semantics:
+  //   - 'not-relevant' → drop from every bucket
+  //   - 'wrong-direction' → move between supplier/customer
+  //   - 'wrong-relationship' → move into the named bucket
+  const { combinedCustomers, combinedSuppliers, combinedCompetitors } = useMemo(() => {
+    const rawCustomers = [...customerItems, ...unverifiedExtras.customers]
+    const rawSuppliers = [...supplierItems, ...unverifiedExtras.suppliers]
+    const rawCompetitors = [...competitorItems, ...unverifiedExtras.competitors]
+
+    if (focusCorrections.length === 0) {
+      return {
+        combinedCustomers: rawCustomers,
+        combinedSuppliers: rawSuppliers,
+        combinedCompetitors: rawCompetitors
+      }
+    }
+
+    const dropped = new Set<string>()
+    const moveTo = new Map<string, 'supplier' | 'customer' | 'competitor' | 'partner'>()
+    for (const c of focusCorrections) {
+      if (c.subjectType !== 'counterparty') continue
+      const key = c.subjectKey.toUpperCase()
+      if (c.correctionType === 'not-relevant') {
+        dropped.add(key)
+      } else if (c.correctionType === 'wrong-direction' && c.correctedValue?.direction) {
+        moveTo.set(key, c.correctedValue.direction)
+      } else if (
+        c.correctionType === 'wrong-relationship' &&
+        c.correctedValue?.relationship
+      ) {
+        moveTo.set(key, c.correctedValue.relationship)
+      }
+    }
+
+    const filterAndExtract = (
+      arr: Counterparty[]
+    ): { kept: Counterparty[]; moved: Counterparty[] } => {
+      const kept: Counterparty[] = []
+      const moved: Counterparty[] = []
+      for (const item of arr) {
+        const k = item.symbol.toUpperCase()
+        if (dropped.has(k)) continue
+        if (moveTo.has(k)) {
+          moved.push(item)
+          continue
+        }
+        kept.push(item)
+      }
+      return { kept, moved }
+    }
+
+    const sup = filterAndExtract(rawSuppliers)
+    const cus = filterAndExtract(rawCustomers)
+    const com = filterAndExtract(rawCompetitors)
+
+    // Reinsert moved chips into the bucket the user picked. Partner folds
+    // into customers (mirrors the unverifiedExtras convention above so the
+    // two surfaces agree on partner placement). Dedupe by symbol since the
+    // same chip may appear in both graph + chain sources.
+    const reinsertBuckets: Record<
+      'supplier' | 'customer' | 'competitor',
+      Counterparty[]
+    > = {
+      supplier: sup.kept,
+      customer: cus.kept,
+      competitor: com.kept
+    }
+    const seen: Record<string, Set<string>> = {
+      supplier: new Set(sup.kept.map((x) => x.symbol.toUpperCase())),
+      customer: new Set(cus.kept.map((x) => x.symbol.toUpperCase())),
+      competitor: new Set(com.kept.map((x) => x.symbol.toUpperCase()))
+    }
+    for (const item of [...sup.moved, ...cus.moved, ...com.moved]) {
+      const target = moveTo.get(item.symbol.toUpperCase())
+      if (!target) continue
+      const bucket = target === 'partner' ? 'customer' : target
+      if (seen[bucket].has(item.symbol.toUpperCase())) continue
+      seen[bucket].add(item.symbol.toUpperCase())
+      reinsertBuckets[bucket].push(item)
+    }
+
+    return {
+      combinedCustomers: reinsertBuckets.customer,
+      combinedSuppliers: reinsertBuckets.supplier,
+      combinedCompetitors: reinsertBuckets.competitor
+    }
+  }, [
+    customerItems,
+    supplierItems,
+    competitorItems,
+    unverifiedExtras.customers,
+    unverifiedExtras.suppliers,
+    unverifiedExtras.competitors,
+    focusCorrections
+  ])
   const presentCategories: Category[] = []
   if (combinedSuppliers.length > 0) presentCategories.push('supplier')
   if (combinedCompetitors.length > 0) presentCategories.push('competitor')
@@ -1305,6 +1533,8 @@ export function ValueChain({
                   onPick={toggleLock}
                   onHover={focusTile}
                   onLeave={scheduleClear}
+                  onContextMenu={(sym, x, y) => openCorrectionMenu(sym, 'supplier', x, y)}
+                  correctedSymbols={correctedSymbolSet}
                 />
                 <TransactionCluster
                   category="competitor"
@@ -1312,6 +1542,8 @@ export function ValueChain({
                   onPick={toggleLock}
                   onHover={focusTile}
                   onLeave={scheduleClear}
+                  onContextMenu={(sym, x, y) => openCorrectionMenu(sym, 'competitor', x, y)}
+                  correctedSymbols={correctedSymbolSet}
                 />
                 <TransactionCluster
                   category="customer"
@@ -1319,8 +1551,36 @@ export function ValueChain({
                   onPick={toggleLock}
                   onHover={focusTile}
                   onLeave={scheduleClear}
+                  onContextMenu={(sym, x, y) => openCorrectionMenu(sym, 'customer', x, y)}
+                  correctedSymbols={correctedSymbolSet}
                 />
               </div>
+              {hiddenCorrections.length > 0 && (
+                <div className="px-4 py-2 border-t border-edge/40 bg-surface-1/40">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-amber-400">
+                      Hidden by you
+                    </span>
+                    <span className="text-[10px] text-zinc-600">
+                      · {hiddenCorrections.length}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {hiddenCorrections.map((c) => (
+                      <button
+                        key={c.subjectKey}
+                        type="button"
+                        onClick={() => void restoreHidden(c.subjectKey)}
+                        title={`Restore ${c.subjectKey} to the chain`}
+                        className="inline-flex items-center gap-1 px-2 py-[3px] rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 text-amber-200 text-[10.5px] tabular-nums hover:bg-amber-500/15 transition-colors"
+                      >
+                        <span>{c.subjectKey}</span>
+                        <span className="text-amber-400/70">×</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-[11px] uppercase tracking-[0.2em] text-zinc-600">
@@ -1428,6 +1688,20 @@ export function ValueChain({
             onOpenTicker(id)
           }}
           onActivateTicker={onActivateTicker}
+        />
+      )}
+
+      {correctionMenu && (
+        <ChainCorrectionMenu
+          x={correctionMenu.x}
+          y={correctionMenu.y}
+          symbol={correctionMenu.symbol}
+          currentCategory={correctionMenu.category}
+          hasExistingCorrection={correctedSymbolSet.has(
+            correctionMenu.symbol.toUpperCase()
+          )}
+          onSelect={(action) => void handleCorrectionSelect(action)}
+          onClose={closeCorrectionMenu}
         />
       )}
     </div>
