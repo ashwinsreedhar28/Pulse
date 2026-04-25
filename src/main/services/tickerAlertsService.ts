@@ -21,7 +21,7 @@
 
 import type { StockQuote } from '../../preload'
 import { getPreferences } from '../database/preferences'
-import { getFundamentals as getCachedFundamentals } from './yahooFinanceService'
+import { peekFundamentals } from './yahooFinanceService'
 import { dispatchNotification } from './notificationService'
 
 // Format YYYY-MM-DD in America/New_York so the identityKey-per-market-day
@@ -121,13 +121,13 @@ function evaluateExtendedMove(quote: StockQuote, threshold: number, dayKey: stri
   }
 }
 
-// 52-week high/low touch — uses the in-memory fundamentals cache that
-// yahooFinanceService already maintains for the detail page. We only
-// alert when the fundamentals are warm; the cold path skips silently
-// (no extra fetches piggybacked on the alert tick).
-async function evaluate52wTouch(quote: StockQuote, dayKey: string): Promise<void> {
+// 52-week high/low touch — uses peekFundamentals (cache-only, never
+// fetches) so the alert tick never piggybacks a Yahoo HTTP request.
+// Cold path silently skips — fundamentals warm up via the user opening
+// the detail page or the fundamentals scheduler's own refresh path.
+function evaluate52wTouch(quote: StockQuote, dayKey: string): void {
   if (quote.price === null) return
-  const f = await getCachedFundamentals(quote.symbol)
+  const f = peekFundamentals(quote.symbol)
   if (!f) return
   // Touch tolerance: within 0.1% of the 52w extreme. Yahoo's value can lag
   // by a few minutes during a fast move, so requiring exact equality
@@ -156,10 +156,11 @@ async function evaluate52wTouch(quote: StockQuote, dayKey: string): Promise<void
 }
 
 // Public entry point — called by stocksScheduler after each successful
-// quote tick with the freshly-broadcast quote rows. Synchronous-ish:
-// evaluateDailyMove + evaluateGapAtOpen + evaluateExtendedMove are pure
-// (no IO), evaluate52wTouch hits the in-memory fundamentals cache.
-export async function evaluateStockAlerts(quotes: StockQuote[]): Promise<void> {
+// quote tick with the freshly-broadcast quote rows. Fully synchronous
+// now (peekFundamentals is cache-only) so no event-loop yields between
+// evaluations — eliminates the TOCTOU window where two evaluators
+// could both pass the daily-cap check before either logged.
+export function evaluateStockAlerts(quotes: StockQuote[]): void {
   if (quotes.length === 0) return
   const prefs = getPreferences()
   // Honor the master Stock category toggle here too; the central
@@ -179,10 +180,6 @@ export async function evaluateStockAlerts(quotes: StockQuote[]): Promise<void> {
     evaluateDailyMove(q, dailyThreshold, dayKey)
     evaluateGapAtOpen(q, gapThreshold, dayKey)
     evaluateExtendedMove(q, extThreshold, dayKey)
-    // 52w touch fetches an in-memory cache; safe to await without
-    // serializing the loop.
-    void evaluate52wTouch(q, dayKey).catch(() => {
-      /* swallow — alert is best-effort */
-    })
+    evaluate52wTouch(q, dayKey)
   }
 }

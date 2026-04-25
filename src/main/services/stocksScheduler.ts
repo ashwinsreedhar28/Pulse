@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import { listTickers } from '../database/tickers'
 import { getQuotes as getStooqQuotes, type StockQuote } from './stooqService'
 import { getExtendedQuotes, getYahooQuotes } from './yahooFinanceService'
+import { evaluateStockAlerts } from './tickerAlertsService'
 
 // Three cadences, picked to match when Stooq data is actually changing:
 //  - Active: weekday 04:00–20:00 ET (pre-market + regular + after-hours)
@@ -116,12 +117,11 @@ async function tick(): Promise<void> {
     lastQuotes = quotes
     broadcast(quotes)
     // Phase 2: feed every successful tick into the stock-alerts evaluator.
-    // The evaluator is a no-op when notifyStocksEnabled is false, so the
-    // import is cheap regardless of user preferences. Fire-and-forget —
-    // alerts shouldn't block the next tick.
+    // Synchronous call — no event-loop yield, no TOCTOU window between
+    // daily-cap checks. The evaluator early-returns when stocks alerts
+    // are disabled in preferences.
     try {
-      const { evaluateStockAlerts } = await import('./tickerAlertsService')
-      void evaluateStockAlerts(quotes)
+      evaluateStockAlerts(quotes)
     } catch (err) {
       console.warn(
         '[stocks] tickerAlerts evaluator failed:',

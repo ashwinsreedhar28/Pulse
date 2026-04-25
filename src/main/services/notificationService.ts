@@ -93,23 +93,19 @@ function resolveIcon(): Electron.NativeImage | null {
   return null
 }
 
-function isInQuietHours(): boolean {
-  try {
-    const prefs = getPreferences()
-    if (!prefs.quietHoursEnabled) return false
-    const now = new Date()
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    const start = prefs.quietHoursStart
-    const end = prefs.quietHoursEnd
-    if (start <= end) return hhmm >= start && hhmm < end
-    return hhmm >= start || hhmm < end
-  } catch {
-    return false
-  }
+type Prefs = ReturnType<typeof getPreferences>
+
+function isInQuietHours(prefs: Prefs): boolean {
+  if (!prefs.quietHoursEnabled) return false
+  const now = new Date()
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const start = prefs.quietHoursStart
+  const end = prefs.quietHoursEnd
+  if (start <= end) return hhmm >= start && hhmm < end
+  return hhmm >= start || hhmm < end
 }
 
-function isCategoryEnabled(category: NotificationCategory): boolean {
-  const prefs = getPreferences()
+function isCategoryEnabled(prefs: Prefs, category: NotificationCategory): boolean {
   switch (category) {
     case 'article':
     case 'digest':
@@ -173,7 +169,18 @@ function attachClickHandler(notif: Notification, action: NotificationClickAction
 
 export function dispatchNotification(candidate: NotificationCandidate): DispatchOutcome {
   if (!Notification.isSupported()) return { ok: false, reason: 'unsupported' }
-  if (!isCategoryEnabled(candidate.category)) {
+  // Read preferences ONCE per dispatch and thread the value into helpers.
+  // Each getPreferences() call runs `SELECT key, value FROM preferences`
+  // (~25 rows) and rebuilds a Map; previously we paid this 2-3× per call
+  // (category check, quiet-hours check, cap check). On a feed-poll cycle
+  // promoting 20 articles that's 60+ SELECT-all-prefs queries in a burst.
+  let prefs: Prefs
+  try {
+    prefs = getPreferences()
+  } catch {
+    return { ok: false, reason: 'unsupported' }
+  }
+  if (!isCategoryEnabled(prefs, candidate.category)) {
     return { ok: false, reason: 'category-disabled' }
   }
 
@@ -186,14 +193,13 @@ export function dispatchNotification(candidate: NotificationCandidate): Dispatch
   }
 
   const importance = candidate.importance ?? 'normal'
-  if (importance === 'normal' && isInQuietHours()) {
+  if (importance === 'normal' && isInQuietHours(prefs)) {
     return { ok: false, reason: 'quiet-hours' }
   }
 
   // Daily cap check. Counted across ALL categories so a price-action heavy
   // day doesn't drown out news, and vice versa. 0 = notifications fully
   // disabled (preferences clamp this 0..50).
-  const prefs = getPreferences()
   if (prefs.notificationDailyCap <= 0) {
     return { ok: false, reason: 'capped' }
   }

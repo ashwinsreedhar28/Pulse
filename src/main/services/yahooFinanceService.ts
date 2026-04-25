@@ -204,6 +204,18 @@ function raw(field: RawField | undefined): number | null {
   return field.raw
 }
 
+// Cache-only accessor — never fetches, never blocks. Returns whatever's
+// already in the in-memory fundamentals cache for this symbol, even if
+// expired (consumer can decide whether stale-data is acceptable).
+// Used by alert evaluators that run on every stocksScheduler tick — a
+// real fetch in that hot path would burn the Yahoo crumb budget against
+// 52w-touch checks for the entire watchlist every 30 minutes.
+export function peekFundamentals(symbol: string): Fundamentals | null {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return null
+  return fundamentalsCache.get(sym)?.value ?? null
+}
+
 export async function getFundamentals(symbol: string): Promise<Fundamentals | null> {
   const sym = symbol.trim().toUpperCase()
   if (!sym) return null

@@ -171,9 +171,32 @@ async function tick(): Promise<void> {
       )
     }
 
+    // Garbage-collect lastSeen entries for games that have been final
+    // for >48h. Without this the map grows unboundedly across an MLB
+    // season (~2,400 games/year). Stale entries also bloat the
+    // favorite-team filter loop slightly — cheap, but no reason to
+    // keep them.
+    pruneStaleLastSeen()
+
     if (!armed) armed = true
   } catch (err) {
     console.warn('[sportsAlerts] tick failed:', err instanceof Error ? err.message : err)
+  }
+}
+
+function pruneStaleLastSeen(): void {
+  // Only run when the map is large enough to matter — sub-256 entries is
+  // negligible memory and skipping the walk avoids per-tick overhead
+  // when you're not following many leagues.
+  if (lastSeen.size < 256) return
+  for (const [key, state] of lastSeen) {
+    // Final + notified = no future state transitions possible. Safe to
+    // drop. The next listGames pass will re-add the entry only if the
+    // game reappears in the 3-day window (it shouldn't — finals stay
+    // final), so dropping is one-way.
+    if (state.status === 'final' && state.notifiedFinal) {
+      lastSeen.delete(key)
+    }
   }
 }
 
