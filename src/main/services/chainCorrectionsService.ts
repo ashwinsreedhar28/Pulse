@@ -12,6 +12,7 @@
 
 import { BrowserWindow } from 'electron'
 
+import { getDb } from '../database/connection'
 import {
   deleteCorrection,
   listCorrectionsForFocus,
@@ -20,6 +21,36 @@ import {
   type UpsertCorrectionInput
 } from '../database/chainCorrections'
 import type { CompanyValueChain } from '../database/companyValueChains'
+
+// Lazy in-memory cache of focus symbols that have at least one stored
+// correction. applyCorrectionsToChain runs on every chain read, so the
+// common case (99% of tickers — no corrections) used to incur a full SELECT
+// per read. Now we hit the DB once per session for a DISTINCT focusSymbol
+// roll-up and short-circuit the SELECT-per-read on misses.
+//
+// Cache is invalidated on every write (apply / remove). Reads of an
+// individual focus's corrections still go to DB so the cache only carries
+// the cheap presence Set, not the full payload.
+let focusesWithCorrectionsCache: Set<string> | null = null
+
+function getFocusesWithCorrections(): Set<string> {
+  if (focusesWithCorrectionsCache) return focusesWithCorrectionsCache
+  try {
+    const rows = getDb()
+      .prepare(`SELECT DISTINCT focusSymbol FROM chain_corrections`)
+      .all() as Array<{ focusSymbol: string }>
+    focusesWithCorrectionsCache = new Set(rows.map((r) => r.focusSymbol.toUpperCase()))
+  } catch {
+    // DB not ready (boot / shutdown). Empty Set means we'll still go to
+    // DB on the next call, which will either succeed or error harmlessly.
+    focusesWithCorrectionsCache = new Set()
+  }
+  return focusesWithCorrectionsCache
+}
+
+function invalidateFocusesCache(): void {
+  focusesWithCorrectionsCache = null
+}
 
 export {
   type ChainCorrection,
@@ -43,6 +74,7 @@ export function listForFocus(focusSymbol: string): ChainCorrection[] {
 
 export function applyCorrection(input: UpsertCorrectionInput): ChainCorrection {
   const row = upsertCorrection(input)
+  invalidateFocusesCache()
   broadcastUpdated(row.focusSymbol)
   return row
 }
@@ -54,6 +86,7 @@ export function removeCorrection(input: {
   correctionType: ChainCorrection['correctionType']
 }): void {
   deleteCorrection(input)
+  invalidateFocusesCache()
   broadcastUpdated(input.focusSymbol)
 }
 
@@ -71,6 +104,10 @@ export function removeCorrection(input: {
 // whole class of "I forgot which company we're discussing" errors.
 export function formatCorrectionsForPrompt(focusSymbol: string): string | null {
   const focus = focusSymbol.toUpperCase()
+  // Skip-SELECT short-circuit on the common case (no corrections for this
+  // focus). Avoids hitting chain_corrections every regen for the 99% of
+  // tickers that have never been corrected.
+  if (!getFocusesWithCorrections().has(focus)) return null
   const corrections = listCorrectionsForFocus(focus)
   if (corrections.length === 0) return null
 
@@ -127,6 +164,11 @@ export function formatCorrectionsForPrompt(focusSymbol: string): string | null {
 // no corrections we return the original reference so identity-equality
 // checks in the renderer can short-circuit.
 export function applyCorrectionsToChain(chain: CompanyValueChain): CompanyValueChain {
+  // Skip-SELECT short-circuit: every chain read calls this, and the vast
+  // majority of focuses have no corrections. Hitting the cache instead of
+  // SELECTing chain_corrections per read is the single biggest perf win
+  // for this module.
+  if (!getFocusesWithCorrections().has(chain.focus.toUpperCase())) return chain
   const corrections = listCorrectionsForFocus(chain.focus)
   if (corrections.length === 0) return chain
 

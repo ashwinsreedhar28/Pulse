@@ -130,6 +130,11 @@ export function upsertCorrection(input: UpsertCorrectionInput): ChainCorrection 
       : null
   const focus = input.focusSymbol.toUpperCase()
   const subject = input.subjectKey.toUpperCase()
+  // ON CONFLICT preserves the original createdAt — that's the timestamp of
+  // the user's FIRST flag on this subject, which is meaningful telemetry
+  // (and shows up in the future "history of corrections" UI). The conflict
+  // path resets appliedAt to NULL so a re-flag forces the next regen to
+  // re-honor the verdict even if the prior application stamped it.
   getDb()
     .prepare(
       `INSERT INTO chain_corrections (
@@ -140,7 +145,6 @@ export function upsertCorrection(input: UpsertCorrectionInput): ChainCorrection 
        DO UPDATE SET
          correctedValueJson = excluded.correctedValueJson,
          note = excluded.note,
-         createdAt = excluded.createdAt,
          appliedAt = NULL`
     )
     .run(
@@ -152,16 +156,35 @@ export function upsertCorrection(input: UpsertCorrectionInput): ChainCorrection 
       input.note ?? null,
       now
     )
-  return {
-    focusSymbol: focus,
-    subjectType: input.subjectType,
-    subjectKey: subject,
-    correctionType: input.correctionType,
-    correctedValue: input.correctedValue ?? null,
-    note: input.note ?? null,
-    createdAt: now,
-    appliedAt: null
+  // Read back the canonical row so callers see the actual createdAt — on
+  // the conflict path the original creation timestamp is preserved, so
+  // reusing `now` would lie about when the user first flagged the subject.
+  const row = getDb()
+    .prepare(
+      `SELECT focusSymbol, subjectType, subjectKey, correctionType,
+              correctedValueJson, note, createdAt, appliedAt
+         FROM chain_corrections
+        WHERE focusSymbol = ?
+          AND subjectType = ?
+          AND subjectKey = ?
+          AND correctionType = ?`
+    )
+    .get(focus, input.subjectType, subject, input.correctionType) as RawRow | undefined
+  if (!row) {
+    // Should never happen — INSERT-OR-UPDATE just ran successfully — but
+    // fall back to the input values to satisfy the non-null return type.
+    return {
+      focusSymbol: focus,
+      subjectType: input.subjectType,
+      subjectKey: subject,
+      correctionType: input.correctionType,
+      correctedValue: input.correctedValue ?? null,
+      note: input.note ?? null,
+      createdAt: now,
+      appliedAt: null
+    }
   }
+  return rowToCorrection(row)
 }
 
 export function deleteCorrection(input: {
