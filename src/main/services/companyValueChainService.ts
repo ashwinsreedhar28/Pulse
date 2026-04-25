@@ -495,6 +495,11 @@ export async function generateCompanyChain(input: {
   symbol: string
   companyName: string
   force?: boolean
+  // Force a specific AI provider for this generation. 'claude' bypasses
+  // the local cap counter and skips Ollama fallback — used by the one-shot
+  // "regenerate all with Claude" flow when the user wants maximum citation
+  // quality. Undefined uses the normal preference-based picker.
+  forceProvider?: 'claude' | 'ollama'
 }): Promise<CompanyValueChain | null> {
   const sym = input.symbol.trim().toUpperCase()
   if (!sym) return null
@@ -644,17 +649,20 @@ export async function generateCompanyChain(input: {
     feedTitle: n.feedTitle
   }))
 
-  const { result: generated, provider } = await routedGenerate({
-    symbol: sym,
-    companyName: input.companyName,
-    profileDescription: profile?.description ?? null,
-    filing: filingPayload,
-    articles: articlesPayload,
-    canonicalStages,
-    sectorName: sectorCatalogEntry?.name,
-    crossChainMentions: crossChain,
-    userCorrectionsBlock
-  })
+  const { result: generated, provider } = await routedGenerate(
+    {
+      symbol: sym,
+      companyName: input.companyName,
+      profileDescription: profile?.description ?? null,
+      filing: filingPayload,
+      articles: articlesPayload,
+      canonicalStages,
+      sectorName: sectorCatalogEntry?.name,
+      crossChainMentions: crossChain,
+      userCorrectionsBlock
+    },
+    input.forceProvider ? { forceProvider: input.forceProvider } : undefined
+  )
 
   // Stamp the generated-by provider into the provenance string so the
   // detail-page card can show "Claude · profile + 10-K" vs "Ollama · profile",
@@ -831,6 +839,13 @@ export async function regenerateAllChains(
     idleGateSeconds?: number
     maxSymbols?: number
     stalestFirst?: boolean
+    // Force a specific AI provider for every ticker in the run.
+    // 'claude' bypasses the local cap counter and skips Ollama fallback —
+    // used by the one-shot "regenerate all with Claude" flow. The user
+    // accepts the marginal API cost in exchange for consistent citation
+    // quality. On per-call Claude failure (real Anthropic 429 or auth
+    // error), the ticker is recorded as failed and the loop continues.
+    forceProvider?: 'claude' | 'ollama'
   } = {}
 ): Promise<RegenerateAllProgress> {
   if (regenRunning) return regenProgress
@@ -930,7 +945,12 @@ export async function regenerateAllChains(
     broadcastRegenProgress()
     const companyName = nameBySymbol.get(sym) ?? getTickerBySymbol(sym)?.companyName ?? sym
     try {
-      await generateCompanyChain({ symbol: sym, companyName, force: true })
+      await generateCompanyChain({
+        symbol: sym,
+        companyName,
+        force: true,
+        forceProvider: opts.forceProvider
+      })
       regenProgress = { ...regenProgress, succeeded: regenProgress.succeeded + 1 }
     } catch (err) {
       console.warn(

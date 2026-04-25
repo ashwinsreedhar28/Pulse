@@ -1380,6 +1380,11 @@ const api = {
       invoke<CompanyValueChainRow | null>('stocks:getCompanyChain', symbol),
     regenerateAllChains: (): Promise<{ ok: boolean }> =>
       invoke<{ ok: boolean }>('stocks:regenerateAllChains'),
+    // One-shot Claude-only regen. Bypasses the local cap counter and
+    // disables Ollama fallback. Used to backfill citations across the
+    // entire watchlist with maximum quality — accept the API cost.
+    regenerateAllChainsForceClaude: (): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('stocks:regenerateAllChainsForceClaude'),
     getRegenerateAllProgress: (): Promise<RegenerateAllProgress> =>
       invoke<RegenerateAllProgress>('stocks:getRegenerateAllProgress'),
     onRegenerateAllProgress: (cb: (p: RegenerateAllProgress) => void): (() => void) => {

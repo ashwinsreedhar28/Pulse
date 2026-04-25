@@ -582,6 +582,16 @@ export function registerDbIpc(): void {
     void regenerateAllChains()
     return { ok: true }
   })
+  // One-shot Claude-only variant. Bypasses the local cap counter and
+  // disables Ollama fallback so the entire run uses Sonnet for maximum
+  // citation quality. The renderer surfaces this as a separate explicit
+  // action rather than a toggle on the regular regen — different cost
+  // profile, different risk profile, deserves its own button click.
+  ipcMain.handle('stocks:regenerateAllChainsForceClaude', async () => {
+    const { regenerateAllChains } = await import('../services/companyValueChainService')
+    void regenerateAllChains({ forceProvider: 'claude' })
+    return { ok: true }
+  })
   ipcMain.handle('stocks:getRegenerateAllProgress', async () => {
     const { getRegenerateAllProgress } = await import('../services/companyValueChainService')
     return getRegenerateAllProgress()

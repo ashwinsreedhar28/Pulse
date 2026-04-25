@@ -152,8 +152,33 @@ function pickProviderForCall(): AiProviderResolved {
 }
 
 export async function generateCompanyValueChain(
-  input: Parameters<typeof ollamaChain>[0]
+  input: Parameters<typeof ollamaChain>[0],
+  opts: {
+    // Force a specific provider for this call. 'claude' bypasses the
+    // local daily-cap counter AND skips the Ollama fallback when Claude
+    // returns null — the ticker is recorded as failed instead of falling
+    // through to a mixed-quality result. Used by the one-shot
+    // "regenerate all with Claude" flow when the user wants maximum
+    // citation quality and is willing to consume their Anthropic quota.
+    // 'ollama' forces Ollama regardless of preference. Undefined uses
+    // the normal preference-based picker.
+    forceProvider?: 'claude' | 'ollama'
+  } = {}
 ): Promise<{ result: GeneratedValueChain | null; provider: AiProviderResolved }> {
+  if (opts.forceProvider === 'claude') {
+    // Bypass recordClaudeCall so the local cap counter doesn't bottleneck
+    // the run — Anthropic's API will enforce real per-account rate limits.
+    const viaClaude = await claudeChain(input)
+    if (viaClaude) return { result: viaClaude, provider: 'claude' }
+    console.warn(
+      `[aiClient] forceProvider=claude returned null for ${input.symbol}; not falling back`
+    )
+    return { result: null, provider: 'claude' }
+  }
+  if (opts.forceProvider === 'ollama') {
+    const viaOllama = await ollamaChain(input)
+    return { result: viaOllama, provider: 'ollama' }
+  }
   const primary = pickProviderForCall()
   if (primary === 'claude') {
     recordClaudeCall()
