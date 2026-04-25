@@ -378,6 +378,17 @@ export default function App(): JSX.Element {
     return unsub
   }, [refresh, refreshCategories])
 
+  // Notification click → open a symbol's detail page. Fired by the
+  // central notificationService for stock-alert notifications. Routes
+  // through the same handleTickerOpenStock flow used by the markets
+  // ticker bar so users land on the same StockDetail surface either way.
+  useEffect(() => {
+    const unsub = window.api.stocks.onOpenSymbol((symbol) => {
+      handleTickerOpenStock(symbol)
+    })
+    return unsub
+  }, [handleTickerOpenStock])
+
   // Eyebrow color tracks the filter-tab underline: Top Stories = red-500,
   // Finance = yellow-400, News = accent/blue. When a sidebar category is
   // active the domain dot's color (yellow or blue) is used instead so the

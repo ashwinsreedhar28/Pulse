@@ -205,6 +205,11 @@ export interface Preferences {
   notifySportsEnabled: boolean
   notifyFilingsEnabled: boolean
   notifyMacroEnabled: boolean
+  // Stock-alert thresholds (Phase 2). Daily move triggers when a quote's
+  // changePct (or extended-hours equivalent) crosses ±N%. Gap triggers
+  // when (open - prevClose) / prevClose crosses ±N% at market open.
+  stockDailyMovePct: number
+  stockGapOpenPct: number
 }
 
 export interface SportsTeam {
@@ -1408,6 +1413,16 @@ const api = {
       ipcRenderer.on('companyChain:updated', listener)
       return (): void => {
         ipcRenderer.off('companyChain:updated', listener)
+      }
+    },
+    // Notification click → open the symbol's detail page. Fired by the
+    // central notificationService when the user clicks a stock alert
+    // (daily move, gap, 52w touch, analyst change, etc.).
+    onOpenSymbol: (cb: (symbol: string) => void): (() => void) => {
+      const listener = (_e: unknown, symbol: string): void => cb(symbol)
+      ipcRenderer.on('stocks:openSymbol', listener)
+      return (): void => {
+        ipcRenderer.off('stocks:openSymbol', listener)
       }
     },
     onUpdated: (cb: (quotes: StockQuote[]) => void): (() => void) => {

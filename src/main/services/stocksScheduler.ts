@@ -115,6 +115,19 @@ async function tick(): Promise<void> {
 
     lastQuotes = quotes
     broadcast(quotes)
+    // Phase 2: feed every successful tick into the stock-alerts evaluator.
+    // The evaluator is a no-op when notifyStocksEnabled is false, so the
+    // import is cheap regardless of user preferences. Fire-and-forget —
+    // alerts shouldn't block the next tick.
+    try {
+      const { evaluateStockAlerts } = await import('./tickerAlertsService')
+      void evaluateStockAlerts(quotes)
+    } catch (err) {
+      console.warn(
+        '[stocks] tickerAlerts evaluator failed:',
+        err instanceof Error ? err.message : err
+      )
+    }
   } catch (err) {
     console.warn('[stocks] tick failed:', err instanceof Error ? err.message : err)
   }

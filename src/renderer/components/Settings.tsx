@@ -1114,7 +1114,9 @@ const CORE_PREF_KEYS: (keyof Preferences)[] = [
   'notifyStocksEnabled',
   'notifySportsEnabled',
   'notifyFilingsEnabled',
-  'notifyMacroEnabled'
+  'notifyMacroEnabled',
+  'stockDailyMovePct',
+  'stockGapOpenPct'
 ]
 const REELS_PREF_KEYS: (keyof Preferences)[] = [
   'ttsEngine',
@@ -1241,6 +1243,31 @@ function PreferencesTab(): JSX.Element {
             onChange={(v) => patch('notifyStocksEnabled', v)}
           />
         </PrefRow>
+        {draft.notifyStocksEnabled && (
+          <>
+            <PrefRow label="Daily move threshold (±%)">
+              <NumberInput
+                value={draft.stockDailyMovePct}
+                min={0.5}
+                max={30}
+                onChange={(v) => patch('stockDailyMovePct', v)}
+              />
+            </PrefRow>
+            <PrefRow label="Gap-at-open threshold (±%)">
+              <NumberInput
+                value={draft.stockGapOpenPct}
+                min={0.5}
+                max={20}
+                onChange={(v) => patch('stockGapOpenPct', v)}
+              />
+            </PrefRow>
+            <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
+              Daily move covers regular session AND pre/after-hours
+              (separate alerts per session). 52-week-high/low touches and
+              gap-at-open also fire when their thresholds are met.
+            </div>
+          </>
+        )}
         <PrefRow label="Sports (HRs, goals, NBA milestones)">
           <ToggleSwitch
             checked={draft.notifySportsEnabled}

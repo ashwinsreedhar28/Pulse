@@ -47,6 +47,13 @@ export interface Preferences {
   notifySportsEnabled: boolean // covers HRs / goals / NBA milestones (Phase 3)
   notifyFilingsEnabled: boolean // covers SEC 8-K / Form 4 (Phase 4)
   notifyMacroEnabled: boolean // VIX spike / DGS10 moves (Phase 4)
+  // Phase 2 thresholds for stock-movement alerts. Percentages are
+  // unsigned (movements in either direction trigger above the threshold).
+  // Defaults are tight enough that on a normal market day with the
+  // user's full watchlist, the daily cap (5/day) is usually the binding
+  // constraint, not the threshold.
+  stockDailyMovePct: number // daily move ±N% triggers alert (default 5)
+  stockGapOpenPct: number // gap at open ±N% triggers alert (default 2)
 }
 
 const DEFAULTS: Preferences = {
@@ -70,7 +77,9 @@ const DEFAULTS: Preferences = {
   notifyStocksEnabled: true,
   notifySportsEnabled: true,
   notifyFilingsEnabled: true,
-  notifyMacroEnabled: true
+  notifyMacroEnabled: true,
+  stockDailyMovePct: 5,
+  stockGapOpenPct: 2
 }
 
 export function getPreferences(): Preferences {
@@ -114,7 +123,17 @@ export function getPreferences(): Preferences {
     notifyStocksEnabled: boolPref(map.get('notifyStocksEnabled'), DEFAULTS.notifyStocksEnabled),
     notifySportsEnabled: boolPref(map.get('notifySportsEnabled'), DEFAULTS.notifySportsEnabled),
     notifyFilingsEnabled: boolPref(map.get('notifyFilingsEnabled'), DEFAULTS.notifyFilingsEnabled),
-    notifyMacroEnabled: boolPref(map.get('notifyMacroEnabled'), DEFAULTS.notifyMacroEnabled)
+    notifyMacroEnabled: boolPref(map.get('notifyMacroEnabled'), DEFAULTS.notifyMacroEnabled),
+    stockDailyMovePct: clamp(
+      Number(map.get('stockDailyMovePct') ?? DEFAULTS.stockDailyMovePct),
+      0.5,
+      30
+    ),
+    stockGapOpenPct: clamp(
+      Number(map.get('stockGapOpenPct') ?? DEFAULTS.stockGapOpenPct),
+      0.5,
+      20
+    )
   }
 }
 
