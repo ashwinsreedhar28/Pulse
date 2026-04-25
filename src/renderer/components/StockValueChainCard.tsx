@@ -165,9 +165,10 @@ function SourceBadge({
     title = `${attr} — from the model's training knowledge (no live link)`
   }
 
-  // 10.5px pill text is small but readable. The previous 8.5px was eye-
-  // strain tiny. Padding bumped slightly to match the larger glyph height.
-  const baseClasses = `inline-flex items-center px-2 py-[2px] rounded-full border text-[10.5px] font-semibold uppercase tracking-[0.12em] max-w-full ${meta.className}`
+  // 10.5px pill text is small but readable. flex-row + min-w-0 on the label
+  // span so long labels get text-ellipsis instead of overflowing the
+  // counterparty column. max-w-full clamps the pill to its container.
+  const baseClasses = `inline-flex items-center gap-1 px-2 py-[2px] rounded-full border text-[10.5px] font-semibold uppercase tracking-[0.12em] max-w-full ${meta.className}`
 
   if (openArgs && onOpen) {
     const args = openArgs
@@ -178,16 +179,23 @@ function SourceBadge({
           e.stopPropagation()
           onOpen(args.url, args.title, args.subtitle)
         }}
-        className={`${baseClasses} hover:brightness-125 cursor-pointer`}
+        className={`${baseClasses} cursor-pointer hover:brightness-125 hover:underline underline-offset-2`}
         title={title}
       >
-        {label}
+        {/* min-w-0 + truncate so the label ellipsises cleanly when the
+            cluster column is narrow rather than busting the pill width. */}
+        <span className="truncate min-w-0">{label}</span>
+        {/* Link arrow makes the click affordance obvious — without it the
+            pill looks like a static badge. */}
+        <span aria-hidden="true" className="shrink-0 text-[9px] opacity-80">
+          ↗
+        </span>
       </button>
     )
   }
   return (
     <span className={baseClasses} title={title}>
-      {label}
+      <span className="truncate min-w-0">{label}</span>
     </span>
   )
 }
