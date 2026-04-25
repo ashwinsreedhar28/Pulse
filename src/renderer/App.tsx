@@ -9,6 +9,7 @@ import { CalendarStrip } from './components/CalendarStrip'
 import { ExternalReader } from './components/ExternalReader'
 import { ValueChain } from './components/ValueChain'
 import { UnifiedValueChainCard } from './components/UnifiedValueChainCard'
+import { ValueChainDiagram } from './components/ValueChainDiagram'
 import { MorningBrief } from './components/MorningBrief'
 import { MacroPanel } from './components/MacroPanel'
 import { FcfSparkline } from './components/FcfSparkline'
@@ -850,7 +851,7 @@ function MarketsReel({ onOpenStock }: { onOpenStock: (symbol: string) => void })
   if (sectorGroups.length === 0) return <ReelPlaceholder text="Awaiting quotes\u2026" />
 
   return (
-    <div className="flex items-center gap-5 whitespace-nowrap animate-ticker pl-8">
+    <div className="flex items-center gap-4 whitespace-nowrap animate-ticker pl-8">
       {doubled.map((cell) => {
         if (cell.kind === 'header') {
           return <SectorHeaderChip key={cell.key} sector={cell.sector} />
@@ -931,7 +932,7 @@ function StoriesReel({
   if (articles.length === 0) return <ReelPlaceholder text="Fetching headlines…" />
   const items = [...articles, ...articles]
   return (
-    <div className="flex items-center gap-5 whitespace-nowrap animate-ticker pl-8">
+    <div className="flex items-center gap-4 whitespace-nowrap animate-ticker pl-8">
       {items.flatMap((a, i) => {
         const key = `s-${a.id}-${i}`
         return [
@@ -1018,7 +1019,7 @@ function SportsReel({ onOpenGame }: { onOpenGame: (g: Game) => void }): JSX.Elem
   }
   const doubled = [...cells, ...cells.map((c) => ({ ...c, key: `${c.key}-x` }))]
   return (
-    <div className="flex items-center gap-5 whitespace-nowrap animate-ticker pl-8">
+    <div className="flex items-center gap-4 whitespace-nowrap animate-ticker pl-8">
       {doubled.map((cell) => {
         if (cell.kind === 'header') {
           return <LeagueHeaderChip key={cell.key} league={cell.league} />
@@ -3370,6 +3371,11 @@ function StockDetail({
   const [financials, setFinancials] = useState<FinancialsSnapshot | null>(null)
   const [profile, setProfile] = useState<CompanyProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
+  // Diagram modal state — opened by the "View diagram" button on the
+  // value chain card, closes either via its own ✕ or by setting null.
+  // Symbol is captured at click time so the modal stays bound to the
+  // right ticker even if the user navigates inside it.
+  const [diagramSymbol, setDiagramSymbol] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -3712,6 +3718,20 @@ function StockDetail({
 
           <FinancialsDetailSection financials={financials} />
 
+          {/* Diagram launcher row above the value chain card. Mirrors the
+              "View diagram" button on the ValueChain page's focus panel so
+              users can reach the zoomable subgraph from either entry point.
+              Right-aligned so it doesn't compete with the card's header. */}
+          <div className="flex justify-end -mb-2">
+            <button
+              type="button"
+              onClick={() => setDiagramSymbol(ticker.symbol)}
+              className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-200 ring-1 ring-inset ring-purple-500/40 hover:bg-purple-500/25"
+            >
+              View diagram
+            </button>
+          </div>
+
           <UnifiedValueChainCard
             symbol={ticker.symbol}
             companyName={ticker.companyName ?? ticker.symbol}
@@ -3874,6 +3894,22 @@ function StockDetail({
           )}
         </div>
       </div>
+      {diagramSymbol && (
+        <ValueChainDiagram
+          initialSymbol={diagramSymbol}
+          tickers={tickers}
+          quotes={quote ? [quote] : []}
+          onClose={() => setDiagramSymbol(null)}
+          onOpenTicker={(id) => {
+            setDiagramSymbol(null)
+            onOpenTicker(id)
+          }}
+          onActivateTicker={(id) => {
+            void window.api.tickers.activate(id)
+          }}
+          onOpenURL={onOpenURL}
+        />
+      )}
     </div>
   )
 }
