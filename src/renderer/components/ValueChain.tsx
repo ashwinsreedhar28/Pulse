@@ -751,31 +751,12 @@ export function ValueChain({
     // Without this filter, regenerating KLAC would still leave the
     // unified view showing curated KLAC→INTC, KLAC→TSM, KLAC→MU edges
     // even though the generated chain replaced them.
-    // Strict-canonical filter: when an override edge touches a focus
-    // that has its own generated chain, the focus's chain is the source
-    // of truth — drop the edge unless `chain_gen_<focus>` is in the
-    // override's source list. This makes the unified view consistent
-    // with each focus's detail-page chain (regenerating KLAC drops
-    // edges from TSM's or AAPL's prior chains that mention KLAC, since
-    // KLAC's own chain didn't carry them through the strict-cite gate).
-    const isCanonicalForFocus = (sources: string[], focus: string): boolean =>
-      sources.includes(`chain_gen_${focus}`)
-    const passesStrictCanonical = (
-      from: string,
-      to: string,
-      sourceField: string
-    ): boolean => {
-      const sources = sourceField
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-      const fromHas = generatedChainSymbols.has(from)
-      const toHas = generatedChainSymbols.has(to)
-      if (fromHas && !isCanonicalForFocus(sources, from)) return false
-      if (toHas && !isCanonicalForFocus(sources, to)) return false
-      return true
-    }
-
+    // Cross-chain mentions ARE rendered: when TSM's chain absorbs an
+    // edge claiming TSM↔KLAC, that edge appears in KLAC's unified-view
+    // panel even if KLAC's own (strict-cited) chain didn't include it.
+    // This is multi-source corroboration, which is more informative than
+    // the focus's single chain alone. The detail page is single-source
+    // (focus's own chain only); the unified view is the aggregated view.
     const out: ValueChainEdge[] = []
     for (const o of edgeOverrides) {
       // Pull citations from override; fall back to legacy single-cite shape.
@@ -799,7 +780,6 @@ export function ValueChain({
       if (o.relationship === 'supplier' || o.relationship === 'partner') {
         const from = o.fromSymbol.toUpperCase()
         const to = o.toSymbol.toUpperCase()
-        if (!passesStrictCanonical(from, to, o.source ?? '')) continue
         out.push({
           from,
           to,
@@ -810,7 +790,6 @@ export function ValueChain({
       } else if (o.relationship === 'customer') {
         const from = o.toSymbol.toUpperCase()
         const to = o.fromSymbol.toUpperCase()
-        if (!passesStrictCanonical(from, to, o.source ?? '')) continue
         out.push({
           from,
           to,
@@ -869,25 +848,11 @@ export function ValueChain({
       if (o.relationship !== 'competitor') continue
       const a = o.fromSymbol.toUpperCase()
       const b = o.toSymbol.toUpperCase()
-      // Strict-canonical: when either side has its own chain, that chain
-      // must have contributed the competitor edge. Otherwise drop —
-      // matches the directional-edge rule above.
-      const sources = (o.source ?? '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-      if (
-        generatedChainSymbols.has(a) &&
-        !sources.includes(`chain_gen_${a}`)
-      ) {
-        continue
-      }
-      if (
-        generatedChainSymbols.has(b) &&
-        !sources.includes(`chain_gen_${b}`)
-      ) {
-        continue
-      }
+      // Cross-chain competitor pairs are kept (e.g. TSM's chain claiming
+      // KLAC↔ASML rivalry shows in KLAC's unified-view focus panel even
+      // when KLAC's own chain didn't carry it through strict-cite). This
+      // matches the directional-edge rule above — multi-source signal
+      // wins on the unified page.
       if (!m.has(a)) m.set(a, new Set())
       if (!m.has(b)) m.set(b, new Set())
       m.get(a)!.add(b)
