@@ -101,6 +101,48 @@
     "notes": "Workaround since Reuters killed their native RSS"
   },
   {
+    "title": "Bloomberg Markets (via Google News)",
+    "url": "https://news.google.com/rss/search?q=when:24h+allinurl:bloomberg.com/news&hl=en-US&gl=US&ceid=US:en",
+    "category": "General Financial",
+    "domain": "finance",
+    "notes": "Bloomberg has no public RSS — Google News workaround surfaces their headline coverage."
+  },
+  {
+    "title": "Wall Street Journal — Markets",
+    "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+    "category": "General Financial",
+    "domain": "finance",
+    "notes": "Direct RSS feed for WSJ Markets section."
+  },
+  {
+    "title": "Wall Street Journal — US Business",
+    "url": "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml",
+    "category": "General Financial",
+    "domain": "finance",
+    "notes": "Direct RSS feed for WSJ US business coverage."
+  },
+  {
+    "title": "CNBC — Top News",
+    "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+    "category": "General Financial",
+    "domain": "finance",
+    "notes": "Top news; high volume of finance + macro stories with native RSS."
+  },
+  {
+    "title": "Financial Times (via Google News)",
+    "url": "https://news.google.com/rss/search?q=when:24h+allinurl:ft.com&hl=en-US&gl=US&ceid=US:en",
+    "category": "General Financial",
+    "domain": "finance",
+    "notes": "FT's free RSS is paywalled-snippet only — Google News workaround surfaces equivalent coverage."
+  },
+  {
+    "title": "FreightWaves",
+    "url": "https://www.freightwaves.com/feed",
+    "category": "Mining & Materials",
+    "domain": "finance",
+    "notes": "Supply chain + logistics trade press. Direct supplier/customer relationship reporting."
+  },
+  {
     "title": "Associated Press",
     "url": "https://news.google.com/rss/search?q=when:24h+allinurl:apnews.com&hl=en-US&gl=US&ceid=US:en",
     "category": "US Geopolitics",

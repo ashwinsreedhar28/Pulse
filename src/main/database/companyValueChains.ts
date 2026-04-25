@@ -28,7 +28,7 @@ export interface CompanyValueChainNode {
 // Provenance for the edge claim — mirrors GeneratedValueChainEdgeSource
 // in ollamaService. Null on legacy chains generated before this field was
 // added. See that module for the label glossary.
-export type CompanyValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'model'
+export type CompanyValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'analyst' | 'model'
 
 // Specific citation pointing to the actual document the edge claim came
 // from. Optional — old chains generated before this feature shipped, and
@@ -60,6 +60,18 @@ export type CompanyValueChainEdgeCitation =
       feedTitle: string | null
     }
   | { kind: 'profile' } // Yahoo / SEC company profile blurb fed in
+  | {
+      kind: 'analyst'
+      // Analyst firm name (e.g., "Goldman Sachs"). Either an exact match
+      // from yahoo upgradeDowngradeHistory or a pattern-matched firm
+      // from the model's modelSource string.
+      firm: string
+      // YYYY-MM-DD or empty when unknown.
+      date: string
+      // Yahoo's per-symbol analyst page (the closest concrete public URL —
+      // per-rating-report URLs are paywalled).
+      url: string
+    }
   | {
       kind: 'model'
       // The model's free-text best guess at the source it learned the

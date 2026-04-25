@@ -1293,5 +1293,29 @@ export const migrations: Migration[] = [
           ON notification_log(sentAt DESC);
       `)
     }
+  },
+  {
+    version: 43,
+    name: 're-seed defaultFeeds.json — adds Bloomberg, WSJ, CNBC, FT, FreightWaves',
+    // Default-feed inserts use INSERT OR IGNORE keyed on the (title, url)
+    // unique constraint, so this safely no-ops on rows that already exist
+    // and inserts the new finance + supply-chain feeds for existing users.
+    // New installs pick these up via migration v3 / v5 reading the same
+    // JSON. Without this re-seed, only fresh installs would get the new
+    // feeds; existing users would never see Bloomberg/WSJ/etc. unless
+    // they added them by hand.
+    up: (db) => {
+      const findCategory = db.prepare<[string, string], { id: number }>(
+        `SELECT id FROM categories WHERE name = ? AND domain = ?`
+      )
+      const insert = db.prepare(
+        `INSERT OR IGNORE INTO feeds (title, url, categoryId, isEnabled) VALUES (?, ?, ?, 1)`
+      )
+      for (const feed of defaultFeeds as DefaultFeed[]) {
+        const cat = findCategory.get(feed.category, feed.domain)
+        if (!cat) continue
+        insert.run(feed.title, feed.url, cat.id)
+      }
+    }
   }
 ]

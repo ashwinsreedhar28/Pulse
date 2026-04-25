@@ -1210,12 +1210,14 @@ export interface GeneratedValueChain {
 // can drift independently if needed; the orchestrator passes identical
 // payloads into both.
 export interface OllamaChainGroundingFiling {
+  refId: string // 'F' | 'F2' | 'F3'
   accession: string
   cik: string
   formType: string
   filedAt: number
   url: string
   excerpt: string
+  excerptHint: string
 }
 export interface OllamaChainGroundingArticle {
   refId: string
@@ -1226,22 +1228,32 @@ export interface OllamaChainGroundingArticle {
   publishedAt: number | null
   feedTitle: string | null
 }
+export interface OllamaChainGroundingAnalyst {
+  refId: string // 'A1'..'A5'
+  firm: string
+  action: 'up' | 'down' | 'main' | 'init' | 'reit'
+  fromGrade: string | null
+  toGrade: string | null
+  date: string
+  url: string
+}
 
 export async function generateCompanyValueChain(input: {
   symbol: string
   companyName: string
   // Optional grounding material — whatever the caller has.
   profileDescription?: string | null
-  // Structured 10-K filing context — when present, the prompt cites it as
-  // ref "F" and the orchestrator can resolve sourceRef="F" back to a
-  // clickable filing citation. Falls back to the legacy raw-string
-  // tenKExcerpt for callers that haven't been updated.
-  filing?: OllamaChainGroundingFiling | null
+  // Structured SEC filings (10-K + 8-K + 10-Q) with refs F/F2/F3. Each
+  // carries its own excerpt. Backward compat: legacy callers passing
+  // tenKExcerpt as a raw string get a single F-ref filing.
+  filings?: OllamaChainGroundingFiling[]
   tenKExcerpt?: string | null
   // Structured news context — each article has a stable refId the model
   // emits as sourceRef on grounded edges. newsSnippets is the legacy
   // unciteable form.
   articles?: OllamaChainGroundingArticle[]
+  // Analyst rating events — refs A1..A5.
+  analystEvents?: OllamaChainGroundingAnalyst[]
   newsSnippets?: Array<{ title: string; summary: string | null }>
   // Canonical stage list from the focus's sector. When provided, the
   // prompt constrains Ollama to pick from this list verbatim — same
@@ -1282,12 +1294,14 @@ export async function generateCompanyValueChain(input: {
       `Company profile [ref P]:\n${input.profileDescription.slice(0, 1200)}`
     )
   }
-  if (input.filing) {
-    const filedDate = new Date(input.filing.filedAt).toISOString().slice(0, 10)
-    contextParts.push(
-      `${input.filing.formType} excerpt [ref F, filed ${filedDate}, accession ${input.filing.accession}]:\n` +
-        input.filing.excerpt.slice(0, 4000)
-    )
+  if (input.filings && input.filings.length > 0) {
+    for (const f of input.filings) {
+      const filedDate = new Date(f.filedAt).toISOString().slice(0, 10)
+      contextParts.push(
+        `${f.formType} excerpt [ref ${f.refId}, filed ${filedDate}, accession ${f.accession}, ${f.excerptHint}]:\n` +
+          f.excerpt.slice(0, 4000)
+      )
+    }
   } else if (input.tenKExcerpt) {
     contextParts.push(
       `10-K excerpt (Item 1 / Business) [ref F]:\n${input.tenKExcerpt.slice(0, 4000)}`
@@ -1295,7 +1309,7 @@ export async function generateCompanyValueChain(input: {
   }
   if (input.articles && input.articles.length > 0) {
     const bullets = input.articles
-      .slice(0, 6)
+      .slice(0, 15)
       .map((a) => {
         const dateStr = a.publishedAt
           ? new Date(a.publishedAt).toISOString().slice(0, 10)
@@ -1309,13 +1323,37 @@ export async function generateCompanyValueChain(input: {
     contextParts.push(`Recent news:\n${bullets}`)
   } else if (input.newsSnippets && input.newsSnippets.length > 0) {
     const bullets = input.newsSnippets
-      .slice(0, 6)
+      .slice(0, 15)
       .map((s, i) => {
         const sum = s.summary ? ` — ${s.summary.slice(0, 200)}` : ''
         return `${i + 1}. "${s.title}"${sum}`
       })
       .join('\n')
     contextParts.push(`Recent news:\n${bullets}`)
+  }
+  if (input.analystEvents && input.analystEvents.length > 0) {
+    const bullets = input.analystEvents
+      .map((a) => {
+        const transition =
+          a.fromGrade && a.toGrade
+            ? `${a.fromGrade} → ${a.toGrade}`
+            : a.toGrade
+              ? `to ${a.toGrade}`
+              : ''
+        const verb =
+          a.action === 'up'
+            ? 'upgraded'
+            : a.action === 'down'
+              ? 'downgraded'
+              : a.action === 'init'
+                ? 'initiated coverage'
+                : a.action === 'reit'
+                  ? 're-iterated'
+                  : 'maintained'
+        return `[ref ${a.refId}] ${a.firm} ${verb} ${transition} on ${a.date}`
+      })
+      .join('\n')
+    contextParts.push(`Analyst rating actions:\n${bullets}`)
   }
   if (input.crossChainMentions && input.crossChainMentions.length > 0) {
     const bullets = input.crossChainMentions
@@ -1365,9 +1403,9 @@ export async function generateCompanyValueChain(input: {
     `      "to": "node symbol",\n` +
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
     `      "note": "one short sentence, <120 chars",\n` +
-    `      "source": "filings" | "news" | "profile" | "model",\n` +
-    `      "sourceRef": "F" | "P" | "N1" | "N2" | ... (when source != "model"),\n` +
-    `      "modelSource": "short attribution" (REQUIRED when source = "model")\n` +
+    `      "source": "filings" | "news" | "profile" | "analyst" | "model",\n` +
+    `      "sourceRef": "F" | "F2" | "F3" | "P" | "N1"-"N15" | "A1"-"A5" (when source != "model"),\n` +
+    `      "modelSource": "concrete attribution" (REQUIRED when source = "model")\n` +
     `    }\n` +
     `  ]\n` +
     `}\n\n` +
@@ -1430,30 +1468,29 @@ export async function generateCompanyValueChain(input: {
     `- Reject a cross-chain mention only if you have stronger grounding ` +
     `(10-K, news snippet) that contradicts it.\n` +
     `\n` +
-    `Edge "source" field — cite where each edge claim comes from so users ` +
-    `can judge how grounded it is:\n` +
-    `- "filings" if the relationship is in the 10-K excerpt above.\n` +
-    `- "news" if it's in one of the recent news snippets above.\n` +
-    `- "profile" if it's from the company profile text above but not the 10-K.\n` +
-    `- "model" if the relationship comes from your general training knowledge ` +
-    `rather than any supplied context above. Be honest — over-claiming ` +
-    `grounding degrades user trust.\n` +
+    `Edge "source" field — STRICT CITATION MODE. Every edge MUST be ` +
+    `linkable to a specific document or named source the user can click ` +
+    `through to:\n` +
+    `- "filings" — supported by 10-K (F), 8-K (F2), or 10-Q (F3) excerpt above.\n` +
+    `- "news" — supported by one of the news articles above (N1..N15).\n` +
+    `- "analyst" — supported by an analyst rating action above (A1..A5).\n` +
+    `- "profile" — from the company profile text (P).\n` +
+    `- "model" — from training knowledge. STRICT RULES BELOW.\n` +
     `\n` +
-    `Edge "sourceRef" field — point to the SPECIFIC document the claim came ` +
-    `from. The valid refs are the [ref X] tags above:\n` +
-    `- "F" for the filing excerpt, "P" for the profile, "N1"/"N2"/... for ` +
-    `the article that mentions the relationship.\n` +
-    `- OMIT sourceRef when source="model".\n` +
-    `- Only emit refs that actually appeared in the context. If you can't ` +
-    `find a matching ref for a claim, set source="model" and emit ` +
-    `modelSource instead of fabricating a sourceRef.\n` +
+    `Edge "sourceRef" field — point to the SPECIFIC ref tag from above. ` +
+    `NEVER fabricate. If no matching ref exists, downgrade source to "model".\n` +
     `\n` +
-    `Edge "modelSource" field — REQUIRED when source="model". Name WHERE ` +
-    `in your training the relationship comes from. Be specific:\n` +
-    `- Good: "Apple FY2023 10-K", "TSMC 2024 annual report", "Bloomberg ` +
-    `supply-chain coverage 2022-2024", "${input.symbol} investor day 2024".\n` +
-    `- Bad: "common knowledge", "general training", "public information".\n` +
-    `- Keep under 80 chars. Be specific or omit the edge entirely.\n` +
+    `Edge "modelSource" — REQUIRED when source="model". Pulse drops edges ` +
+    `whose modelSource doesn't match a resolvable pattern, so use:\n` +
+    `- SEC filing: "${input.symbol} 10-K FY2023" / "${input.symbol} 8-K Mar 2024".\n` +
+    `- Investor day / earnings call: "${input.symbol} 2024 investor day" / ` +
+    `"${input.symbol} Q2 2024 earnings call".\n` +
+    `- Analyst note: "Goldman Sachs upgrade ${input.symbol} 2024".\n` +
+    `- News: "Bloomberg ${input.symbol} supply chain 2024" / "Reuters ${input.symbol}".\n` +
+    `\n` +
+    `If your knowledge doesn't match one of these patterns — if you'd write ` +
+    `"industry consensus", "general training", "common knowledge", or any ` +
+    `vague phrase — OMIT THE EDGE. Strict mode drops unlinkable edges.\n` +
     `\n` +
     (input.userCorrectionsBlock
       ? `\n${input.userCorrectionsBlock}\n\n` +

@@ -546,7 +546,7 @@ export interface CompanyValueChainNode {
 // 'news' = from a recent news snippet, 'profile' = from the company
 // profile description, 'model' = the LLM's general knowledge. Null on
 // legacy chains generated before this field was added.
-export type CompanyValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'model'
+export type CompanyValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'analyst' | 'model'
 
 // Specific document the edge claim points to. Renderer turns this into a
 // clickable chip — opens the SEC URL externally for filings, the in-app
@@ -570,6 +570,12 @@ export type CompanyValueChainEdgeCitation =
       feedTitle: string | null
     }
   | { kind: 'profile' }
+  | {
+      kind: 'analyst'
+      firm: string
+      date: string
+      url: string
+    }
   | {
       kind: 'model'
       // Free-text source attribution from the model's training knowledge

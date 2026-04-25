@@ -89,6 +89,11 @@ export const SOURCE_BADGE: Record<
     className: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
     title: 'Cited in the company profile description'
   },
+  analyst: {
+    label: 'Analyst',
+    className: 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-200',
+    title: 'Cited in an analyst rating action'
+  },
   model: {
     label: 'Model',
     className: 'border-violet-500/40 bg-violet-500/10 text-violet-200',
@@ -154,13 +159,22 @@ function SourceBadge({
         ? `${citation.feedTitle ?? 'Article'} · ${dateStr}`
         : (citation.feedTitle ?? null)
     }
+  } else if (citation?.kind === 'analyst') {
+    // Analyst rating event citation. URL is Yahoo's per-symbol analyst
+    // page (concrete public link; per-rating-report URLs are paywalled).
+    const dateStr = citation.date ? ` · ${citation.date}` : ''
+    label = `${citation.firm}${dateStr}`
+    title = `${citation.firm} analyst action${dateStr} — click to open Yahoo Finance analyst page`
+    openArgs = {
+      url: citation.url,
+      title: `${citation.firm} — analyst coverage`,
+      subtitle: citation.date || null
+    }
   } else if (citation?.kind === 'model' && citation.attribution) {
-    // Model-grounded edge with a free-text training attribution. Render
-    // the full string (no character cap) so users see the complete
-    // source name like "Industry analyst consensus circa 2023" or
-    // "JCI 10-K 2023 competitive landscape disclosure". The pill wraps
-    // to multiple lines when needed; readability beats compactness here
-    // since this IS the citation.
+    // Model-grounded edge with a free-text training attribution that
+    // wasn't pattern-resolvable to a real link. In STRICT mode these
+    // get dropped before reaching the renderer; this branch only fires
+    // for legacy chains generated before strict mode shipped.
     label = citation.attribution
     title = `${citation.attribution} — from the model's training knowledge (no live link)`
   }

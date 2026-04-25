@@ -22,6 +22,7 @@ import { resolveCompanyName } from './companyNameResolver'
 import { ensureCompanyProfile, getCompanyProfile } from './companyProfileService'
 import { generateCompanyValueChain as routedGenerate } from './aiClient'
 import type { GeneratedValueChain } from './ollamaService'
+import { getRecentAnalystChanges } from './yahooFinanceService'
 import { buildPrimaryDocUrl } from './secService'
 import { forceRefreshFilings } from './secFilingsService'
 import {
@@ -41,6 +42,14 @@ const FETCH_TIMEOUT_MS = 30_000
 
 function isAnnualReport(filing: SecFiling): boolean {
   return filing.formType === '10-K' || filing.formType === '10-K/A'
+}
+
+function isQuarterlyReport(filing: SecFiling): boolean {
+  return filing.formType === '10-Q' || filing.formType === '10-Q/A'
+}
+
+function isCurrentReport(filing: SecFiling): boolean {
+  return filing.formType === '8-K' || filing.formType === '8-K/A'
 }
 
 // Minimal HTML→text extractor tailored to SEC EDGAR documents. Building
@@ -83,19 +92,31 @@ function stripHtmlToText(html: string): string {
 
 // Bundled return: the excerpt text plus the metadata about WHICH filing
 // it came from. The chain generator threads this into its grounding-with-
-// refs payload so edges grounded in the 10-K can carry a clickable
+// refs payload so edges grounded in the filing can carry a clickable
 // citation back to the SEC archive URL.
-interface TenKExcerptResult {
+interface FilingExcerptResult {
   excerpt: string
   filing: SecFiling
   url: string
+  // Excerpt-extraction strategy used. Helps the prompt label what slice
+  // of the document the model is reading ("Item 1 / Business" vs the
+  // raw beginning of the filing).
+  excerptHint: string
 }
 
-async function fetchTenKExcerpt(symbol: string): Promise<TenKExcerptResult | null> {
-  const filings = getFilingsForSymbol(symbol, 10).filter(isAnnualReport)
-  const latest = filings[0]
-  if (!latest) return null
-  const url = buildPrimaryDocUrl(latest.cik, latest.accessionNumber, latest.primaryDocument)
+// Generic SEC filing body fetch + excerpt slice. Hits the same EDGAR
+// archive URL pattern as fetchTenKExcerpt previously did, but takes a
+// region-of-interest regex so each form type can target its most
+// relevant section:
+//   - 10-K:  Item 1 Business (value-chain disclosures + customer concentration)
+//   - 10-Q:  Item 2 MD&A (recent quarter's business commentary)
+//   - 8-K:   Item 7.01 / 8.01 / Item 2.02 / first exhibit
+async function fetchFilingExcerpt(
+  filing: SecFiling,
+  excerptStrategy: { regex: RegExp; hint: string; preBuffer: number; window: number },
+  fallbackHint: string
+): Promise<FilingExcerptResult | null> {
+  const url = buildPrimaryDocUrl(filing.cik, filing.accessionNumber, filing.primaryDocument)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
@@ -109,23 +130,84 @@ async function fetchTenKExcerpt(symbol: string): Promise<TenKExcerptResult | nul
     if (!res.ok) return null
     const html = await res.text()
     const text = stripHtmlToText(html)
-    if (text.length < 500) return null
-    // Slice to Item 1 (Business) — concentrated value-chain info lives
-    // there. Fallback to the first 6k chars when the marker isn't present.
-    const m = /item\s+1\.\s*business/i.exec(text)
-    const excerpt = m
-      ? text.slice(Math.max(0, m.index - 200), Math.min(text.length, Math.max(0, m.index - 200) + 6000))
-      : text.slice(0, 6000)
-    return { excerpt, filing: latest, url }
+    if (text.length < 300) return null
+    const m = excerptStrategy.regex.exec(text)
+    if (m) {
+      const start = Math.max(0, m.index - excerptStrategy.preBuffer)
+      const excerpt = text.slice(start, Math.min(text.length, start + excerptStrategy.window))
+      return { excerpt, filing, url, excerptHint: excerptStrategy.hint }
+    }
+    return {
+      excerpt: text.slice(0, excerptStrategy.window),
+      filing,
+      url,
+      excerptHint: fallbackHint
+    }
   } catch (err) {
     console.warn(
-      `[companyChain] 10-K fetch failed for ${symbol}:`,
+      `[companyChain] ${filing.formType} fetch failed for ${filing.symbol}:`,
       err instanceof Error ? err.message : err
     )
     return null
   } finally {
     clearTimeout(timer)
   }
+}
+
+async function fetchTenKExcerpt(symbol: string): Promise<FilingExcerptResult | null> {
+  const filings = getFilingsForSymbol(symbol, 10).filter(isAnnualReport)
+  const latest = filings[0]
+  if (!latest) return null
+  return fetchFilingExcerpt(
+    latest,
+    {
+      regex: /item\s+1\.\s*business/i,
+      hint: 'Item 1 / Business',
+      preBuffer: 200,
+      window: 6000
+    },
+    '10-K opening section'
+  )
+}
+
+async function fetchTenQExcerpt(symbol: string): Promise<FilingExcerptResult | null> {
+  const filings = getFilingsForSymbol(symbol, 10).filter(isQuarterlyReport)
+  const latest = filings[0]
+  if (!latest) return null
+  return fetchFilingExcerpt(
+    latest,
+    {
+      regex: /management['’]s\s+discussion\s+and\s+analysis|item\s+2\b/i,
+      hint: 'Item 2 / MD&A',
+      preBuffer: 200,
+      window: 5000
+    },
+    '10-Q opening section'
+  )
+}
+
+async function fetchEightKExcerpt(symbol: string): Promise<FilingExcerptResult | null> {
+  // 8-K filings vary wildly — earnings releases, investor presentations,
+  // material agreements, etc. Each Item code targets a different signal:
+  //   2.02 = earnings release / financial results
+  //   7.01 = Reg FD disclosure (investor day decks land here as Ex 99.1)
+  //   1.01 = entry into material agreement (supply contracts, etc.)
+  //   8.01 = "other events" (catch-all for press releases)
+  // We slice broadly — most 8-Ks are short enough that a 5k-char window
+  // captures the substance.
+  const filings = getFilingsForSymbol(symbol, 10).filter(isCurrentReport)
+  const latest = filings[0]
+  if (!latest) return null
+  return fetchFilingExcerpt(
+    latest,
+    {
+      regex: /item\s+(2\.02|7\.01|1\.01|8\.01)/i,
+      hint: '8-K disclosure',
+      preBuffer: 100,
+      window: 5000
+    },
+    '8-K opening section'
+  )
 }
 
 // Quick pull of the 6 most recent articles tagged to this symbol. Returns
@@ -141,8 +223,43 @@ interface RecentNewsRow {
   publishedAt: number | null
   feedTitle: string | null
 }
+// Supply-chain keyword pre-filter for news article context. We fetch
+// up to 30 most-recent articles tagged to the symbol, score each by
+// whether its title/summary mentions a supply-chain term (supplier,
+// customer, partner, contract, deal, acquisition, supply, etc.), then
+// keep the top 15 ordered by recency. Catches Bloomberg/Reuters/etc.
+// pieces that actually discuss supplier/customer dynamics rather than
+// macro coverage that just happens to mention the ticker.
+const SUPPLY_CHAIN_KEYWORDS = [
+  'supplier',
+  'supply',
+  'customer',
+  'partner',
+  'partnership',
+  'agreement',
+  'contract',
+  'deal',
+  'acquire',
+  'acquisition',
+  'merger',
+  'award',
+  'selected',
+  'won',
+  'order',
+  'shipment',
+  'foundry',
+  'fabricate',
+  'license',
+  'royalty',
+  'distribut',
+  'reseller',
+  'OEM',
+  'integrator',
+  'tier'
+]
+
 function fetchRecentNews(symbol: string): RecentNewsRow[] {
-  return getDb()
+  const candidates = getDb()
     .prepare<[string, number], RecentNewsRow>(
       `SELECT a.id        AS articleId,
               a.title     AS title,
@@ -157,7 +274,23 @@ function fetchRecentNews(symbol: string): RecentNewsRow[] {
         ORDER BY a.publishedAt DESC
         LIMIT ?`
     )
-    .all(symbol.toUpperCase(), 6)
+    .all(symbol.toUpperCase(), 30)
+  if (candidates.length <= 15) return candidates
+  // Score by supply-chain keyword presence in title or summary. Keep
+  // candidates with hits first, ordered by recency; then fill with
+  // most-recent non-hit articles to reach 15.
+  const matches = (text: string | null): boolean => {
+    if (!text) return false
+    const lower = text.toLowerCase()
+    return SUPPLY_CHAIN_KEYWORDS.some((kw) => lower.includes(kw))
+  }
+  const hits: RecentNewsRow[] = []
+  const misses: RecentNewsRow[] = []
+  for (const c of candidates) {
+    if (matches(c.title) || matches(c.summary)) hits.push(c)
+    else misses.push(c)
+  }
+  return [...hits, ...misses].slice(0, 15)
 }
 
 function broadcastUpdated(symbol: string): void {
@@ -313,71 +446,260 @@ type ChainEdge = {
   modelSource?: string | null
 }
 
-// Resolve the model-emitted sourceRef ("F", "P", "N1", ...) on each edge
-// into a structured CompanyValueChainEdgeCitation that the renderer can
-// turn into a clickable chip. We deliberately do NOT trust the model's
-// self-reported source category alone — the sourceRef MUST match a
-// context item we actually supplied. If the model fabricates a ref or
-// references one we didn't pass (e.g. "N7" when we only fed 6 articles),
-// citation is set to null and the user just sees the existing source-
-// category badge. Edges with no sourceRef get null citation.
+// Resolve the model-emitted sourceRef ("F" / "F2" / "F3" / "P" / "N1" /
+// "A1" / ...) on each edge into a structured CompanyValueChainEdgeCitation
+// that the renderer can turn into a clickable chip. STRICT-CITATION MODE:
+// edges that can't be resolved to a clickable link (no matching ref AND
+// no pattern-resolvable modelSource) are DROPPED here so the rendered
+// graph only contains edges with real provenance.
+//
+// Resolution order per edge:
+//   1. Direct ref lookup (F/F2/F3 → filings, N* → articles, A* → analyst,
+//      P → profile)
+//   2. Pattern match on modelSource (10-K/8-K/10-Q strings, named analyst
+//      firms, publisher names) → resolved citation
+//   3. Drop the edge.
+//
+// (1) and (2) cover the linkable cases. (3) keeps "industry consensus"
+// and other vague claims out of the chain entirely.
+interface FilingCitationData {
+  accession: string
+  cik: string
+  formType: string
+  filedAt: number
+  url: string
+}
+interface ArticleCitationData {
+  articleId: number
+  title: string
+  url: string | null
+  publishedAt: number | null
+  feedTitle: string | null
+}
+interface AnalystCitationData {
+  firm: string
+  url: string
+  date: string
+}
+
+// Resolve common patterns in the model's free-text modelSource attribution
+// to a real citation. Catches strings like "AAPL FY2023 10-K" / "TSM 8-K
+// Mar 2024" / "Goldman Sachs upgrade AAPL 2024" and upgrades the citation
+// from kind:'model' to kind:'filing' or kind:'analyst' with a clickable
+// URL. Returns null when nothing matched (caller drops the edge in
+// strict mode).
+function patternResolveModelSource(
+  attribution: string,
+  focusSymbol: string
+): import('../database/companyValueChains').CompanyValueChainEdgeCitation | null {
+  const text = attribution.trim()
+  if (!text) return null
+  const upper = text.toUpperCase()
+
+  // SEC filing patterns: 10-K / 10-Q / 8-K / DEF 14A. We optimistically
+  // match against the focus symbol's local SEC cache. Year extraction is
+  // best-effort: we look for either "FY" + 4-digit year, or a bare 20xx
+  // year token. Filing matched by form type + filedAt year (allowing for
+  // the typical filing-after-period-end gap).
+  const formMatch = upper.match(/\b(10-?K|10-?Q|8-?K|DEF\s*14A)\b/)
+  if (formMatch) {
+    const formType = formMatch[1].replace(/(\d)([KQ])/, '$1-$2') // "10K" -> "10-K"
+    const yearMatch = upper.match(/(?:FY)?\s*(20\d{2})/)
+    const year = yearMatch ? Number(yearMatch[1]) : null
+    const filings = getFilingsForSymbol(focusSymbol, 30)
+    let candidate = filings.find((f) => {
+      if (f.formType !== formType && f.formType !== `${formType}/A`) return false
+      if (!year) return true
+      const filedYear = new Date(f.filedAt).getFullYear()
+      // 10-K for FY2023 typically files in 2024 (3-month gap). Accept
+      // either the year matches OR year+1 matches.
+      return filedYear === year || filedYear === year + 1
+    })
+    if (!candidate && year) {
+      // Fallback: nearest filing of that form type — better some link
+      // than none if year mismatch.
+      candidate = filings.find((f) => f.formType === formType || f.formType === `${formType}/A`)
+    }
+    if (candidate) {
+      return {
+        kind: 'filing',
+        accession: candidate.accessionNumber,
+        cik: candidate.cik,
+        formType: candidate.formType,
+        filedAt: candidate.filedAt,
+        url: buildPrimaryDocUrl(candidate.cik, candidate.accessionNumber, candidate.primaryDocument)
+      }
+    }
+  }
+
+  // Investor day / earnings call → most recent 8-K.
+  if (/INVESTOR\s+DAY|EARNINGS\s+CALL|EARNINGS\s+RELEASE|REGULATION\s+FD/.test(upper)) {
+    const filings = getFilingsForSymbol(focusSymbol, 20)
+    const eightK = filings.find((f) => f.formType === '8-K' || f.formType === '8-K/A')
+    if (eightK) {
+      return {
+        kind: 'filing',
+        accession: eightK.accessionNumber,
+        cik: eightK.cik,
+        formType: eightK.formType,
+        filedAt: eightK.filedAt,
+        url: buildPrimaryDocUrl(eightK.cik, eightK.accessionNumber, eightK.primaryDocument)
+      }
+    }
+  }
+
+  // Analyst note patterns: "Goldman Sachs upgrade AAPL 2024",
+  // "Morgan Stanley note", "JP Morgan rating". Recognize known analyst
+  // firm names. Link to Yahoo's per-symbol analyst page (concrete, public).
+  const analystFirms = [
+    'Goldman Sachs',
+    'Morgan Stanley',
+    'JP Morgan',
+    'Bank of America',
+    'Citi',
+    'Wells Fargo',
+    'Barclays',
+    'Bernstein',
+    'Wedbush',
+    'Piper Sandler',
+    'Raymond James',
+    'Jefferies',
+    'Evercore',
+    'Cowen',
+    'Mizuho',
+    'UBS',
+    'Deutsche',
+    'Rosenblatt',
+    'Loop Capital',
+    'Truist'
+  ]
+  const matchedFirm = analystFirms.find((f) => upper.includes(f.toUpperCase()))
+  if (matchedFirm || /\b(ANALYST|UPGRADE|DOWNGRADE|RATING|CONSENSUS)\b/.test(upper)) {
+    return {
+      kind: 'analyst',
+      firm: matchedFirm ?? 'Analyst note',
+      url: `https://finance.yahoo.com/quote/${encodeURIComponent(focusSymbol)}/analysis`,
+      date: ''
+    }
+  }
+
+  // Bloomberg / Reuters / FT / WSJ / etc. — search local article DB for
+  // a matching article. If we have one tagged to the focus that mentions
+  // the publisher in title or summary, link to it. Otherwise null.
+  const publisherMatch = upper.match(
+    /\b(BLOOMBERG|REUTERS|WSJ|FT|FINANCIAL TIMES|CNBC|BARRON|FORBES|FORTUNE|ECONOMIST|NIKKEI)\b/
+  )
+  if (publisherMatch) {
+    const pubKw = publisherMatch[1].toLowerCase()
+    const article = getDb()
+      .prepare<
+        [string, string, string, string],
+        { id: number; title: string; url: string | null; publishedAt: number | null; feedTitle: string | null }
+      >(
+        `SELECT a.id, a.title, a.url, a.publishedAt, f.title AS feedTitle
+           FROM articles a
+           JOIN article_ticker_matches m ON m.articleId = a.id
+           LEFT JOIN feeds f ON f.id = a.feedId
+          WHERE m.symbol = ?
+            AND (LOWER(f.title) LIKE '%' || ? || '%'
+                 OR LOWER(a.title) LIKE '%' || ? || '%'
+                 OR LOWER(a.url) LIKE '%' || ? || '%')
+          ORDER BY a.publishedAt DESC
+          LIMIT 1`
+      )
+      .get(focusSymbol.toUpperCase(), pubKw, pubKw, pubKw) as
+      | { id: number; title: string; url: string | null; publishedAt: number | null; feedTitle: string | null }
+      | undefined
+    if (article) {
+      return {
+        kind: 'article',
+        articleId: article.id,
+        title: article.title,
+        url: article.url,
+        publishedAt: article.publishedAt,
+        feedTitle: article.feedTitle
+      }
+    }
+  }
+
+  return null
+}
+
 function attachCitations(
   edges: ChainEdge[],
-  filing: { accession: string; cik: string; formType: string; filedAt: number; url: string } | null,
-  articlesByRef: Map<
-    string,
-    {
-      articleId: number
-      title: string
-      url: string | null
-      publishedAt: number | null
-      feedTitle: string | null
-    }
-  >
+  filingsByRef: Map<string, FilingCitationData>,
+  articlesByRef: Map<string, ArticleCitationData>,
+  analystByRef: Map<string, AnalystCitationData>,
+  focusSymbol: string
 ): import('../database/companyValueChains').CompanyValueChainEdge[] {
-  return edges.map((edge) => {
+  const out: import('../database/companyValueChains').CompanyValueChainEdge[] = []
+  let dropped = 0
+  for (const edge of edges) {
     let citation: import('../database/companyValueChains').CompanyValueChainEdgeCitation | null = null
     const ref = (edge.sourceRef ?? '').toUpperCase()
-    if (ref === 'F' && filing) {
+    // Direct ref-supplied citations (the primary path — most edges land here).
+    if (ref.startsWith('F') && filingsByRef.has(ref)) {
+      const f = filingsByRef.get(ref)!
       citation = {
         kind: 'filing',
-        accession: filing.accession,
-        cik: filing.cik,
-        formType: filing.formType,
-        filedAt: filing.filedAt,
-        url: filing.url
+        accession: f.accession,
+        cik: f.cik,
+        formType: f.formType,
+        filedAt: f.filedAt,
+        url: f.url
       }
     } else if (ref === 'P') {
       citation = { kind: 'profile' }
-    } else if (ref.startsWith('N')) {
-      const article = articlesByRef.get(ref)
-      if (article) {
-        citation = {
-          kind: 'article',
-          articleId: article.articleId,
-          title: article.title,
-          url: article.url,
-          publishedAt: article.publishedAt,
-          feedTitle: article.feedTitle
-        }
+    } else if (ref.startsWith('N') && articlesByRef.has(ref)) {
+      const a = articlesByRef.get(ref)!
+      citation = {
+        kind: 'article',
+        articleId: a.articleId,
+        title: a.title,
+        url: a.url,
+        publishedAt: a.publishedAt,
+        feedTitle: a.feedTitle
       }
-    } else if (edge.source === 'model' || !ref) {
-      // For model-grounded edges, lift the model's free-text attribution
-      // (e.g. "Apple FY2023 10-K") into the citation. The renderer
-      // displays this as the badge label instead of the generic "Model".
-      citation = edge.modelSource
-        ? { kind: 'model', attribution: edge.modelSource }
-        : { kind: 'model' }
+    } else if (ref.startsWith('A') && analystByRef.has(ref)) {
+      const a = analystByRef.get(ref)!
+      citation = {
+        kind: 'analyst',
+        firm: a.firm,
+        url: a.url,
+        date: a.date
+      }
+    } else if (edge.source === 'model' && edge.modelSource) {
+      // Phase B: try to resolve the modelSource string to a real
+      // citation via pattern matching against the local SEC cache,
+      // analyst firms, and news feeds. If resolution succeeds, the
+      // edge is upgraded to a clickable citation; if it fails, citation
+      // stays null and the edge is dropped below in strict mode.
+      citation = patternResolveModelSource(edge.modelSource, focusSymbol)
     }
-    return {
+
+    // Strict-citation mode: edges with no resolvable link are dropped.
+    // The model is instructed to omit such edges in the prompt; this
+    // catches anything that slips through (vague modelSource, ref that
+    // doesn't match anything we supplied, ref-less model attributions).
+    if (!citation) {
+      dropped += 1
+      continue
+    }
+    out.push({
       from: edge.from,
       to: edge.to,
       relationship: edge.relationship,
       note: edge.note,
       source: edge.source,
       citation
-    }
-  })
+    })
+  }
+  if (dropped > 0) {
+    console.log(
+      `[companyChain] attachCitations: dropped ${dropped} edge(s) without resolvable citation (strict mode)`
+    )
+  }
+  return out
 }
 
 // Re-frame a foreign edge relative to a specific focus. The source chain
@@ -541,18 +863,25 @@ export async function generateCompanyChain(input: {
   ])
 
   // Now gather what landed during the warm-up (plus whatever was already in
-  // cache from prior sessions).
+  // cache from prior sessions). We fetch THREE SEC filings (10-K + 8-K +
+  // 10-Q) in parallel — investor presentations + earnings releases land
+  // in the 8-K, MD&A in the 10-Q. Articles up to 15 (was 6) so broader
+  // news coverage gets citable refs. Analyst events from cache.
   const profile = getCompanyProfile(sym)
-  const [tenKExcerpt, news] = await Promise.all([
+  const [tenKExcerpt, eightKExcerpt, tenQExcerpt, news] = await Promise.all([
     fetchTenKExcerpt(sym),
+    fetchEightKExcerpt(sym),
+    fetchTenQExcerpt(sym),
     Promise.resolve(fetchRecentNews(sym))
   ])
 
   // Record what sources we fed so the UI can show provenance.
   const sources: string[] = []
   if (profile) sources.push('company profile')
-  if (tenKExcerpt) sources.push('10-K Item 1')
-  if (news.length > 0) sources.push(`${news.length} recent article${news.length === 1 ? '' : 's'}`)
+  if (tenKExcerpt) sources.push('10-K')
+  if (eightKExcerpt) sources.push('8-K')
+  if (tenQExcerpt) sources.push('10-Q')
+  if (news.length > 0) sources.push(`${news.length} article${news.length === 1 ? '' : 's'}`)
   const contextLabel = sources.length > 0 ? sources.join(' + ') : 'model priors only'
 
   // Classify the ticker into the unified sector catalog so the generated
@@ -625,20 +954,61 @@ export async function generateCompanyChain(input: {
   // the original chip without forcing a regen.
   const userCorrectionsBlock = formatCorrectionsForPrompt(sym)
 
-  // Build the structured grounding payload with stable ref ids the model
-  // will cite back. "F" → 10-K filing, "P" → profile, "N1"/"N2"/... →
-  // articles. After generation we resolve the model's emitted sourceRef
-  // back into a clickable citation object stored on each edge.
-  const filingPayload = tenKExcerpt
-    ? {
-        accession: tenKExcerpt.filing.accessionNumber,
-        cik: tenKExcerpt.filing.cik,
-        formType: tenKExcerpt.filing.formType,
-        filedAt: tenKExcerpt.filing.filedAt,
-        url: tenKExcerpt.url,
-        excerpt: tenKExcerpt.excerpt
-      }
-    : null
+  // Build the structured grounding payload with stable ref ids:
+  //   F   → 10-K (Item 1 / Business)
+  //   F2  → 8-K (most recent — investor presentations + earnings releases)
+  //   F3  → 10-Q (Item 2 / MD&A)
+  //   P   → company profile
+  //   N1..N15 → news articles (supply-chain-keyword-prefiltered)
+  //   A1..A5  → recent analyst rating actions
+  // After generation we resolve the model's emitted sourceRef back into a
+  // clickable citation object stored on each edge — see attachCitations.
+  const filingsPayload: Array<{
+    refId: string
+    accession: string
+    cik: string
+    formType: string
+    filedAt: number
+    url: string
+    excerpt: string
+    excerptHint: string
+  }> = []
+  if (tenKExcerpt) {
+    filingsPayload.push({
+      refId: 'F',
+      accession: tenKExcerpt.filing.accessionNumber,
+      cik: tenKExcerpt.filing.cik,
+      formType: tenKExcerpt.filing.formType,
+      filedAt: tenKExcerpt.filing.filedAt,
+      url: tenKExcerpt.url,
+      excerpt: tenKExcerpt.excerpt,
+      excerptHint: tenKExcerpt.excerptHint
+    })
+  }
+  if (eightKExcerpt) {
+    filingsPayload.push({
+      refId: 'F2',
+      accession: eightKExcerpt.filing.accessionNumber,
+      cik: eightKExcerpt.filing.cik,
+      formType: eightKExcerpt.filing.formType,
+      filedAt: eightKExcerpt.filing.filedAt,
+      url: eightKExcerpt.url,
+      excerpt: eightKExcerpt.excerpt,
+      excerptHint: eightKExcerpt.excerptHint
+    })
+  }
+  if (tenQExcerpt) {
+    filingsPayload.push({
+      refId: 'F3',
+      accession: tenQExcerpt.filing.accessionNumber,
+      cik: tenQExcerpt.filing.cik,
+      formType: tenQExcerpt.filing.formType,
+      filedAt: tenQExcerpt.filing.filedAt,
+      url: tenQExcerpt.url,
+      excerpt: tenQExcerpt.excerpt,
+      excerptHint: tenQExcerpt.excerptHint
+    })
+  }
   const articlesPayload = news.map((n, i) => ({
     refId: `N${i + 1}`,
     articleId: n.articleId,
@@ -648,14 +1018,36 @@ export async function generateCompanyChain(input: {
     publishedAt: n.publishedAt,
     feedTitle: n.feedTitle
   }))
+  // Analyst rating actions from yahooFinanceService's in-memory cache —
+  // populated by the analyst-estimates scheduler. Last 5 entries with
+  // up/down actions; the model can cite these for "consensus rated X"
+  // claims. URL points to Yahoo's per-symbol analyst page (concrete and
+  // public; per-report URLs would be paywalled).
+  const analystEventsPayload = (() => {
+    const recent = getRecentAnalystChanges(sym)
+      .filter((c) => c.action === 'up' || c.action === 'down')
+      .slice(0, 5)
+    return recent.map((c, i) => ({
+      refId: `A${i + 1}`,
+      firm: c.firm ?? 'Unnamed analyst',
+      action: c.action as 'up' | 'down',
+      fromGrade: c.fromGrade,
+      toGrade: c.toGrade,
+      date: c.epochGradeDate
+        ? new Date(c.epochGradeDate * 1000).toISOString().slice(0, 10)
+        : '—',
+      url: `https://finance.yahoo.com/quote/${encodeURIComponent(sym)}/analysis`
+    }))
+  })()
 
   const { result: generated, provider } = await routedGenerate(
     {
       symbol: sym,
       companyName: input.companyName,
       profileDescription: profile?.description ?? null,
-      filing: filingPayload,
+      filings: filingsPayload,
       articles: articlesPayload,
+      analystEvents: analystEventsPayload,
       canonicalStages,
       sectorName: sectorCatalogEntry?.name,
       crossChainMentions: crossChain,
@@ -683,12 +1075,20 @@ export async function generateCompanyChain(input: {
 
   const resolvedNodes = resolveNodes(generated.nodes, sym)
   const canonicalEdges = canonicalizeEdges(generated.edges, resolvedNodes, generated.nodes)
-  // Resolve each edge's sourceRef ("F" / "P" / "N1" / ...) into a
-  // structured citation pointing at the actual SEC URL or in-app article.
-  // Falls back to citation=null for edges with no ref or a ref that
-  // doesn't match a context item we supplied.
+  // Resolve each edge's sourceRef into a structured citation pointing at
+  // the actual SEC URL / news article / analyst page. Strict mode: edges
+  // with no resolvable citation are DROPPED (Phase B pattern resolver
+  // gets a chance first via attachCitations).
+  const filingsByRef = new Map(filingsPayload.map((f) => [f.refId, f]))
   const articlesByRef = new Map(articlesPayload.map((a) => [a.refId, a]))
-  const citedEdges = attachCitations(canonicalEdges, filingPayload, articlesByRef)
+  const analystByRef = new Map(analystEventsPayload.map((a) => [a.refId, a]))
+  const citedEdges = attachCitations(
+    canonicalEdges,
+    filingsByRef,
+    articlesByRef,
+    analystByRef,
+    sym
+  )
   const graph: CompanyValueChain = {
     focus: sym,
     stages: generated.stages,
