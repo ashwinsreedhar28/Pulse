@@ -5,7 +5,7 @@
 // node symbols to real tickers via companyNameResolver so links back to
 // ticker detail pages work for the ones we can verify.
 
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, powerMonitor } from 'electron'
 import { JSDOM, VirtualConsole } from 'jsdom'
 
 import { getDb } from '../database/connection'
@@ -620,6 +620,25 @@ function broadcastRegenProgress(): void {
   }
 }
 
+// Maximum time waitForIdle will block before giving up and processing
+// anyway. 5 minutes is long enough that the user is probably actually
+// busy (not just typing a sentence), but short enough that a regen run
+// still makes meaningful progress per session.
+const IDLE_WAIT_MAX_MS = 5 * 60 * 1000
+// Polling cadence for the idle check. powerMonitor.getSystemIdleTime
+// is cheap; 5s strikes a balance between responsiveness and wakeups.
+const IDLE_POLL_INTERVAL_MS = 5_000
+
+async function waitForIdle(thresholdSeconds: number): Promise<void> {
+  const start = Date.now()
+  while (true) {
+    const idle = powerMonitor.getSystemIdleTime()
+    if (idle >= thresholdSeconds) return
+    if (Date.now() - start >= IDLE_WAIT_MAX_MS) return
+    await new Promise<void>((resolve) => setTimeout(resolve, IDLE_POLL_INTERVAL_MS))
+  }
+}
+
 export function getRegenerateAllProgress(): RegenerateAllProgress {
   return regenProgress
 }
@@ -630,14 +649,30 @@ export function getRegenerateAllProgress(): RegenerateAllProgress {
 // cap makes parallel runs counterproductive, and keeping order stable
 // makes the progress UI easier to read.
 //
-// `skipIfGeneratedWithinMs` lets callers cheapen a re-run by skipping
-// chains whose generatedAt is newer than that window. Manual button
-// callers pass 0 (regen everything). Auto-on-boot callers pass a real
-// window (e.g. 20h) so a partial run that hit the Claude cap yesterday
-// only retries the stragglers tomorrow instead of re-burning the
-// already-fresh chains.
+// Options:
+//   skipIfGeneratedWithinMs — drop any chain regenerated within this window.
+//     Manual button passes 0 (regen everything). Auto-on-boot passes a
+//     real window (e.g. 20h) so a partial run that hit the Claude cap
+//     yesterday only retries stragglers today.
+//   idleGateSeconds — between symbols, wait until the user has been idle
+//     for at least this many seconds. Auto-boot uses this so a long
+//     regen doesn't compete with active interaction. Manual passes 0.
+//     Has a max-wait cap (5 min) so the run still makes progress when
+//     the user is actively working.
+//   maxSymbols — process at most this many symbols this run; remainder
+//     waits for the next invocation. Auto-boot caps at ~20 stalest so
+//     a single boot can't burn through an entire 100-symbol watchlist.
+//     Manual passes Infinity.
+//   stalestFirst — when true, sort symbols by generatedAt ASC (NULL/never-
+//     generated first). Combined with maxSymbols this guarantees the
+//     oldest data gets refreshed first across multiple boot cycles.
 export async function regenerateAllChains(
-  opts: { skipIfGeneratedWithinMs?: number } = {}
+  opts: {
+    skipIfGeneratedWithinMs?: number
+    idleGateSeconds?: number
+    maxSymbols?: number
+    stalestFirst?: boolean
+  } = {}
 ): Promise<RegenerateAllProgress> {
   if (regenRunning) return regenProgress
   regenRunning = true
@@ -675,6 +710,32 @@ export async function regenerateAllChains(
       )
     }
   }
+
+  // Stalest-first: sort by generatedAt ascending (NULL → -Infinity so
+  // never-generated symbols lead). Critical when maxSymbols caps the run:
+  // we want the oldest data to refresh first across multiple boots.
+  if (opts.stalestFirst) {
+    const ageBySymbol = new Map<string, number>()
+    for (const sym of symbols) {
+      const row = getCompanyValueChain(sym)
+      ageBySymbol.set(sym, row?.generatedAt ?? -Infinity)
+    }
+    symbols = [...symbols].sort(
+      (a, b) => (ageBySymbol.get(a) ?? 0) - (ageBySymbol.get(b) ?? 0)
+    )
+  }
+
+  // Cap the run length when requested. Auto-boot uses this so a single
+  // launch can't burn through 100+ symbols of Claude calls. Stragglers
+  // wait for the next invocation (next boot or manual button).
+  if (opts.maxSymbols !== undefined && opts.maxSymbols > 0) {
+    if (symbols.length > opts.maxSymbols) {
+      console.log(
+        `[companyChain] regenerate-all: capping at ${opts.maxSymbols} stalest of ${symbols.length} symbols`
+      )
+      symbols = symbols.slice(0, opts.maxSymbols)
+    }
+  }
   // Build a companyName lookup so every symbol in the run has a usable
   // prompt input even if it was only in the existingChainSymbols set
   // (covers the rare case where a chain exists but the tickers row was
@@ -694,7 +755,18 @@ export async function regenerateAllChains(
   }
   broadcastRegenProgress()
 
+  let firstSymbol = true
   for (const sym of symbols) {
+    // Idle gate: between symbols (not before the first), wait for the user
+    // to be idle for at least idleGateSeconds before starting the next
+    // regen. Caps the wait at IDLE_WAIT_MAX_MS so the run still makes
+    // progress when the user is actively working — better to slightly
+    // contend than to never finish.
+    if (!firstSymbol && opts.idleGateSeconds && opts.idleGateSeconds > 0) {
+      await waitForIdle(opts.idleGateSeconds)
+    }
+    firstSymbol = false
+
     regenProgress = { ...regenProgress, currentSymbol: sym }
     broadcastRegenProgress()
     const companyName = nameBySymbol.get(sym) ?? getTickerBySymbol(sym)?.companyName ?? sym
@@ -742,6 +814,14 @@ const AUTO_REGEN_SKIP_MS = 20 * 60 * 60 * 1000 // 20 hours — matches so
 const AUTO_REGEN_BOOT_DELAY_MS = 3 * 60 * 1000 // 3 minutes after startup
 // — let feed polling, stocks scheduler, and financials backfill clear
 // first so they don't compete for Claude bandwidth.
+const AUTO_REGEN_IDLE_GATE_SECONDS = 30 // Between symbols, wait until the
+// user has been idle for 30s. Prevents the regen pass from competing with
+// active interaction (typing, scrolling) while still allowing it to make
+// progress when the user steps away.
+const AUTO_REGEN_MAX_PER_BOOT = 25 // Cap a single boot's regen run at the
+// 25 stalest chains. With ~65-100 symbols in scope this means one boot
+// won't burn the entire daily Claude budget; it takes 3-4 boots over the
+// throttle window to fully refresh the graph.
 
 export async function maybeAutoRegenerateOnBoot(): Promise<void> {
   // Late-imported to avoid circular-dependency headaches with preferences.
@@ -763,10 +843,16 @@ export async function maybeAutoRegenerateOnBoot(): Promise<void> {
     return
   }
   console.log(
-    `[companyChain] auto-regen starting — will skip chains < ${Math.round(AUTO_REGEN_SKIP_MS / 3600_000)}h old`
+    `[companyChain] auto-regen starting — skip <${Math.round(AUTO_REGEN_SKIP_MS / 3600_000)}h old, ` +
+      `cap ${AUTO_REGEN_MAX_PER_BOOT} stalest, ${AUTO_REGEN_IDLE_GATE_SECONDS}s idle gate between`
   )
   try {
-    await regenerateAllChains({ skipIfGeneratedWithinMs: AUTO_REGEN_SKIP_MS })
+    await regenerateAllChains({
+      skipIfGeneratedWithinMs: AUTO_REGEN_SKIP_MS,
+      idleGateSeconds: AUTO_REGEN_IDLE_GATE_SECONDS,
+      maxSymbols: AUTO_REGEN_MAX_PER_BOOT,
+      stalestFirst: true
+    })
   } finally {
     // Record the stamp even if the run partially failed (Claude cap, etc.).
     // Prevents a failing run from re-firing every restart.
