@@ -272,6 +272,24 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
+// powerMonitor handlers must be registered ONCE for the lifetime of the
+// process. applyPreferences() calls stopPolling() + startPolling() on every
+// preference save; if we re-registered listeners here they'd stack and a
+// single Mac wake would fire N polls. Module-level flag gates registration.
+let powerHandlersRegistered = false
+
+function ensurePowerHandlers(): void {
+  if (powerHandlersRegistered) return
+  powerHandlersRegistered = true
+  powerMonitor.on('suspend', () => {
+    paused = true
+  })
+  powerMonitor.on('resume', () => {
+    paused = false
+    void pollAllFeeds()
+  })
+}
+
 export function startPolling(intervalMs: number = DEFAULT_INTERVAL_MS): void {
   stopPolling()
   // Kick off immediately, then on interval.
@@ -290,13 +308,7 @@ export function startPolling(intervalMs: number = DEFAULT_INTERVAL_MS): void {
     if (task) enqueueOllamaTask(task)
   }, IDLE_DRAIN_INTERVAL_MS)
 
-  powerMonitor.on('suspend', () => {
-    paused = true
-  })
-  powerMonitor.on('resume', () => {
-    paused = false
-    void pollAllFeeds()
-  })
+  ensurePowerHandlers()
 }
 
 export function stopPolling(): void {

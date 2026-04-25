@@ -122,6 +122,7 @@ let popoverWindow: BrowserWindow | null = null
 let splashWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
+let ollamaHealthInterval: NodeJS.Timeout | null = null
 
 function getRendererURL(page: 'main' | 'popover' | 'splash'): string {
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
@@ -702,7 +703,10 @@ app.whenReady().then(async () => {
   const ollamaP = checkOllamaHealth(true)
     .then((online) => splashUpdate('ollama', online ? 'ok' : 'skip'))
     .catch(() => splashUpdate('ollama', 'skip'))
-  setInterval(() => void checkOllamaHealth(true), 2 * 60 * 1000)
+  // Track the handle so will-quit can clear it; without this the timer
+  // outlives `app.quit()` in dev hot-reload and keeps pinging Ollama after
+  // the DB has been closed (occasionally noisy in shutdown logs).
+  ollamaHealthInterval = setInterval(() => void checkOllamaHealth(true), 2 * 60 * 1000)
 
   // Backfill article↔ticker classifications for pre-v21 articles (or any
   // article ingested before a ticker was added to the watchlist). Runs
@@ -733,6 +737,10 @@ app.whenReady().then(async () => {
 })
 
 app.on('will-quit', () => {
+  if (ollamaHealthInterval) {
+    clearInterval(ollamaHealthInterval)
+    ollamaHealthInterval = null
+  }
   stopPolling()
   stopDigestTimer()
   stopDiscoverySchedule()
