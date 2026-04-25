@@ -16,8 +16,11 @@ import {
 import { listTickers } from '../database/tickers'
 import {
   getAnalystEstimates,
-  type AnalystEstimates
+  getRecentAnalystChanges,
+  type AnalystEstimates,
+  type AnalystGradeChange
 } from './yahooFinanceService'
+import { dispatchNotification } from './notificationService'
 
 // Analyst coverage moves slowly — a weekly sweep catches upgrade/downgrade
 // cycles without wasting Yahoo crumbs. Price-target revisions cluster after
@@ -52,7 +55,76 @@ export async function refreshEstimates(symbol: string): Promise<AnalystEstimates
   if (!value) return null
   upsertEstimates(value)
   broadcastUpdated(symbol)
+  // Phase 2.5: dispatch analyst upgrade/downgrade notifications. Reads
+  // the upgradeHistory side-channel cached by yahooFinanceService during
+  // the fetch above (so we don't pay a second quoteSummary call). Dedup
+  // is handled by notification_log keyed on (symbol, date, firm, action)
+  // so a repeated weekly sweep over the same history rows no-ops.
+  try {
+    dispatchAnalystChanges(symbol, getRecentAnalystChanges(symbol))
+  } catch (err) {
+    console.warn(
+      `[estimates] analyst notify failed for ${symbol}:`,
+      err instanceof Error ? err.message : err
+    )
+  }
   return value
+}
+
+// 7-day window. Yahoo's upgradeDowngradeHistory typically returns ~12-20
+// entries spanning a year or more; we only want to notify on entries
+// that landed in the past week so a fresh-install user doesn't get a
+// 14-message backlog dumped into their notification center.
+const ANALYST_NOTIFY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+// Convert firm names to a stable slug for the identityKey. Yahoo's firm
+// strings have spaces, periods, and ampersands ("Goldman Sachs", "JP
+// Morgan", "RBC Capital") — slug them so the identity key stays
+// well-formed across re-fetches.
+function firmSlug(firm: string | null): string {
+  if (!firm) return 'unknown'
+  return firm
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function dispatchAnalystChanges(symbol: string, history: AnalystGradeChange[]): void {
+  if (history.length === 0) return
+  const sym = symbol.toUpperCase()
+  const cutoffMs = Date.now() - ANALYST_NOTIFY_WINDOW_MS
+  for (const row of history) {
+    if (!row.epochGradeDate) continue
+    const tsMs = row.epochGradeDate * 1000
+    if (tsMs < cutoffMs) continue
+    // Only notify on actual upgrade/downgrade rows. 'main' (maintain),
+    // 'init' (initiate), and 'reit' (re-iterate) are noise — analyst
+    // affirmed an existing rating, no signal change. Power users can
+    // always read the full table on the detail page.
+    if (row.action !== 'up' && row.action !== 'down') continue
+    const action = row.action === 'up' ? 'upgraded' : 'downgraded'
+    const firm = row.firm ?? 'An analyst'
+    const transition =
+      row.fromGrade && row.toGrade
+        ? `${row.fromGrade} → ${row.toGrade}`
+        : row.toGrade
+          ? `to ${row.toGrade}`
+          : ''
+    const dayKey = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date(tsMs))
+    dispatchNotification({
+      category: 'analyst',
+      identityKey: `analyst:${sym}:${dayKey}:${firmSlug(row.firm)}:${row.action}`,
+      title: `${sym} ${action} by ${firm}`,
+      body: transition || `${firm} updated their rating.`,
+      importance: 'normal',
+      clickAction: { kind: 'symbol', symbol: sym }
+    })
+  }
 }
 
 function broadcastUpdated(symbol: string): void {

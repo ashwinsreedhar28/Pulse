@@ -783,9 +783,40 @@ export interface AnalystEstimates {
 
 interface EstimatesCacheEntry {
   value: AnalystEstimates
+  // Raw upgrade/downgrade history rows from this fetch (most-recent first
+  // when Yahoo orders them that way; we don't sort here). Used by the
+  // analyst-alerts dispatcher to detect new entries since the last
+  // refresh and fire OS notifications. Kept transient (not persisted) —
+  // dedup of "have we already alerted on this entry?" lives in the
+  // notification_log keyed by (symbol, date, firm, action).
+  upgradeHistory: AnalystGradeChange[]
+}
+
+// Single grade-change event from Yahoo's upgradeDowngradeHistory module.
+// All fields nullable because Yahoo occasionally omits one or two on a
+// row (typically fromGrade for an "init" action).
+export interface AnalystGradeChange {
+  firm: string | null
+  toGrade: string | null
+  fromGrade: string | null
+  // 'up' | 'down' | 'main' | 'init' | 'reit' (re-iterate). Used to color
+  // the alert and decide importance — only 'up' / 'down' notify by default.
+  action: string | null
+  // Unix seconds; the timestamp Yahoo records for the call. Often 9–10am
+  // ET on the morning the analyst note dropped.
+  epochGradeDate: number | null
 }
 
 const estimatesCache = new Map<string, EstimatesCacheEntry>()
+
+// Public helper for the analyst-alerts dispatcher. Returns whatever
+// upgradeHistory was attached to the most recent estimates fetch for the
+// symbol. Empty array when never fetched. Caller filters by recency and
+// action — we don't filter here so the cache stays neutral.
+export function getRecentAnalystChanges(symbol: string): AnalystGradeChange[] {
+  const cached = estimatesCache.get(symbol.trim().toUpperCase())
+  return cached?.upgradeHistory ?? []
+}
 
 function tombstoneEstimates(symbol: string): AnalystEstimates {
   const value: AnalystEstimates = {
@@ -805,7 +836,7 @@ function tombstoneEstimates(symbol: string): AnalystEstimates {
     downgradesLast30d: 0,
     fetchedAt: Date.now()
   }
-  estimatesCache.set(symbol, { value })
+  estimatesCache.set(symbol, { value, upgradeHistory: [] })
   return value
 }
 
@@ -950,11 +981,24 @@ export async function getAnalystEstimates(symbol: string): Promise<AnalystEstima
   const cutoffSec = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60
   let up = 0
   let down = 0
+  // Capture the raw history rows for the analyst-alerts dispatcher.
+  // Same array shape we expose via getRecentAnalystChanges; the
+  // dispatcher applies its own recency filter so we keep whatever Yahoo
+  // returned (typically last ~20 entries spanning a year or two).
+  const recentHistory: AnalystGradeChange[] = []
   for (const row of history) {
     const t = row.epochGradeDate
-    if (typeof t !== 'number' || t < cutoffSec) continue
-    if (row.action === 'up') up++
-    else if (row.action === 'down') down++
+    if (typeof t === 'number' && t >= cutoffSec) {
+      if (row.action === 'up') up++
+      else if (row.action === 'down') down++
+    }
+    recentHistory.push({
+      firm: row.firm ?? null,
+      toGrade: row.toGrade ?? null,
+      fromGrade: row.fromGrade ?? null,
+      action: row.action ?? null,
+      epochGradeDate: typeof row.epochGradeDate === 'number' ? row.epochGradeDate : null
+    })
   }
 
   const value: AnalystEstimates = {
@@ -982,7 +1026,7 @@ export async function getAnalystEstimates(symbol: string): Promise<AnalystEstima
     downgradesLast30d: down,
     fetchedAt: Date.now()
   }
-  estimatesCache.set(sym, { value })
+  estimatesCache.set(sym, { value, upgradeHistory: recentHistory })
   return value
 }
 
