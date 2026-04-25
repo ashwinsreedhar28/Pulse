@@ -4,7 +4,7 @@
 // state (within ~4h of generation) renders pre-expanded so morning users
 // see it immediately.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type {
   BriefBullet,
@@ -173,15 +173,21 @@ export function MorningBrief({ onOpenArticle, onOpenSymbol }: Props): JSX.Elemen
   const [refreshing, setRefreshing] = useState(false)
   const [collapsed, setCollapsed] = useCollapsedSection('morningBrief', false)
 
-  // Auto-collapse if the existing brief is more than 6h old — by then the
-  // morning frame has passed, so it's clutter rather than headline space.
-  // Respects the persisted preference: if the user explicitly opened a
-  // stale brief in this session, we don't fight them on every refresh.
+  // Auto-collapse if the brief is more than 6h old — by then the morning
+  // frame has passed, so it's clutter rather than headline space.
+  //
+  // This fires AT MOST ONCE per unique brief: we track the generatedAt of
+  // the brief we already evaluated, and skip the auto-collapse on every
+  // subsequent setRow (broadcasts, refetches). Otherwise the user's manual
+  // expand on a stale brief would be slammed shut on the next refresh AND
+  // persisted via useCollapsedSection, silently corrupting their preference.
+  const autoCollapsedForRef = useRef<number | null>(null)
   useEffect(() => {
-    if (row && row.generatedAt > 0) {
-      const ageMs = Date.now() - row.generatedAt
-      if (ageMs > 6 * 60 * 60 * 1000) setCollapsed(true)
-    }
+    if (!row || row.generatedAt === 0) return
+    if (autoCollapsedForRef.current === row.generatedAt) return
+    autoCollapsedForRef.current = row.generatedAt
+    const ageMs = Date.now() - row.generatedAt
+    if (ageMs > 6 * 60 * 60 * 1000) setCollapsed(true)
   }, [row, setCollapsed])
 
   useEffect(() => {

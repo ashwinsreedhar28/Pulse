@@ -483,9 +483,12 @@ export async function generateCompanyChain(input: {
 
   // User-flagged corrections for this focus's chain. Pre-formatted as a
   // ground-truth block; null when the user has no active corrections.
-  // Whatever the model emits, applyCorrectionsToChain re-applies the
-  // corrections to the result before persisting so the user's verdict is
-  // honored even if the model regresses on it.
+  // Injected into the generator prompt so the model honors the verdicts
+  // instead of repeating the original mistake. Read-time application via
+  // applyCorrectionsToChain in readCompanyChain still handles any model
+  // regression — we deliberately persist the raw model output (see the
+  // setCompanyValueChain call below) so removing a correction restores
+  // the original chip without forcing a regen.
   const userCorrectionsBlock = formatCorrectionsForPrompt(sym)
 
   const { result: generated, provider } = await routedGenerate({
@@ -519,19 +522,20 @@ export async function generateCompanyChain(input: {
 
   const resolvedNodes = resolveNodes(generated.nodes, sym)
   const canonicalEdges = canonicalizeEdges(generated.edges, resolvedNodes, generated.nodes)
-  const rawGraph: CompanyValueChain = {
+  const graph: CompanyValueChain = {
     focus: sym,
     stages: generated.stages,
     nodes: resolvedNodes,
     edges: canonicalEdges
   }
-  // Belt-and-suspenders: even though we passed userCorrectionsBlock into
-  // the generator prompt, re-apply the corrections to the model's output
-  // before persisting. The model may regress on a correction (especially
-  // Ollama, which honors instructions less consistently), and re-applying
-  // here guarantees the user's verdict survives every regen.
-  const graph = applyCorrectionsToChain(rawGraph)
 
+  // Persist the RAW model output. Corrections are applied at read time via
+  // readCompanyChain → applyCorrectionsToChain so the saved chain stays
+  // pristine. Baking corrections into the DB would be destructive: a user
+  // who marks AAPL "not relevant" → regenerates → deletes the correction
+  // would lose AAPL from the chain until another regen, contradicting the
+  // "Hidden by you / Restore" UX. Defense against model regression is the
+  // userCorrectionsBlock injected into the generator prompt above.
   setCompanyValueChain({
     symbol: sym,
     status: 'ready',
