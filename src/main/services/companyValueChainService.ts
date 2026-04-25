@@ -1231,13 +1231,20 @@ async function concentrationAugmentCitations(
   return out
 }
 
-// Whitelisted primary-press domains that the web-search augment will
+// Whitelisted primary-source domains that the web-search augment will
 // accept as kind:'article' citations when no sec.gov filing is findable.
-// Restricted to first-party trade press / wire services so we don't
-// degrade to citing aggregator reposts. Domains are matched as
-// case-insensitive suffixes against the URL's host — "reuters.com" hits
-// both "www.reuters.com" and "reuters.com/business/...".
+// Buckets:
+//   - First-party trade press / wire services (Reuters, Bloomberg, FT, ...)
+//   - Press-wire services (PR Newswire, Business Wire, GlobeNewswire,
+//     AccessWire) — companies issue formal announcements through these
+//     services, often the canonical citable form for a deal/award
+//   - IR / investor-relations subdomains — `ir.kla.com` is a first-party
+//     source by definition, no different from the company's 10-K text.
+//     Detected separately via subdomain prefix regex.
+// Aggregator reposts (Yahoo, MSN Money, Seeking Alpha) are NOT in this
+// list — we want the primary source, not a Yahoo Finance reprint.
 const PRIMARY_PRESS_DOMAINS = [
+  // News wires + trade press
   'reuters.com',
   'bloomberg.com',
   'ft.com',
@@ -1263,13 +1270,33 @@ const PRIMARY_PRESS_DOMAINS = [
   'anandtech.com',
   'techcrunch.com',
   'theregister.com',
-  'eenewseurope.com'
+  'eenewseurope.com',
+  // Press-wire services — first-party announcements distributed via
+  // a regulated wire. KLA's "Intel preferred-quality-supplier award"
+  // press release is a textbook example of why we accept these.
+  'prnewswire.com',
+  'businesswire.com',
+  'globenewswire.com',
+  'accesswire.com',
+  'newswire.ca'
 ]
+
+// Subdomain prefixes that identify an investor-relations site. When the
+// URL's host starts with one of these, treat it as a first-party source
+// regardless of the parent domain — companies routinely host material
+// announcements at ir.<company>.com that are functionally identical to
+// 8-K disclosures (and often filed as 8-K Item 7.01 too).
+const IR_SUBDOMAIN_PREFIXES = ['ir.', 'investors.', 'investor.']
 
 function matchesPrimaryPress(url: string): { ok: true; host: string } | { ok: false } {
   try {
     const u = new URL(url)
     const host = u.hostname.toLowerCase()
+    // IR subdomain match: ir.kla.com, investors.intel.com, etc.
+    for (const prefix of IR_SUBDOMAIN_PREFIXES) {
+      if (host.startsWith(prefix)) return { ok: true, host }
+    }
+    // Domain whitelist match.
     for (const domain of PRIMARY_PRESS_DOMAINS) {
       if (host === domain || host.endsWith('.' + domain) || host === 'www.' + domain) {
         return { ok: true, host }
@@ -1321,11 +1348,14 @@ async function webSearchAugmentCitations(
   let consumed = 0
   let bailedOnRateLimit = false
   // Pace sequential calls to stay under Anthropic's 50K-input-tokens-per-
-  // minute Haiku tier-1 limit. Each web-search call is ~3-5K input
-  // tokens (system + user + tool result), so 6 seconds between calls
-  // keeps us safely below 10 calls/min ≈ 50K tokens/min. The first call
-  // fires immediately; pacing applies to each subsequent call.
-  const PACING_MS = 6_000
+  // minute Haiku tier-1 limit. Each web-search call burns more tokens
+  // than the system prompt suggests because the tool_result block from
+  // the web search itself counts as input on the model's follow-up turn
+  // (often 5-15K tokens). 6s pacing was hitting 429s on every call;
+  // bumped to 10s gives us ~6 calls/min ≈ 30-90K tokens/min — still over
+  // the soft limit on the high end but the per-call retry handles spikes
+  // gracefully. If 429s still recur, knock it down to 5 max searches.
+  const PACING_MS = 10_000
   let lastCallAt = 0
   for (let i = 0; i < cap; i++) {
     const t = targets[i]
@@ -1431,24 +1461,34 @@ async function webSearchAugmentCitations(
     //  2. Trade-press article on a whitelisted domain → kind:'article'
     let cite: import('../database/companyValueChains').CompanyValueChainEdgeCitation | null = null
 
-    if (/^https:\/\/www\.sec\.gov\/Archives\//i.test(url)) {
+    if (/^https:\/\/(www\.)?sec\.gov\//i.test(url)) {
+      // Try the canonical Archives/edgar/data/{CIK}/{accession} pattern
+      // first so we get a real accession + CIK on the citation. If that
+      // doesn't match, fall back to a synthetic filing record where
+      // accession/CIK are placeholders — the user still gets a clickable
+      // link to an SEC page (filing index, EDGAR full-text-search hit,
+      // etc.). Better an imprecise filing cite than no cite at all.
       const urlMatch = url.match(/\/Archives\/edgar\/data\/(\d+)\/([0-9]{18}|[0-9-]{20})/i)
-      if (!urlMatch) {
-        console.log(
-          `[companyChain] web-search ${focus}↔${t.counterparty}: Archives URL didn't match accession pattern — "${url}"`
-        )
-        continue
+      let accession: string
+      let cik: string
+      if (urlMatch) {
+        cik = urlMatch[1]
+        const accessionRaw = urlMatch[2]
+        accession =
+          accessionRaw.includes('-')
+            ? accessionRaw
+            : `${accessionRaw.slice(0, 10)}-${accessionRaw.slice(10, 12)}-${accessionRaw.slice(12)}`
+      } else {
+        // Synthetic placeholders. The renderer falls back to opening
+        // the URL externally; a comment-grade accession just means the
+        // SEC pill doesn't claim a specific doc but the URL still works.
+        cik = '0000000000'
+        accession = 'web-search'
       }
-      const cik = urlMatch[1]
-      const accessionRaw = urlMatch[2]
-      const accession =
-        accessionRaw.includes('-')
-          ? accessionRaw
-          : `${accessionRaw.slice(0, 10)}-${accessionRaw.slice(10, 12)}-${accessionRaw.slice(12)}`
       const formType =
         typeof parsed.formType === 'string' && parsed.formType.trim()
           ? parsed.formType.trim().toUpperCase()
-          : 'SEC filing'
+          : 'SEC.gov'
       const year = typeof parsed.year === 'number' ? parsed.year : null
       const filedAt = year ? Date.UTC(year, 0, 1) : Date.now()
       cite = { kind: 'filing', accession, cik, formType, filedAt, url }
