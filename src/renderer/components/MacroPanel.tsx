@@ -78,12 +78,12 @@ function deltaTone(
 }
 
 function Sparkline({ points }: { points: Array<{ date: string; value: number | null }> }): JSX.Element | null {
-  // 140×36 — large enough to read trend at a glance, small enough that
-  // 9 tiles still fit comfortably in 2 rows on a 1440-wide window.
+  // 130×32 — sized for the value+sparkline two-column row inside a
+  // 260px tile. Large enough to read trend at a glance.
   const real = points.filter((p) => p.value !== null) as Array<{ date: string; value: number }>
   if (real.length < 2) return null
-  const width = 140
-  const height = 36
+  const width = 130
+  const height = 32
   const values = real.map((p) => p.value)
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -126,33 +126,38 @@ function Tile({ snap }: { snap: FredSeriesSnapshot }): JSX.Element {
   const tone = deltaTone(snap.delta, snap.preferredDirection)
   return (
     <div
-      className="flex items-center gap-3 px-3.5 py-2.5 rounded-lg border border-edge/60 bg-surface-1/70 hover:bg-surface-1 transition-colors w-[280px] flex-shrink-0"
+      className="flex flex-col px-3.5 py-2.5 rounded-lg border border-edge/60 bg-surface-1/70 hover:bg-surface-1 transition-colors w-[260px] flex-shrink-0"
       title={
         snap.units
           ? `${snap.label} · ${snap.units}${snap.latestDate ? ` · as of ${snap.latestDate}` : ''}`
           : snap.label
       }
     >
-      <div className="flex flex-col min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 mb-0.5">
-          <span
-            className={`shrink-0 w-1.5 h-1.5 rounded-full ${GROUP_DOT[snap.group]}`}
-            aria-hidden="true"
-          />
-          <span className="text-[9.5px] font-semibold uppercase tracking-[0.22em] text-zinc-500 truncate">
-            {snap.label}
-          </span>
-        </div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-[18px] font-semibold tabular-nums text-zinc-100 leading-none">
+      {/* Full-width label header. Long labels like "10Y-2Y SPREAD" and */}
+      {/* "INITIAL CLAIMS" no longer compete with the sparkline for room. */}
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span
+          className={`shrink-0 w-1.5 h-1.5 rounded-full ${GROUP_DOT[snap.group]}`}
+          aria-hidden="true"
+        />
+        <span className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-zinc-400 whitespace-nowrap">
+          {snap.label}
+        </span>
+      </div>
+      {/* Value + delta on the left, sparkline on the right. */}
+      <div className="flex items-end justify-between gap-3">
+        <div className="flex flex-col min-w-0">
+          <span className="text-[20px] font-semibold tabular-nums text-zinc-100 leading-none">
             {value}
           </span>
           {delta && (
-            <span className={`text-[10.5px] tabular-nums ${tone}`}>{delta}</span>
+            <span className={`text-[10.5px] tabular-nums mt-1 ${tone}`}>{delta}</span>
           )}
         </div>
+        <div className="shrink-0 self-end">
+          <Sparkline points={snap.series} />
+        </div>
       </div>
-      <Sparkline points={snap.series} />
     </div>
   )
 }
