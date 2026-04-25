@@ -101,7 +101,26 @@ function normalizeTheme(raw: string | undefined): Theme {
   return DEFAULTS.theme
 }
 
+// Allowed preference keys, derived from DEFAULTS so this stays in sync as
+// new preferences are added. The `preferences` table is shared with internal
+// counters (e.g. _claudeUsageDate / _claudeUsageCount via getClaudeUsageState)
+// that MUST NOT be writable from the renderer; the whitelist gates that.
+export const PREFERENCE_KEYS: ReadonlySet<keyof Preferences> = new Set(
+  Object.keys(DEFAULTS) as Array<keyof Preferences>
+)
+
+export function isPreferenceKey(key: string): key is keyof Preferences {
+  return PREFERENCE_KEYS.has(key as keyof Preferences)
+}
+
 export function setPreference(key: keyof Preferences, value: string | number | boolean): void {
+  // Enforce the whitelist at the writer boundary — defense against any
+  // caller (renderer-bridged or future internal) that fabricates a key
+  // outside the typed surface. Internal counters use their own bespoke
+  // setters (setClaudeUsageState etc.), not this one.
+  if (!isPreferenceKey(key)) {
+    throw new Error(`setPreference: unknown key "${key}"`)
+  }
   getDb()
     .prepare(`INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)`)
     .run(key, String(value))

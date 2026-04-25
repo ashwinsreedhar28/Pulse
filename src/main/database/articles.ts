@@ -343,15 +343,19 @@ export function searchArticlesFts(
   try {
     const rows = getDb()
       .prepare<[string, number], ArticleRow>(
-        // Rank orders by FTS5's BM25 score; we blend with recency (half-life
-        // ~14 days) so a great older match still surfaces but recency wins
-        // ties. Pure BM25 returned 2018 articles for current-events queries.
+        // FTS5 rank is NEGATIVE (smaller = better). Pure BM25 returned 2018
+        // articles for current-events queries, so we blend with recency
+        // (half-life ~14 days). Divide rank by the age factor so older
+        // articles get a *less negative* (worse) score — fresher articles
+        // keep their stronger negative rank and sort first under ASC.
+        // Earlier code multiplied here, which inverted the bias and put
+        // ancient articles at the top.
         `SELECT a.*, f.title AS feedTitle, f.iconURL AS feedIconURL
          FROM articles_fts
          JOIN articles a ON a.id = articles_fts.rowid
          JOIN feeds f ON f.id = a.feedId
          WHERE articles_fts MATCH ?
-         ORDER BY (articles_fts.rank * (1.0 + (? - COALESCE(a.publishedAt, 0)) / 1209600000.0)) ASC
+         ORDER BY (articles_fts.rank / (1.0 + (? - COALESCE(a.publishedAt, 0)) / 1209600000.0)) ASC
          LIMIT ${cap}`
       )
       .all(ftsQuery, Date.now())

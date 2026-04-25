@@ -318,8 +318,17 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:prefs:get', () => prefsDb.getPreferences())
   ipcMain.handle(
     'db:prefs:set',
-    (_e, key: keyof prefsDb.Preferences, value: string | number | boolean) =>
+    (_e, key: keyof prefsDb.Preferences, value: string | number | boolean) => {
+      // Trust-boundary whitelist: the renderer can only set keys that exist
+      // in the Preferences interface. Without this, a renderer payload
+      // could overwrite internal counters stored in the same `preferences`
+      // table (e.g. _claudeUsageCount), corrupting the daily-cap tracking.
+      if (!prefsDb.isPreferenceKey(key)) {
+        console.warn(`[ipc] db:prefs:set rejected unknown key "${String(key)}"`)
+        return
+      }
       prefsDb.setPreference(key, value)
+    }
   )
 
   // reader
