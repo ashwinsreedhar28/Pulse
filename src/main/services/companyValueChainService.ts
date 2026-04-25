@@ -1697,6 +1697,7 @@ const PRIMARY_PRESS_DOMAINS = [
   'cnbc.com',
   'marketwatch.com',
   'apnews.com',
+  'npr.org',          // NPR Business — first-party reporting
   'theinformation.com',
   'semianalysis.com',
   'semiwiki.com',
@@ -1720,7 +1721,14 @@ const PRIMARY_PRESS_DOMAINS = [
   'businesswire.com',
   'globenewswire.com',
   'accesswire.com',
-  'newswire.ca'
+  'newswire.ca',
+  // IR-vendor hosts. These domains host investor-relations + press-
+  // release pages on behalf of public companies (e.g. femsa.gcs-web.com
+  // is FEMSA's IR site hosted by GCS-Web). Content is first-party even
+  // though the parent domain isn't the company itself.
+  'gcs-web.com',
+  'q4inc.com',
+  'q4cdn.com'
 ]
 
 // Subdomain prefixes that identify a first-party corporate-comms site.
@@ -1754,7 +1762,20 @@ const PRESS_RELEASE_PATH_PATTERNS: RegExp[] = [
   /\/investor[s]?\/news/i,
   /\/news-events\//i,
   /\/about\/news\//i,
-  /\/media\/press/i
+  /\/media\/press/i,
+  // /news/<slug> form — e.g. ionq.com/news/ionq-announces-...
+  // Many smaller companies host announcements at /news/ without a
+  // /press-releases subfolder. The trailing slug requirement (`/.+`)
+  // distinguishes from the bare /news/ landing page that wouldn't
+  // contain a specific announcement.
+  /\/news\/[^/]+/i,
+  // /blog/ form — Google, NVIDIA, AWS all host technical announcements
+  // about partnerships in their corporate blogs.
+  /\/blog\/[^/]+/i,
+  // /press/<slug> — variant without "release" subdir
+  /\/press\/[^/]+/i,
+  // /announcements/<slug>
+  /\/announcements?\/[^/]+/i
 ]
 
 // Known aggregator / second-tier-research hosts that we explicitly do
