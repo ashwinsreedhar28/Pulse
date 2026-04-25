@@ -437,17 +437,29 @@ export default function App(): JSX.Element {
                     : selectedCategoryId !== null
                       ? `cat:${selectedCategoryId}`
                       : `filter:${filter}`
-  const feedLookupContext = bookmarksOnly
-    ? 'Bookmarked news articles across finance (semiconductor value chain, defense, mining) and general news (US geopolitics, space, world events).'
-    : activeCategory
-      ? activeCategory.domain === 'finance'
+  // Memoize the lookupContext string — it's written as a DOM attribute on
+  // the scroll container (data-lookup-context) and only read on mouseup
+  // by SmartLookupLayer. App re-renders on every state slice change
+  // (currently a lot of them), so without memoization we were rebuilding
+  // and writing the attribute on each render even when none of the inputs
+  // had changed.
+  const feedLookupContext = useMemo(() => {
+    if (bookmarksOnly) {
+      return 'Bookmarked news articles across finance (semiconductor value chain, defense, mining) and general news (US geopolitics, space, world events).'
+    }
+    if (activeCategory) {
+      return activeCategory.domain === 'finance'
         ? `Finance news feed, category "${activeCategory.name}" — semiconductor value chain (fabless, foundries, equipment, EDA, packaging), defense/aerospace, mining. Ambiguous terms are usually companies, products, or executives.`
         : `General news feed, category "${activeCategory.name}" — US politics and geopolitics, space exploration, local/regional news, and world events. Ambiguous terms are usually people, places, or policy.`
-      : filter === 'finance'
-        ? 'Finance news feed — semiconductor value chain (fabless, foundries, equipment, EDA, packaging), defense/aerospace, mining. Ambiguous terms are usually public companies, products, or executives.'
-        : filter === 'news'
-          ? 'General news feed — US politics and geopolitics, space exploration, local/regional news, and world events. Ambiguous terms are usually people, places, or policy.'
-          : 'Mixed news dashboard covering finance (semiconductors, defense, mining) and general news (US geopolitics, space, world events).'
+    }
+    if (filter === 'finance') {
+      return 'Finance news feed — semiconductor value chain (fabless, foundries, equipment, EDA, packaging), defense/aerospace, mining. Ambiguous terms are usually public companies, products, or executives.'
+    }
+    if (filter === 'news') {
+      return 'General news feed — US politics and geopolitics, space exploration, local/regional news, and world events. Ambiguous terms are usually people, places, or policy.'
+    }
+    return 'Mixed news dashboard covering finance (semiconductors, defense, mining) and general news (US geopolitics, space, world events).'
+  }, [bookmarksOnly, activeCategory, filter])
 
   return (
     <div
@@ -815,21 +827,27 @@ function MarketsReel({ onOpenStock }: { onOpenStock: (symbol: string) => void })
     return sectorOrder.map((s) => ({ sector: s, quotes: buckets.get(s)! }))
   }, [quotes, tickers])
 
-  if (sectorGroups.length === 0) return <ReelPlaceholder text="Awaiting quotes\u2026" />
-
+  // Memoize the cell list and the doubled (loop) version on the same deps
+  // as sectorGroups. Without this the marquee's ~130-node child set was
+  // rebuilt and reconciled on every quote tick (every minute during market
+  // hours), causing GPU helper CPU to spike inside the animating ticker.
   type MarketCell =
     | { kind: 'header'; sector: string; key: string }
     | { kind: 'quote'; quote: StockQuote; key: string }
     | { kind: 'sep'; key: string }
-  const cells: MarketCell[] = []
-  for (const g of sectorGroups) {
-    cells.push({ kind: 'header', sector: g.sector, key: `mh-${g.sector}` })
-    g.quotes.forEach((q, i) => {
-      if (i > 0) cells.push({ kind: 'sep', key: `msep-${g.sector}-${q.symbol}` })
-      cells.push({ kind: 'quote', quote: q, key: `mq-${g.sector}-${q.symbol}` })
-    })
-  }
-  const doubled = [...cells, ...cells.map((c) => ({ ...c, key: `${c.key}-x` }))]
+  const doubled = useMemo(() => {
+    const cells: MarketCell[] = []
+    for (const g of sectorGroups) {
+      cells.push({ kind: 'header', sector: g.sector, key: `mh-${g.sector}` })
+      g.quotes.forEach((q, i) => {
+        if (i > 0) cells.push({ kind: 'sep', key: `msep-${g.sector}-${q.symbol}` })
+        cells.push({ kind: 'quote', quote: q, key: `mq-${g.sector}-${q.symbol}` })
+      })
+    }
+    return [...cells, ...cells.map((c) => ({ ...c, key: `${c.key}-x` }))]
+  }, [sectorGroups])
+
+  if (sectorGroups.length === 0) return <ReelPlaceholder text="Awaiting quotes\u2026" />
 
   return (
     <div className="flex items-center gap-5 whitespace-nowrap animate-ticker pl-8">
@@ -870,6 +888,7 @@ function StoriesReel({
   const [articles, setArticles] = useState<Article[]>([])
   useEffect(() => {
     let cancelled = false
+    let intervalId: ReturnType<typeof setInterval> | null = null
     const load = async (): Promise<void> => {
       try {
         const a = await window.api.articles.list({ limit: 25 })
@@ -878,11 +897,35 @@ function StoriesReel({
         if (!cancelled) setArticles([])
       }
     }
+    const startInterval = (): void => {
+      if (intervalId) return
+      intervalId = setInterval(() => void load(), 120_000)
+    }
+    const stopInterval = (): void => {
+      if (intervalId) {
+        clearInterval(intervalId)
+        intervalId = null
+      }
+    }
+    // Visibility-gated polling. The reel marquee is one of the only
+    // background-polling components left; without this gate it kept
+    // re-fetching every 2 minutes even while the window was occluded,
+    // defeating the body.pulse-hidden plumbing that pauses animations.
+    const onVisibilityChange = (): void => {
+      if (document.hidden) {
+        stopInterval()
+      } else {
+        void load()
+        startInterval()
+      }
+    }
     void load()
-    const t = setInterval(() => void load(), 120_000)
+    if (!document.hidden) startInterval()
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       cancelled = true
-      clearInterval(t)
+      stopInterval()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [])
   if (articles.length === 0) return <ReelPlaceholder text="Fetching headlines…" />
