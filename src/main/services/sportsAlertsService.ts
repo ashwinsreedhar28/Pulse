@@ -218,8 +218,9 @@ function fireScoreChangeIfAny(game: Game, prev: GameState, curr: GameState): voi
 // NBA scoring milestones we currently watch. Tiered so a 50-pt night
 // fires for 30 → 40 → 50 progressively (one alert per tier crossed,
 // per player per game). Add 'triple-double' / 'double-double' here
-// when we wire stat-line parsing for non-PTS columns.
-const NBA_PTS_TIERS = [30, 40, 50]
+// when we wire stat-line parsing for non-PTS columns. Sorted DESC so
+// `find(t => pts >= t)` returns the highest tier crossed.
+const NBA_PTS_TIERS = [50, 40, 30]
 
 async function scanNbaMilestones(): Promise<void> {
   const games = await listGames('nba', 1).catch(() => [])
@@ -243,24 +244,29 @@ async function scanNbaMilestones(): Promise<void> {
           const ptsRaw = player.stats[ptsIdx]
           const pts = Number.parseInt(ptsRaw ?? '', 10)
           if (!Number.isFinite(pts)) continue
-          for (const tier of NBA_PTS_TIERS) {
-            if (pts >= tier) {
-              const teamSide = teamGroup.team
-              const teamName = teamSide === 'home' ? g.home.shortName : g.away.shortName
-              const opponent = teamSide === 'home' ? g.away.shortName : g.home.shortName
-              dispatchNotification({
-                category: 'sport',
-                // identityKey: per-game, per-player, per-tier. Dedup
-                // ensures one alert per tier per player per game even
-                // if the player's pts ticks up between polls.
-                identityKey: `sport-milestone:${g.id}:${slugify(player.athlete)}:${tier}PTS`,
-                title: `NBA: ${player.athlete} ${pts} pts`,
-                body: `${teamName} vs ${opponent}.`,
-                importance: 'urgent',
-                clickAction: { kind: 'game', payload: { leagueId: g.leagueId, leaguePath: g.leaguePath, eventId: g.id } }
-              })
+          // Dispatch ONLY the highest tier crossed (50 > 40 > 30). The
+          // dispatcher's identity-key dedup short-circuits lower tiers
+          // on subsequent observations. Firing all three at once on the
+          // first observation of a 50-pt night was burning 60% of the
+          // daily cap on a single game. Per-tier still matters ACROSS
+          // observations: a player at 32 pts now dispatches '30PTS',
+          // then '40PTS' when they hit 40, then '50PTS' at 50.
+          const tier = NBA_PTS_TIERS.find((t) => pts >= t)
+          if (tier === undefined) continue
+          const teamSide = teamGroup.team
+          const teamName = teamSide === 'home' ? g.home.shortName : g.away.shortName
+          const opponent = teamSide === 'home' ? g.away.shortName : g.home.shortName
+          dispatchNotification({
+            category: 'sport',
+            identityKey: `sport-milestone:${g.id}:${slugify(player.athlete)}:${tier}PTS`,
+            title: `NBA: ${player.athlete} ${pts} pts`,
+            body: `${teamName} vs ${opponent}.`,
+            importance: 'urgent',
+            clickAction: {
+              kind: 'game',
+              payload: { leagueId: g.leagueId, leaguePath: g.leaguePath, eventId: g.id }
             }
-          }
+          })
         }
       }
     }

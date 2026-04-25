@@ -6,7 +6,15 @@ const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports'
 const ESPN_BASE_V3 = 'https://site.api.espn.com/apis/site/v3/sports'
 const FETCH_TIMEOUT_MS = 12_000
 const SCOREBOARD_TTL_MS = 15_000
-const SUMMARY_TTL_MS = 10_000
+// Summary (box score) TTL bumped from 10s to 60s. The original 10s was
+// fine when getGameDetail was only called by the user opening a game
+// detail panel; the 90s sportsAlerts tick now also calls it once per
+// live NBA game for milestone scanning, and a 10s TTL meant every tick
+// fetched fresh from ESPN. 60s keeps the data near-real-time for the
+// detail panel while letting the milestone scan reuse the cache between
+// ticks (90s tick > 60s TTL, but the renderer's open-detail path warms
+// it cheaply).
+const SUMMARY_TTL_MS = 60_000
 
 export interface SportsLeague {
   id: string
