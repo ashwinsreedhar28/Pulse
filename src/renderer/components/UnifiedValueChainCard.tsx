@@ -203,7 +203,22 @@ export function UnifiedValueChainCard({
     </span>
   )
 
-  const canRegenerate = prepared.source !== 'curated'
+  // Curated cards used to hide the action button entirely, which left
+  // statically-graphed tickers (AAPL, NVDA, etc.) with no UI affordance
+  // to trigger a first-time Claude generation. Now we always show a
+  // button: "Generate" for curated cards, "Regenerate" for ones that
+  // already have a generated chain.
+  const buttonLabel = working
+    ? prepared.source === 'curated'
+      ? 'Generating…'
+      : 'Regenerating…'
+    : prepared.source === 'curated'
+      ? 'Generate'
+      : 'Regenerate'
+  const buttonTitle =
+    prepared.source === 'curated'
+      ? 'Generate a Claude-grounded chain for this ticker. Takes 30–60s and replaces the curated baseline.'
+      : 'Re-run the value-chain generator with fresh context. Takes 30–60s.'
 
   return (
     <CollapsibleSection
@@ -218,27 +233,25 @@ export function UnifiedValueChainCard({
           {prepared.blurb}
         </p>
       )}
-      {canRegenerate && (
-        <div className="flex items-center gap-2 mb-4">
-          <button
-            onClick={() => void onGenerate(true)}
-            disabled={working}
-            className={`text-[9.5px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full ring-1 ring-inset ${
-              working
-                ? 'bg-zinc-800 text-zinc-500 ring-zinc-700 cursor-wait'
-                : 'bg-zinc-800/70 text-zinc-300 ring-zinc-700 hover:bg-zinc-700'
-            }`}
-            title="Re-run the value-chain generator with fresh context. Takes 30–60s."
-          >
-            {working ? 'Regenerating…' : 'Regenerate'}
-          </button>
-          {prepared.generatedAt && (
-            <span className="text-[10px] text-zinc-500">
-              Generated {new Date(prepared.generatedAt).toLocaleDateString()}
-            </span>
-          )}
-        </div>
-      )}
+      <div className="flex items-center gap-2 mb-4">
+        <button
+          onClick={() => void onGenerate(true)}
+          disabled={working}
+          className={`text-[9.5px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full ring-1 ring-inset ${
+            working
+              ? 'bg-zinc-800 text-zinc-500 ring-zinc-700 cursor-wait'
+              : 'bg-zinc-800/70 text-zinc-300 ring-zinc-700 hover:bg-zinc-700'
+          }`}
+          title={buttonTitle}
+        >
+          {buttonLabel}
+        </button>
+        {prepared.generatedAt && (
+          <span className="text-[10px] text-zinc-500">
+            Generated {new Date(prepared.generatedAt).toLocaleDateString()}
+          </span>
+        )}
+      </div>
       <div className={`grid grid-cols-1 gap-6 items-start ${gridColsClass}`}>
         <TransactionCluster
           category="supplier"

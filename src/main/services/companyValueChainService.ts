@@ -346,12 +346,12 @@ async function fetchBilateralFilings(input: {
   focusCompanyName: string
   counterpartySymbols: string[]
   // Cap the number of counterparty fetches per chain to keep regen-all
-  // bounded. Defaults to 8 — typical chain has 6-12 ticker counterparties
-  // and the highest-priority ones (per the model's edge ordering) get
-  // through first.
+  // bounded. Defaults to 15 — typical chain has 8-15 ticker counterparties,
+  // and now that we pre-warm the counterparty cache before this runs we
+  // want to actually hit all of them rather than truncate at 8.
   maxCounterparties?: number
 }): Promise<BilateralFilingHit[]> {
-  const cap = input.maxCounterparties ?? 8
+  const cap = input.maxCounterparties ?? 15
   const symbols = input.counterpartySymbols.slice(0, cap)
   const focusUpper = input.focusSymbol.toUpperCase()
   // Build a set of focus-mention search terms: the ticker + the company
@@ -481,8 +481,9 @@ function isAggregatorFeed(feedTitle: string | null): boolean {
   return AGGREGATOR_PENALTY_FEEDS.some((agg) => lower.includes(agg))
 }
 
-function fetchRecentNews(symbol: string): RecentNewsRow[] {
-  const candidates = getDb()
+function fetchRecentNews(symbol: string, companyName?: string): RecentNewsRow[] {
+  const upper = symbol.toUpperCase()
+  const matched = getDb()
     .prepare<[string, number], RecentNewsRow>(
       `SELECT a.id        AS articleId,
               a.title     AS title,
@@ -497,7 +498,56 @@ function fetchRecentNews(symbol: string): RecentNewsRow[] {
         ORDER BY a.publishedAt DESC
         LIMIT ?`
     )
-    .all(symbol.toUpperCase(), 30)
+    .all(upper, 30)
+  // Fallback: when the strict ticker-matcher returns few or no articles,
+  // fall back to a substring scan on company name + ticker. The matcher
+  // builds article_ticker_matches from the tickerReference alias list,
+  // which has gaps for less-common tickers (e.g. "KLA" never appearing
+  // in headlines as "KLAC"). Without this, focuses with thin matched-
+  // article counts get ZERO news refs in the prompt and edges that
+  // should cite Reuters fall back to model-knowledge cites that the
+  // strict-cite gate then drops.
+  let candidates: RecentNewsRow[] = matched
+  if (candidates.length < 8) {
+    const seenIds = new Set(candidates.map((c) => c.articleId))
+    // Build search keys: ticker (always) plus the company name's first
+    // meaningful word once corp-suffix words are stripped. "KLA Corporation"
+    // → "KLA"; "Apple Inc." → "Apple"; "JPMorgan Chase & Co." → "JPMorgan".
+    const stopSuffix = /\b(Inc\.?|Incorporated|Corp\.?|Corporation|Ltd\.?|Limited|LLC|Company|Co\.?|Holdings|Group|PLC|N\.V\.|S\.A\.|AG)\b/gi
+    const cleaned = (companyName ?? '').replace(stopSuffix, '').trim()
+    const head = cleaned.split(/\s+/)[0]?.trim() ?? ''
+    const keys = [upper]
+    if (head.length >= 4) keys.push(head)
+    const placeholders = keys
+      .map(() => `(LOWER(a.title) LIKE ? OR LOWER(a.summary) LIKE ?)`)
+      .join(' OR ')
+    const params: string[] = []
+    for (const k of keys) {
+      const pat = `%${k.toLowerCase()}%`
+      params.push(pat, pat)
+    }
+    const fallback = getDb()
+      .prepare<unknown[], RecentNewsRow>(
+        `SELECT a.id        AS articleId,
+                a.title     AS title,
+                a.summary   AS summary,
+                a.url       AS url,
+                a.publishedAt AS publishedAt,
+                f.title     AS feedTitle
+           FROM articles a
+           LEFT JOIN feeds f ON f.id = a.feedId
+          WHERE ${placeholders}
+          ORDER BY a.publishedAt DESC
+          LIMIT 50`
+      )
+      .all(...params) as RecentNewsRow[]
+    for (const row of fallback) {
+      if (seenIds.has(row.articleId)) continue
+      seenIds.add(row.articleId)
+      candidates.push(row)
+      if (candidates.length >= 60) break
+    }
+  }
   if (candidates.length === 0) return candidates
   // Score: relationship-keyword hits earn points, aggregator-feed hits
   // lose points, recency tiebreaks. Goal is to surface trade-press
@@ -1130,7 +1180,7 @@ async function webSearchAugmentCitations(
   edges: import('../database/companyValueChains').CompanyValueChainEdge[],
   focusSymbol: string,
   focusCompanyName: string,
-  maxSearches = 3
+  maxSearches = 12
 ): Promise<import('../database/companyValueChains').CompanyValueChainEdge[]> {
   const focus = focusSymbol.toUpperCase()
   // Find edges still missing a primary cite. Order by edge index so the
@@ -1429,7 +1479,7 @@ export async function generateCompanyChain(input: {
     fetchTenKExcerpt(sym),
     fetchEightKExcerpt(sym),
     fetchTenQExcerpt(sym),
-    Promise.resolve(fetchRecentNews(sym))
+    Promise.resolve(fetchRecentNews(sym, input.companyName))
   ])
 
   // Record what sources we fed so the UI can show provenance.
@@ -1623,6 +1673,31 @@ export async function generateCompanyChain(input: {
   const articlesByRef = new Map(articlesPayload.map((a) => [a.refId, a]))
   // Step 1: refs + pattern + article-cross-reference auto-augment.
   let citedEdges = attachCitations(canonicalEdges, filingsByRef, articlesByRef, sym)
+  // Step 1.5: pre-warm counterparty SEC cache. Without this, bilateral
+  // fetching is a no-op for any focus whose counterparties haven't been
+  // independently regenerated — getFilingsForSymbol returns empty, so
+  // the bilateral scanner has nothing to read. We collect ticker-kind
+  // counterparties from the resolved nodes and force-refresh their
+  // filings in parallel before bilateral runs. Capped at 12 to keep
+  // SEC-call concurrency reasonable; per-call timeout bounds the worst
+  // case to ~12s of pre-warm latency.
+  const counterpartyTickers = resolvedNodes
+    .filter((n) => n.kind === 'ticker' && n.symbol.toUpperCase() !== sym)
+    .map((n) => n.symbol.toUpperCase())
+    .slice(0, 12)
+  if (counterpartyTickers.length > 0) {
+    console.log(
+      `[companyChain] pre-warming SEC cache for ${counterpartyTickers.length} counterparties of ${sym}`
+    )
+    await Promise.all(
+      counterpartyTickers.map((cp) =>
+        Promise.race([
+          forceRefreshFilings(cp).catch(() => null),
+          new Promise((resolve) => setTimeout(resolve, 8_000))
+        ])
+      )
+    )
+  }
   // Step 2: bilateral counterparty filing scan. Fixes the "10-Ks rarely
   // name competitors" problem by mining the OTHER side's 10-K for focus
   // mentions. Bounded by the maxCounterparties cap inside the fetcher.
