@@ -66,7 +66,8 @@ export function UnifiedValueChainCard({
   symbol,
   companyName,
   tickers,
-  onOpenTicker
+  onOpenTicker,
+  onOpenCitation
 }: {
   symbol: string
   companyName: string
@@ -75,6 +76,10 @@ export function UnifiedValueChainCard({
   // curated fallback (TransactionCluster has its own onPick hook that we
   // don't set here — current StockValueChainCard never did either).
   onOpenTicker?: (symbol: string) => void
+  // Forwarded into TransactionCluster as onOpenCitation. Lets edge
+  // citation pills route to the in-app external reader for the cited
+  // SEC filing or news article.
+  onOpenCitation?: (url: string, title: string, subtitle?: string | null) => void
 }): JSX.Element | null {
   const upper = symbol.toUpperCase()
   const [row, setRow] = useState<CompanyValueChainRow | null | undefined>(undefined)
@@ -239,16 +244,19 @@ export function UnifiedValueChainCard({
           category="supplier"
           items={prepared.suppliers}
           onPick={onOpenTicker}
+          onOpenCitation={onOpenCitation}
         />
         <TransactionCluster
           category="competitor"
           items={prepared.competitors}
           onPick={onOpenTicker}
+          onOpenCitation={onOpenCitation}
         />
         <TransactionCluster
           category="customer"
           items={prepared.customers}
           onPick={onOpenTicker}
+          onOpenCitation={onOpenCitation}
         />
       </div>
     </CollapsibleSection>
@@ -336,7 +344,8 @@ function prepareFromGenerated(
   const toCounterparty = (
     sym: string,
     note: string | null,
-    source: CompanyValueChainEdgeSource | null
+    source: CompanyValueChainEdgeSource | null,
+    citation: import('../../preload').CompanyValueChainEdgeCitation | null
   ): Counterparty => {
     const n = nodeBySymbol.get(sym)
     const stage = n?.stage ?? ''
@@ -346,7 +355,8 @@ function prepareFromGenerated(
       stageLabel: stage ? stageLabelById.get(stage) ?? humanize(stage) : '—',
       companyName: nameBySymbol.get(sym) ?? n?.name ?? sym,
       note,
-      source
+      source,
+      citation
     }
   }
 
@@ -367,12 +377,13 @@ function prepareFromGenerated(
     const rel = e.relationship
     const note = e.note ?? null
     const source = e.source ?? null
+    const citation = e.citation ?? null
     if (rel === 'competitor') {
       if (from === focus && !seenCompetitors.has(to)) {
-        competitors.push(toCounterparty(to, note, source))
+        competitors.push(toCounterparty(to, note, source, citation))
         seenCompetitors.add(to)
       } else if (to === focus && !seenCompetitors.has(from)) {
-        competitors.push(toCounterparty(from, note, source))
+        competitors.push(toCounterparty(from, note, source, citation))
         seenCompetitors.add(from)
       }
       continue
@@ -380,10 +391,10 @@ function prepareFromGenerated(
     if (rel === 'supplier') {
       // from supplies to.
       if (to === focus && !seenSuppliers.has(from)) {
-        suppliers.push(toCounterparty(from, note, source))
+        suppliers.push(toCounterparty(from, note, source, citation))
         seenSuppliers.add(from)
       } else if (from === focus && !seenCustomers.has(to)) {
-        customers.push(toCounterparty(to, note, source))
+        customers.push(toCounterparty(to, note, source, citation))
         seenCustomers.add(to)
       }
       continue
@@ -391,10 +402,10 @@ function prepareFromGenerated(
     if (rel === 'customer') {
       // from is customer of to (so to supplies from).
       if (from === focus && !seenSuppliers.has(to)) {
-        suppliers.push(toCounterparty(to, note, source))
+        suppliers.push(toCounterparty(to, note, source, citation))
         seenSuppliers.add(to)
       } else if (to === focus && !seenCustomers.has(from)) {
-        customers.push(toCounterparty(from, note, source))
+        customers.push(toCounterparty(from, note, source, citation))
         seenCustomers.add(from)
       }
       continue
@@ -403,10 +414,10 @@ function prepareFromGenerated(
       // Symmetric — fold into customers when focus is `from`, suppliers
       // otherwise. This matches ValueChain's logic.
       if (from === focus && !seenCustomers.has(to)) {
-        customers.push(toCounterparty(to, note, source))
+        customers.push(toCounterparty(to, note, source, citation))
         seenCustomers.add(to)
       } else if (to === focus && !seenSuppliers.has(from)) {
-        suppliers.push(toCounterparty(from, note, source))
+        suppliers.push(toCounterparty(from, note, source, citation))
         seenSuppliers.add(from)
       }
     }

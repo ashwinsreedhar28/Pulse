@@ -30,12 +30,48 @@ export interface CompanyValueChainNode {
 // added. See that module for the label glossary.
 export type CompanyValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'model'
 
+// Specific citation pointing to the actual document the edge claim came
+// from. Optional — old chains generated before this feature shipped, and
+// edges grounded only in the model's training knowledge ('model' source),
+// have no citation. The renderer uses citations to deep-link the user
+// straight to the SEC URL or in-app article reader.
+export type CompanyValueChainEdgeCitation =
+  | {
+      kind: 'filing'
+      // SEC accession number, e.g. "0000320193-24-000123". Used to build
+      // the public archive URL via secService.buildFilingUrl.
+      accession: string
+      cik: string
+      formType: string // '10-K', '10-K/A', etc.
+      filedAt: number // ms epoch — when SEC stamped the filing
+      url: string // pre-built primary doc URL so the renderer doesn't need secService
+    }
+  | {
+      kind: 'article'
+      // Pulse article id — opens the in-app reader. articleId is the
+      // primary key into the articles table; the rest is denormalized
+      // here so the renderer doesn't need a second IPC to display the
+      // citation chip (URL/title come from the same row but only the id
+      // is needed to navigate).
+      articleId: number
+      title: string
+      url: string | null
+      publishedAt: number | null
+      feedTitle: string | null
+    }
+  | { kind: 'profile' } // Yahoo / SEC company profile blurb fed in
+  | { kind: 'model' } // Model's training knowledge only — no document
+
 export interface CompanyValueChainEdge {
   from: string
   to: string
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
   source: CompanyValueChainEdgeSource | null
+  // Specific document pointer. Present on edges from chains regenerated
+  // after the citation feature shipped; null on legacy edges and on
+  // 'model'-grounded edges where there's no document to point at.
+  citation?: CompanyValueChainEdgeCitation | null
 }
 
 export interface CompanyValueChain {

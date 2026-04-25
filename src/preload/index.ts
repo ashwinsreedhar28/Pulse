@@ -529,12 +529,37 @@ export interface CompanyValueChainNode {
 // legacy chains generated before this field was added.
 export type CompanyValueChainEdgeSource = 'filings' | 'news' | 'profile' | 'model'
 
+// Specific document the edge claim points to. Renderer turns this into a
+// clickable chip — opens the SEC URL externally for filings, the in-app
+// reader for articles. Null on legacy edges and on 'model'-grounded
+// edges where there's no document to point at.
+export type CompanyValueChainEdgeCitation =
+  | {
+      kind: 'filing'
+      accession: string
+      cik: string
+      formType: string
+      filedAt: number
+      url: string
+    }
+  | {
+      kind: 'article'
+      articleId: number
+      title: string
+      url: string | null
+      publishedAt: number | null
+      feedTitle: string | null
+    }
+  | { kind: 'profile' }
+  | { kind: 'model' }
+
 export interface CompanyValueChainEdge {
   from: string
   to: string
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
   source: CompanyValueChainEdgeSource | null
+  citation?: CompanyValueChainEdgeCitation | null
 }
 
 export interface CompanyValueChain {

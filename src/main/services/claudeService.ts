@@ -189,11 +189,44 @@ function extractJsonObject(raw: string): string | null {
 
 // ---- generateCompanyValueChain ---------------------------------------------
 
+// Per-source context the generator can cite by reference id. Each kind
+// gets a stable id ("F" for the filing, "P" for profile, "N1"/"N2"/...
+// for news) that the model emits as `sourceRef` on edges it grounds in
+// that source. The orchestrator in companyValueChainService builds these
+// from the SEC filing row + Pulse article rows so the resolver can map
+// the model's ref back to a clickable citation later.
+export interface ChainGroundingFiling {
+  accession: string
+  cik: string
+  formType: string
+  filedAt: number
+  url: string
+  excerpt: string
+}
+export interface ChainGroundingArticle {
+  refId: string // 'N1' | 'N2' | ...
+  articleId: number
+  title: string
+  summary: string | null
+  url: string | null
+  publishedAt: number | null
+  feedTitle: string | null
+}
+
 export async function generateCompanyValueChain(input: {
   symbol: string
   companyName: string
   profileDescription?: string | null
+  // Structured 10-K context. When supplied, the prompt cites it as ref "F".
+  filing?: ChainGroundingFiling | null
+  // Backward-compat: callers that haven't been updated still pass tenKExcerpt
+  // as a raw string. We treat it as an unciteable filing (no sourceRef).
   tenKExcerpt?: string | null
+  // Structured news context. Each article has a stable refId ("N1", "N2"...)
+  // the model uses on grounded edges. Backward-compat newsSnippets is also
+  // accepted but doesn't get refIds, so the model can only cite by 'news'
+  // category, not by article.
+  articles?: ChainGroundingArticle[]
   newsSnippets?: Array<{ title: string; summary: string | null }>
   // Canonical stage list for the focus's classified sub-sector. When
   // provided, Claude is constrained to pick stage ids from this list —
@@ -225,14 +258,38 @@ export async function generateCompanyValueChain(input: {
   if (!input.companyName.trim()) return null
   if (!(await checkClaudeHealth())) return null
 
+  // Profile is the only single-source category, so it gets a fixed ref
+  // "P" — the model uses sourceRef="P" on edges grounded in profile text.
   const profileBlock = input.profileDescription
-    ? `\n\nCompany profile:\n${input.profileDescription.trim().slice(0, 2000)}`
+    ? `\n\nCompany profile [ref P]:\n${input.profileDescription.trim().slice(0, 2000)}`
     : ''
-  const tenKBlock = input.tenKExcerpt
-    ? `\n\n10-K Item 1 excerpt:\n${input.tenKExcerpt.trim().slice(0, 6000)}`
-    : ''
-  const newsBlock =
-    input.newsSnippets && input.newsSnippets.length > 0
+  // Filing block prefers the structured ChainGroundingFiling (gives the
+  // model concrete metadata about WHICH 10-K it's looking at — form type
+  // and filing date — and a stable ref "F" for citations). Falls back to
+  // the legacy raw-string tenKExcerpt when callers haven't been updated.
+  const tenKBlock = input.filing
+    ? `\n\n${input.filing.formType} excerpt [ref F, filed ${new Date(input.filing.filedAt).toISOString().slice(0, 10)}, accession ${input.filing.accession}]:\n${input.filing.excerpt.trim().slice(0, 6000)}`
+    : input.tenKExcerpt
+      ? `\n\n10-K Item 1 excerpt [ref F]:\n${input.tenKExcerpt.trim().slice(0, 6000)}`
+      : ''
+  // Articles get N1, N2, ... refs. Each line carries the title, source
+  // (feed name), and date so the model can pick the right one to cite
+  // without having to read the full summary first.
+  const newsBlock = input.articles && input.articles.length > 0
+    ? '\n\nRecent news:\n' +
+      input.articles
+        .slice(0, 6)
+        .map((a) => {
+          const dateStr = a.publishedAt
+            ? new Date(a.publishedAt).toISOString().slice(0, 10)
+            : ''
+          const meta = [a.feedTitle, dateStr].filter(Boolean).join(' · ')
+          const metaSuffix = meta ? ` (${meta})` : ''
+          const summarySuffix = a.summary ? ` — ${a.summary.slice(0, 200)}` : ''
+          return `[ref ${a.refId}] ${a.title}${metaSuffix}${summarySuffix}`
+        })
+        .join('\n')
+    : input.newsSnippets && input.newsSnippets.length > 0
       ? '\n\nRecent news:\n' +
         input.newsSnippets
           .slice(0, 6)
@@ -290,7 +347,8 @@ export async function generateCompanyValueChain(input: {
     `      "to": "node symbol",\n` +
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
     `      "note": "one sentence, <120 chars, grounded in facts",\n` +
-    `      "source": "filings" | "news" | "profile" | "model"\n` +
+    `      "source": "filings" | "news" | "profile" | "model",\n` +
+    `      "sourceRef": "F" | "P" | "N1" | "N2" | ... (omit for source=model)\n` +
     `    }\n` +
     `  ]\n` +
     `}\n\n` +
@@ -367,6 +425,20 @@ export async function generateCompanyValueChain(input: {
     `- "model" if you know the relationship from your general training but ` +
     `none of the supplied context mentions it. Use this honestly — over-` +
     `claiming grounding degrades user trust.\n` +
+    `\n` +
+    `Edge "sourceRef" field — point to the SPECIFIC document the claim ` +
+    `came from so the user can click through to read it themselves. The ` +
+    `refs above (in [ref X] tags) are the only valid values:\n` +
+    `- "F" when source="filings" and the claim came from the 10-K excerpt.\n` +
+    `- "P" when source="profile" and the claim came from the profile text.\n` +
+    `- "N1" / "N2" / ... when source="news" and the claim came from THAT ` +
+    `specific article. Pick the one that actually mentions the relationship — ` +
+    `if multiple do, pick the most recent. NEVER guess a refId that wasn't ` +
+    `supplied above.\n` +
+    `- OMIT sourceRef when source="model" (no document to cite).\n` +
+    `- If you set source="filings"/"news"/"profile" but you don't have a ` +
+    `matching ref above, downgrade source to "model" and omit sourceRef ` +
+    `rather than fabricate a citation.\n` +
     `\n` +
     (input.userCorrectionsBlock
       ? `\n${input.userCorrectionsBlock}\n\n` +
@@ -488,6 +560,7 @@ export async function generateCompanyValueChain(input: {
         relationship?: unknown
         note?: unknown
         source?: unknown
+        sourceRef?: unknown
       }
       const from = typeof row.from === 'string' ? row.from.trim().toUpperCase() : ''
       const to = typeof row.to === 'string' ? row.to.trim().toUpperCase() : ''
@@ -527,12 +600,17 @@ export async function generateCompanyValueChain(input: {
         rawSource === 'model'
           ? rawSource
           : null
+      const sourceRef =
+        typeof row.sourceRef === 'string' && row.sourceRef.trim()
+          ? row.sourceRef.trim()
+          : null
       edgesOut.push({
         from,
         to,
         relationship: rel,
         note: typeof row.note === 'string' ? row.note.trim().slice(0, 200) : null,
-        source
+        source,
+        sourceRef
       })
     }
   }

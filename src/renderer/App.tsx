@@ -3051,6 +3051,7 @@ function StocksPage({
             quote={bySymbol.get(t.symbol.toUpperCase())}
             onClose={() => setSelectedTickerId(null)}
             onOpenArticle={onOpenArticle}
+            onOpenURL={onOpenURL}
             onActivate={async () => {
               await window.api.tickers.activate(t.id)
               const updated = await window.api.tickers.list()
@@ -3336,7 +3337,8 @@ function StockDetail({
   onClose,
   onOpenArticle,
   onActivate,
-  onOpenTicker
+  onOpenTicker,
+  onOpenURL
 }: {
   ticker: Ticker
   tickers: Ticker[]
@@ -3348,6 +3350,10 @@ function StockDetail({
   // chain when users click a resolved node. Parent owns the state (the
   // ticker-id selector on StocksPage), so this just re-fires that handler.
   onOpenTicker: (tickerId: number) => void
+  // Open an external URL in the in-app reader. Wired into the value-chain
+  // citation chips so users can click through from an edge to the cited
+  // 10-K filing or news article.
+  onOpenURL: (url: string, title: string, subtitle?: string | null) => void
 }): JSX.Element {
   const [history, setHistory] = useState<HistoryPoint[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
@@ -3709,6 +3715,7 @@ function StockDetail({
             symbol={ticker.symbol}
             companyName={ticker.companyName ?? ticker.symbol}
             tickers={tickers}
+            onOpenCitation={onOpenURL}
             onOpenTicker={async (sym) => {
               // Ensure a passive ticker row exists for the clicked node,
               // then navigate to its detail page. Falls back to companyName

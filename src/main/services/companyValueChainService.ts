@@ -81,7 +81,17 @@ function stripHtmlToText(html: string): string {
     .trim()
 }
 
-async function fetchTenKExcerpt(symbol: string): Promise<string | null> {
+// Bundled return: the excerpt text plus the metadata about WHICH filing
+// it came from. The chain generator threads this into its grounding-with-
+// refs payload so edges grounded in the 10-K can carry a clickable
+// citation back to the SEC archive URL.
+interface TenKExcerptResult {
+  excerpt: string
+  filing: SecFiling
+  url: string
+}
+
+async function fetchTenKExcerpt(symbol: string): Promise<TenKExcerptResult | null> {
   const filings = getFilingsForSymbol(symbol, 10).filter(isAnnualReport)
   const latest = filings[0]
   if (!latest) return null
@@ -103,11 +113,10 @@ async function fetchTenKExcerpt(symbol: string): Promise<string | null> {
     // Slice to Item 1 (Business) — concentrated value-chain info lives
     // there. Fallback to the first 6k chars when the marker isn't present.
     const m = /item\s+1\.\s*business/i.exec(text)
-    if (m) {
-      const start = Math.max(0, m.index - 200)
-      return text.slice(start, Math.min(text.length, start + 6000))
-    }
-    return text.slice(0, 6000)
+    const excerpt = m
+      ? text.slice(Math.max(0, m.index - 200), Math.min(text.length, Math.max(0, m.index - 200) + 6000))
+      : text.slice(0, 6000)
+    return { excerpt, filing: latest, url }
   } catch (err) {
     console.warn(
       `[companyChain] 10-K fetch failed for ${symbol}:`,
@@ -119,17 +128,31 @@ async function fetchTenKExcerpt(symbol: string): Promise<string | null> {
   }
 }
 
-// Quick pull of the 6 most recent articles tagged to this symbol. Keeps the
-// grounding context concise; we're feeding this into a fairly long prompt
-// already.
-function fetchRecentNews(
-  symbol: string
-): Array<{ title: string; summary: string | null }> {
+// Quick pull of the 6 most recent articles tagged to this symbol. Returns
+// the full row metadata (id, url, publishedAt, feed title) so the chain
+// generator can build [ref N1] / [ref N2] / ... entries the model can
+// cite — and the renderer can later resolve those refs to clickable
+// chips that open the in-app reader.
+interface RecentNewsRow {
+  articleId: number
+  title: string
+  summary: string | null
+  url: string | null
+  publishedAt: number | null
+  feedTitle: string | null
+}
+function fetchRecentNews(symbol: string): RecentNewsRow[] {
   return getDb()
-    .prepare<[string, number], { title: string; summary: string | null }>(
-      `SELECT a.title, a.summary
+    .prepare<[string, number], RecentNewsRow>(
+      `SELECT a.id        AS articleId,
+              a.title     AS title,
+              a.summary   AS summary,
+              a.url       AS url,
+              a.publishedAt AS publishedAt,
+              f.title     AS feedTitle
          FROM articles a
          JOIN article_ticker_matches m ON m.articleId = a.id
+         LEFT JOIN feeds f ON f.id = a.feedId
         WHERE m.symbol = ?
         ORDER BY a.publishedAt DESC
         LIMIT ?`
@@ -279,6 +302,73 @@ type ChainEdge = {
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
   source: 'filings' | 'news' | 'profile' | 'model' | null
+  // Stable id of the supplied context item the model cited as its source.
+  // Resolved into a structured CompanyValueChainEdgeCitation by
+  // attachCitations after canonicalizeEdges runs. Null when the model
+  // didn't cite anything (typically when source='model').
+  sourceRef?: string | null
+}
+
+// Resolve the model-emitted sourceRef ("F", "P", "N1", ...) on each edge
+// into a structured CompanyValueChainEdgeCitation that the renderer can
+// turn into a clickable chip. We deliberately do NOT trust the model's
+// self-reported source category alone — the sourceRef MUST match a
+// context item we actually supplied. If the model fabricates a ref or
+// references one we didn't pass (e.g. "N7" when we only fed 6 articles),
+// citation is set to null and the user just sees the existing source-
+// category badge. Edges with no sourceRef get null citation.
+function attachCitations(
+  edges: ChainEdge[],
+  filing: { accession: string; cik: string; formType: string; filedAt: number; url: string } | null,
+  articlesByRef: Map<
+    string,
+    {
+      articleId: number
+      title: string
+      url: string | null
+      publishedAt: number | null
+      feedTitle: string | null
+    }
+  >
+): import('../database/companyValueChains').CompanyValueChainEdge[] {
+  return edges.map((edge) => {
+    let citation: import('../database/companyValueChains').CompanyValueChainEdgeCitation | null = null
+    const ref = (edge.sourceRef ?? '').toUpperCase()
+    if (ref === 'F' && filing) {
+      citation = {
+        kind: 'filing',
+        accession: filing.accession,
+        cik: filing.cik,
+        formType: filing.formType,
+        filedAt: filing.filedAt,
+        url: filing.url
+      }
+    } else if (ref === 'P') {
+      citation = { kind: 'profile' }
+    } else if (ref.startsWith('N')) {
+      const article = articlesByRef.get(ref)
+      if (article) {
+        citation = {
+          kind: 'article',
+          articleId: article.articleId,
+          title: article.title,
+          url: article.url,
+          publishedAt: article.publishedAt,
+          feedTitle: article.feedTitle
+        }
+      }
+    } else if (edge.source === 'model' || !ref) {
+      citation = { kind: 'model' }
+    }
+    return {
+      from: edge.from,
+      to: edge.to,
+      relationship: edge.relationship,
+      note: edge.note,
+      source: edge.source,
+      citation
+    }
+  })
 }
 
 // Re-frame a foreign edge relative to a specific focus. The source chain
@@ -376,7 +466,8 @@ function canonicalizeEdges(
       to: canonicalTo,
       relationship: edge.relationship,
       note: edge.note,
-      source: edge.source
+      source: edge.source,
+      sourceRef: edge.sourceRef ?? null
     })
   }
   if (dropped > 0) {
@@ -458,7 +549,9 @@ export async function generateCompanyChain(input: {
       symbol: sym,
       companyName: input.companyName,
       profileDescription: profile?.description ?? null,
-      tenKExcerpt,
+      // Sector classifier still wants raw text — pass just the excerpt
+      // string, not the full TenKExcerptResult bundle.
+      tenKExcerpt: tenKExcerpt?.excerpt ?? null,
       force: input.force ?? false
     })
     if (cls) {
@@ -517,12 +610,36 @@ export async function generateCompanyChain(input: {
   // the original chip without forcing a regen.
   const userCorrectionsBlock = formatCorrectionsForPrompt(sym)
 
+  // Build the structured grounding payload with stable ref ids the model
+  // will cite back. "F" → 10-K filing, "P" → profile, "N1"/"N2"/... →
+  // articles. After generation we resolve the model's emitted sourceRef
+  // back into a clickable citation object stored on each edge.
+  const filingPayload = tenKExcerpt
+    ? {
+        accession: tenKExcerpt.filing.accessionNumber,
+        cik: tenKExcerpt.filing.cik,
+        formType: tenKExcerpt.filing.formType,
+        filedAt: tenKExcerpt.filing.filedAt,
+        url: tenKExcerpt.url,
+        excerpt: tenKExcerpt.excerpt
+      }
+    : null
+  const articlesPayload = news.map((n, i) => ({
+    refId: `N${i + 1}`,
+    articleId: n.articleId,
+    title: n.title,
+    summary: n.summary,
+    url: n.url,
+    publishedAt: n.publishedAt,
+    feedTitle: n.feedTitle
+  }))
+
   const { result: generated, provider } = await routedGenerate({
     symbol: sym,
     companyName: input.companyName,
     profileDescription: profile?.description ?? null,
-    tenKExcerpt,
-    newsSnippets: news,
+    filing: filingPayload,
+    articles: articlesPayload,
     canonicalStages,
     sectorName: sectorCatalogEntry?.name,
     crossChainMentions: crossChain,
@@ -548,11 +665,17 @@ export async function generateCompanyChain(input: {
 
   const resolvedNodes = resolveNodes(generated.nodes, sym)
   const canonicalEdges = canonicalizeEdges(generated.edges, resolvedNodes, generated.nodes)
+  // Resolve each edge's sourceRef ("F" / "P" / "N1" / ...) into a
+  // structured citation pointing at the actual SEC URL or in-app article.
+  // Falls back to citation=null for edges with no ref or a ref that
+  // doesn't match a context item we supplied.
+  const articlesByRef = new Map(articlesPayload.map((a) => [a.refId, a]))
+  const citedEdges = attachCitations(canonicalEdges, filingPayload, articlesByRef)
   const graph: CompanyValueChain = {
     focus: sym,
     stages: generated.stages,
     nodes: resolvedNodes,
-    edges: canonicalEdges
+    edges: citedEdges
   }
 
   // Persist the RAW model output. Corrections are applied at read time via

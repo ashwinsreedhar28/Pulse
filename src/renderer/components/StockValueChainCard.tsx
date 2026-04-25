@@ -1,5 +1,9 @@
 import { useMemo, type MouseEvent as ReactMouseEvent } from 'react'
-import type { CompanyValueChainEdgeSource, Ticker } from '../../preload'
+import type {
+  CompanyValueChainEdgeCitation,
+  CompanyValueChainEdgeSource,
+  Ticker
+} from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
 import { CollapsibleSection } from './CollapsibleSection'
 
@@ -50,6 +54,11 @@ export interface Counterparty {
   // / 'profile' are real groundings; 'model' means the LLM claimed the
   // relationship from training knowledge without any supplied context.
   source?: CompanyValueChainEdgeSource | null
+  // Specific document the model cited as the basis for this edge. When
+  // present, the source badge becomes a clickable link — opens the SEC
+  // archive URL externally for filings, the in-app reader for articles.
+  // Absent on legacy chains generated before this feature shipped.
+  citation?: CompanyValueChainEdgeCitation | null
   // True when this counterparty is a Claude-named entity that didn't
   // resolve to a real public ticker (private companies, brand labels
   // like ROVI_LABEL, unverified placeholders). Renders as a muted, non-
@@ -86,6 +95,85 @@ export const SOURCE_BADGE: Record<
     title:
       'From the model’s training knowledge — not grounded in any supplied filing or article'
   }
+}
+
+// Format an article's date as YYYY-MM-DD for the citation tooltip. Returns
+// empty string when no date is available so the title string degrades
+// gracefully ("Article: ..." with no date suffix).
+function formatCiteDate(ms: number | null | undefined): string {
+  if (!ms || !Number.isFinite(ms)) return ''
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
+// SourceBadge: renders the provenance pill next to an edge note. When a
+// citation + onOpen handler are both present, the pill becomes a clickable
+// link to the actual document. Falls back to a static pill (matching the
+// legacy non-cited UX) for: edges without citations, edges with citations
+// but kinds that have no URL ('profile'/'model'), or callers that didn't
+// wire a handler.
+function SourceBadge({
+  source,
+  citation,
+  onOpen
+}: {
+  source?: CompanyValueChainEdgeSource | null
+  citation?: CompanyValueChainEdgeCitation | null
+  onOpen?: (url: string, title: string, subtitle?: string | null) => void
+}): JSX.Element | null {
+  if (!source) return null
+  const meta = SOURCE_BADGE[source]
+  if (!meta) return null
+
+  let label = meta.label
+  let title = meta.title
+  let openArgs: { url: string; title: string; subtitle: string | null } | null = null
+
+  if (citation?.kind === 'filing') {
+    const dateStr = formatCiteDate(citation.filedAt)
+    label = citation.formType
+    title = `${citation.formType} filed ${dateStr} · ${citation.accession} — click to open SEC filing`
+    openArgs = {
+      url: citation.url,
+      title: `${citation.formType} (${dateStr})`,
+      subtitle: citation.accession
+    }
+  } else if (citation?.kind === 'article' && citation.url) {
+    const dateStr = formatCiteDate(citation.publishedAt)
+    const sourceStr = citation.feedTitle ?? 'News'
+    label = sourceStr.length > 14 ? sourceStr.slice(0, 12) + '…' : sourceStr
+    title = `${citation.title}${dateStr ? ` (${dateStr})` : ''} — click to open`
+    openArgs = {
+      url: citation.url,
+      title: citation.title,
+      subtitle: dateStr
+        ? `${citation.feedTitle ?? 'Article'} · ${dateStr}`
+        : (citation.feedTitle ?? null)
+    }
+  }
+
+  const baseClasses = `shrink-0 inline-flex items-center px-1.5 py-[1px] rounded-full border text-[8.5px] font-semibold uppercase tracking-[0.16em] ${meta.className}`
+
+  if (openArgs && onOpen) {
+    const args = openArgs
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onOpen(args.url, args.title, args.subtitle)
+        }}
+        className={`${baseClasses} hover:brightness-125 cursor-pointer`}
+        title={title}
+      >
+        {label}
+      </button>
+    )
+  }
+  return (
+    <span className={baseClasses} title={title}>
+      {label}
+    </span>
+  )
 }
 
 // Palette maps to the three relationship categories used throughout the value
@@ -346,7 +434,8 @@ export function TransactionCluster({
   onHover,
   onLeave,
   onContextMenu,
-  correctedSymbols
+  correctedSymbols,
+  onOpenCitation
 }: {
   category: Category
   items: Counterparty[]
@@ -361,6 +450,11 @@ export function TransactionCluster({
   // get a small "user-corrected" badge so the user can see at a glance
   // which entries are theirs vs Claude's original.
   correctedSymbols?: Set<string>
+  // Click handler for the source-citation pill. When provided, edges with
+  // resolvable citations (filings or news articles with URLs) become
+  // clickable — the badge calls this with the URL so the consuming screen
+  // can route through its existing external-reader pattern.
+  onOpenCitation?: (url: string, title: string, subtitle?: string | null) => void
 }): JSX.Element | null {
   const tone = TONE[category]
   const groups = useStageGroups(items)
@@ -459,14 +553,11 @@ export function TransactionCluster({
                       {item.note && (
                         <div className="text-[11px] leading-snug text-zinc-400 mt-0.5 flex items-start gap-1.5">
                           <span className="flex-1 min-w-0">{item.note}</span>
-                          {item.source && SOURCE_BADGE[item.source] && (
-                            <span
-                              className={`shrink-0 inline-flex items-center px-1.5 py-[1px] rounded-full border text-[8.5px] font-semibold uppercase tracking-[0.16em] ${SOURCE_BADGE[item.source].className}`}
-                              title={SOURCE_BADGE[item.source].title}
-                            >
-                              {SOURCE_BADGE[item.source].label}
-                            </span>
-                          )}
+                          <SourceBadge
+                            source={item.source}
+                            citation={item.citation}
+                            onOpen={onOpenCitation}
+                          />
                         </div>
                       )}
                     </div>

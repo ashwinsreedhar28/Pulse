@@ -1179,6 +1179,12 @@ export interface GeneratedValueChainEdge {
   relationship: 'supplier' | 'customer' | 'competitor' | 'partner'
   note: string | null
   source: GeneratedValueChainEdgeSource | null
+  // Stable id of the supplied context item the model cited as its source.
+  // 'F' for the filing, 'P' for the profile, 'N1'/'N2'/... for articles.
+  // Resolved to a CompanyValueChainEdgeCitation in companyValueChainService
+  // before the chain is persisted. Null when the model emitted no ref
+  // (typically because source='model').
+  sourceRef?: string | null
 }
 
 export interface GeneratedValueChainStage {
@@ -1193,12 +1199,43 @@ export interface GeneratedValueChain {
   edges: GeneratedValueChainEdge[]
 }
 
+// See claudeService.ChainGroundingFiling / ChainGroundingArticle. We
+// re-declare the shapes here (rather than import) so the two providers
+// can drift independently if needed; the orchestrator passes identical
+// payloads into both.
+export interface OllamaChainGroundingFiling {
+  accession: string
+  cik: string
+  formType: string
+  filedAt: number
+  url: string
+  excerpt: string
+}
+export interface OllamaChainGroundingArticle {
+  refId: string
+  articleId: number
+  title: string
+  summary: string | null
+  url: string | null
+  publishedAt: number | null
+  feedTitle: string | null
+}
+
 export async function generateCompanyValueChain(input: {
   symbol: string
   companyName: string
   // Optional grounding material — whatever the caller has.
   profileDescription?: string | null
+  // Structured 10-K filing context — when present, the prompt cites it as
+  // ref "F" and the orchestrator can resolve sourceRef="F" back to a
+  // clickable filing citation. Falls back to the legacy raw-string
+  // tenKExcerpt for callers that haven't been updated.
+  filing?: OllamaChainGroundingFiling | null
   tenKExcerpt?: string | null
+  // Structured news context — each article has a stable refId the model
+  // emits as sourceRef on grounded edges. newsSnippets is the legacy
+  // unciteable form.
+  articles?: OllamaChainGroundingArticle[]
   newsSnippets?: Array<{ title: string; summary: string | null }>
   // Canonical stage list from the focus's sector. When provided, the
   // prompt constrains Ollama to pick from this list verbatim — same
@@ -1235,14 +1272,36 @@ export async function generateCompanyValueChain(input: {
 
   const contextParts: string[] = []
   if (input.profileDescription) {
-    contextParts.push(`Company profile:\n${input.profileDescription.slice(0, 1200)}`)
-  }
-  if (input.tenKExcerpt) {
     contextParts.push(
-      `10-K excerpt (Item 1 / Business):\n${input.tenKExcerpt.slice(0, 4000)}`
+      `Company profile [ref P]:\n${input.profileDescription.slice(0, 1200)}`
     )
   }
-  if (input.newsSnippets && input.newsSnippets.length > 0) {
+  if (input.filing) {
+    const filedDate = new Date(input.filing.filedAt).toISOString().slice(0, 10)
+    contextParts.push(
+      `${input.filing.formType} excerpt [ref F, filed ${filedDate}, accession ${input.filing.accession}]:\n` +
+        input.filing.excerpt.slice(0, 4000)
+    )
+  } else if (input.tenKExcerpt) {
+    contextParts.push(
+      `10-K excerpt (Item 1 / Business) [ref F]:\n${input.tenKExcerpt.slice(0, 4000)}`
+    )
+  }
+  if (input.articles && input.articles.length > 0) {
+    const bullets = input.articles
+      .slice(0, 6)
+      .map((a) => {
+        const dateStr = a.publishedAt
+          ? new Date(a.publishedAt).toISOString().slice(0, 10)
+          : ''
+        const meta = [a.feedTitle, dateStr].filter(Boolean).join(' · ')
+        const metaSuffix = meta ? ` (${meta})` : ''
+        const sum = a.summary ? ` — ${a.summary.slice(0, 200)}` : ''
+        return `[ref ${a.refId}] "${a.title}"${metaSuffix}${sum}`
+      })
+      .join('\n')
+    contextParts.push(`Recent news:\n${bullets}`)
+  } else if (input.newsSnippets && input.newsSnippets.length > 0) {
     const bullets = input.newsSnippets
       .slice(0, 6)
       .map((s, i) => {
@@ -1300,7 +1359,8 @@ export async function generateCompanyValueChain(input: {
     `      "to": "node symbol",\n` +
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
     `      "note": "one short sentence, <120 chars",\n` +
-    `      "source": "filings" | "news" | "profile" | "model"\n` +
+    `      "source": "filings" | "news" | "profile" | "model",\n` +
+    `      "sourceRef": "F" | "P" | "N1" | "N2" | ... (omit when source=model)\n` +
     `    }\n` +
     `  ]\n` +
     `}\n\n` +
@@ -1371,6 +1431,15 @@ export async function generateCompanyValueChain(input: {
     `- "model" if the relationship comes from your general training knowledge ` +
     `rather than any supplied context above. Be honest — over-claiming ` +
     `grounding degrades user trust.\n` +
+    `\n` +
+    `Edge "sourceRef" field — point to the SPECIFIC document the claim came ` +
+    `from. The valid refs are the [ref X] tags above:\n` +
+    `- "F" for the filing excerpt, "P" for the profile, "N1"/"N2"/... for ` +
+    `the article that mentions the relationship.\n` +
+    `- OMIT sourceRef when source="model".\n` +
+    `- Only emit refs that actually appeared in the context. If you can't ` +
+    `find a matching ref for a claim, set source="model" and omit sourceRef ` +
+    `rather than fabricate one.\n` +
     `\n` +
     (input.userCorrectionsBlock
       ? `\n${input.userCorrectionsBlock}\n\n` +
@@ -1575,6 +1644,7 @@ export async function generateCompanyValueChain(input: {
                 relationship?: unknown
                 note?: unknown
                 source?: unknown
+                sourceRef?: unknown
               }
           )
           .filter(
@@ -1590,12 +1660,17 @@ export async function generateCompanyValueChain(input: {
             const source = validSources.includes(sourceRaw)
               ? (sourceRaw as GeneratedValueChainEdgeSource)
               : null
+            const sourceRef =
+              typeof e.sourceRef === 'string' && (e.sourceRef as string).trim()
+                ? (e.sourceRef as string).trim()
+                : null
             return {
               from: (e.from as string).trim().toUpperCase().replace(/\s+/g, '_'),
               to: (e.to as string).trim().toUpperCase().replace(/\s+/g, '_'),
               relationship: e.relationship as GeneratedValueChainEdge['relationship'],
               note: typeof e.note === 'string' ? (e.note as string).trim().slice(0, 180) : null,
-              source
+              source,
+              sourceRef
             }
           })
           .filter((e) => e.from !== e.to)
