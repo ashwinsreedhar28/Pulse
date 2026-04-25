@@ -1309,6 +1309,23 @@ const api = {
       invoke<AnalystEstimates[]>('stocks:getEstimatesBatch', symbols),
     refreshEstimates: (symbol: string) =>
       invoke<AnalystEstimates | null>('stocks:refreshEstimates', symbol),
+    // Single mount-bundle for the ValueChain page. Replaces six separate
+    // batch IPCs that fired on every mount with one round-trip. Incremental
+    // refreshes still come through the existing *:updated subscriptions.
+    getValueChainMountBundle: (
+      symbols: string[],
+      filingsSinceMs: number
+    ): Promise<{
+      financials: FinancialsSnapshot[]
+      earnings: EarningsBadge[]
+      estimates: AnalystEstimates[]
+      sectorsWithContent: SectorWithContent[]
+      primaryIndex: Record<string, string>
+      edgeOverrides: GraphEdgeOverride[]
+      nodeOverrides: GraphNodeOverride[]
+      recentFilings: Record<string, SecFiling[]>
+    }> =>
+      invoke('valueChain:getMountBundle', symbols, filingsSinceMs),
     getOptionsSnapshot: (symbol: string) =>
       invoke<OptionsSnapshot | null>('stocks:getOptionsSnapshot', symbol),
     searchTickers: (query: string, limit?: number) =>

@@ -419,6 +419,60 @@ export function registerDbIpc(): void {
   ipcMain.handle('stocks:refreshEstimates', (_e, symbol: string) =>
     forceRefreshEstimates(symbol)
   )
+  // Single mount-bundle for the ValueChain page. Collapses six independent
+  // IPC round-trips (financials + earnings + estimates + sectors-with-
+  // content + primary-index + edge-overrides + node-overrides + recent-
+  // filings) into one. The handler runs them concurrently in main and
+  // returns a single payload — saves seven IPC ping-pongs on every page
+  // mount and lets the renderer commit all the data in one render pass
+  // instead of rendering empty maps for each slice as it resolves.
+  // Incremental refresh still flows through the existing *:updated
+  // broadcasts; the bundle is only used at mount.
+  ipcMain.handle(
+    'valueChain:getMountBundle',
+    async (_e, symbols: string[], filingsSinceMs: number) => {
+      const sinceMs =
+        Number.isFinite(filingsSinceMs) && filingsSinceMs > 0
+          ? filingsSinceMs
+          : Date.now() - 72 * 60 * 60 * 1000
+      const [
+        financials,
+        earnings,
+        estimates,
+        sectorsWithContent,
+        primaryIndex,
+        edgeOverrides,
+        nodeOverrides
+      ] = await Promise.all([
+        Promise.resolve(computeSnapshotsForSymbols(symbols)),
+        getEarningsBadgesForSymbols(symbols),
+        Promise.resolve(getEstimatesSnapshotsForSymbols(symbols)),
+        Promise.resolve(listSectorsWithContent()),
+        Promise.resolve(buildPrimarySectorIndex()),
+        Promise.resolve(listEdgeOverrides()),
+        Promise.resolve(listNodeOverrides())
+      ])
+      const filingsMap = getRecentFilingsForSymbols(symbols, sinceMs, INTERESTING_FORMS)
+      const recentFilings: Record<string, unknown[]> = {}
+      for (const [sym, list] of filingsMap) {
+        recentFilings[sym] = list.map((f) => ({
+          ...f,
+          filingUrl: buildFilingUrl(f.cik, f.accessionNumber),
+          primaryDocUrl: buildPrimaryDocUrl(f.cik, f.accessionNumber, f.primaryDocument)
+        }))
+      }
+      return {
+        financials,
+        earnings,
+        estimates,
+        sectorsWithContent,
+        primaryIndex,
+        edgeOverrides,
+        nodeOverrides,
+        recentFilings
+      }
+    }
+  )
   // SEC EDGAR filings. Per-symbol list (ticker detail page), batch-recent
   // (value-chain "new 8-K" badges), and a force-refresh hook for promotion
   // flows that can't wait for the daily sweep.

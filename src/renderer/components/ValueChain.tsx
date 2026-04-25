@@ -282,19 +282,62 @@ export function ValueChain({
   const [financialsMap, setFinancialsMap] = useState<Map<string, FinancialsSnapshot>>(
     () => new Map()
   )
+  // Earnings badges (next scheduled date + most-recent reported quarter end).
+  // Drives tile pulse animations + the focus-panel countdown.
+  const [earningsMap, setEarningsMap] = useState<Map<string, EarningsBadge>>(
+    () => new Map()
+  )
+  // Analyst consensus (forward EPS, price target, upgrade/downgrade tally).
+  // Only symbols the estimates scheduler has already cached will come back.
+  const [estimatesMap, setEstimatesMap] = useState<Map<string, AnalystEstimates>>(
+    () => new Map()
+  )
+  // Auto-committed graph-edge + node overlays from the candidates pipeline.
+  // Refreshes on every graph:updated broadcast.
+  const [edgeOverrides, setEdgeOverrides] = useState<GraphEdgeOverride[]>([])
+  const [nodeOverrides, setNodeOverrides] = useState<GraphNodeOverride[]>([])
+  // Unified-graph sector state: drives the GICS tab strip + sector filter.
+  const [sectorsWithContent, setSectorsWithContent] = useState<SectorWithContent[]>([])
+  const [primaryIndex, setPrimaryIndex] = useState<Record<string, string>>({})
+  // Recent SEC filings (last 72h) — powers the 📄 badge on tiles.
+  const [recentFilingsMap, setRecentFilingsMap] = useState<Map<string, SecFiling[]>>(
+    () => new Map()
+  )
+
+  // Single mount-bundle: pulls financials + earnings + estimates + sector
+  // rollup + graph overrides + recent filings in one IPC round-trip.
+  // Replaces six independent fetches that each rendered an empty map until
+  // the slowest resolved. Incremental refreshes flow through the *:updated
+  // listeners below.
   useEffect(() => {
     let cancelled = false
     const symbols = [...new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))]
+    const since = Date.now() - 72 * 60 * 60 * 1000
     window.api.stocks
-      .getFinancialsBatch(symbols)
-      .then((snapshots) => {
+      .getValueChainMountBundle(symbols, since)
+      .then((bundle) => {
         if (cancelled) return
-        const m = new Map<string, FinancialsSnapshot>()
-        for (const s of snapshots) m.set(s.symbol.toUpperCase(), s)
-        setFinancialsMap(m)
+        const fin = new Map<string, FinancialsSnapshot>()
+        for (const s of bundle.financials) fin.set(s.symbol.toUpperCase(), s)
+        setFinancialsMap(fin)
+        const earn = new Map<string, EarningsBadge>()
+        for (const b of bundle.earnings) earn.set(b.symbol.toUpperCase(), b)
+        setEarningsMap(earn)
+        const est = new Map<string, AnalystEstimates>()
+        for (const r of bundle.estimates) est.set(r.symbol.toUpperCase(), r)
+        setEstimatesMap(est)
+        setEdgeOverrides(bundle.edgeOverrides)
+        setNodeOverrides(bundle.nodeOverrides)
+        setSectorsWithContent(bundle.sectorsWithContent)
+        setPrimaryIndex(bundle.primaryIndex)
+        const filings = new Map<string, SecFiling[]>()
+        for (const sym of Object.keys(bundle.recentFilings)) {
+          filings.set(sym.toUpperCase(), bundle.recentFilings[sym])
+        }
+        setRecentFilingsMap(filings)
       })
       .catch((err: unknown) => {
-        console.warn('[valueChain] financials batch fetch failed', err)
+        console.warn('[valueChain] mount bundle fetch failed', err)
       })
     return () => {
       cancelled = true
@@ -317,59 +360,6 @@ export function ValueChain({
         })
     })
   }, [])
-
-  // Earnings badges (next scheduled date + most-recent reported quarter end).
-  // Parallel to financialsMap — one batch fetch on mount drives the tile
-  // pulse animations + the focus-panel countdown. Yahoo's 24h TTL inside
-  // getEarnings makes this cheap even for all ~65 graph nodes, and the
-  // calendar strip warms the cache ahead of us on app boot.
-  const [earningsMap, setEarningsMap] = useState<Map<string, EarningsBadge>>(
-    () => new Map()
-  )
-  useEffect(() => {
-    let cancelled = false
-    const symbols = [...new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))]
-    window.api.stocks
-      .getEarningsBatch(symbols)
-      .then((badges) => {
-        if (cancelled) return
-        const m = new Map<string, EarningsBadge>()
-        for (const b of badges) m.set(b.symbol.toUpperCase(), b)
-        setEarningsMap(m)
-      })
-      .catch((err: unknown) => {
-        console.warn('[valueChain] earnings batch fetch failed', err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // Analyst consensus (forward EPS, price target, upgrade/downgrade tally).
-  // Only symbols the estimates scheduler has already cached will come back
-  // here — passive graph nodes won't have entries until the user promotes
-  // them to the watchlist. The UI degrades gracefully (em-dashes).
-  const [estimatesMap, setEstimatesMap] = useState<Map<string, AnalystEstimates>>(
-    () => new Map()
-  )
-  useEffect(() => {
-    let cancelled = false
-    const symbols = [...new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))]
-    window.api.stocks
-      .getEstimatesBatch(symbols)
-      .then((rows) => {
-        if (cancelled) return
-        const m = new Map<string, AnalystEstimates>()
-        for (const r of rows) m.set(r.symbol.toUpperCase(), r)
-        setEstimatesMap(m)
-      })
-      .catch((err: unknown) => {
-        console.warn('[valueChain] estimates batch fetch failed', err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
   useEffect(() => {
     return window.api.stocks.onEstimatesUpdated((symbol) => {
       const sym = symbol.toUpperCase()
@@ -388,60 +378,12 @@ export function ValueChain({
         })
     })
   }, [])
-
-  // Auto-committed graph-edge + node overlays from the candidates pipeline.
-  // Merged into CHAIN.edges / CHAIN.nodes / COMPETITOR_MAP at the
-  // relationship-building useMemos below so accepted edges + nodes
-  // participate in the same role inference as the static JSON entries.
-  // Refreshes on every graph:updated broadcast (fires when a sweep commits
-  // new edges/nodes or the user undoes one in Settings).
-  const [edgeOverrides, setEdgeOverrides] = useState<GraphEdgeOverride[]>([])
-  const [nodeOverrides, setNodeOverrides] = useState<GraphNodeOverride[]>([])
-
-  // Unified-graph sector state. `sectorsWithContent` drives which top-level
-  // GICS tabs render (hides sectors with zero assigned tickers).
-  // `primaryIndex` powers the sector filter and the cross-sector edge badge.
-  const [sectorsWithContent, setSectorsWithContent] = useState<SectorWithContent[]>([])
-  const [primaryIndex, setPrimaryIndex] = useState<Record<string, string>>({})
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([window.api.sectors.listWithContent(), window.api.sectors.primaryIndex()])
-      .then(([withContent, idx]) => {
-        if (cancelled) return
-        setSectorsWithContent(withContent)
-        setPrimaryIndex(idx)
-      })
-      .catch((err: unknown) => {
-        console.warn('[valueChain] sectors fetch failed', err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([
-      window.api.graph.listOverrides(),
-      window.api.graph.listNodeOverrides()
-    ])
-      .then(([edges, nodes]) => {
-        if (cancelled) return
-        setEdgeOverrides(edges)
-        setNodeOverrides(nodes)
-      })
-      .catch((err: unknown) => {
-        console.warn('[valueChain] overrides fetch failed', err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
   useEffect(() => {
     return window.api.graph.onUpdated(() => {
-      // Refetch both the overlays AND the sector rollup / primary index.
-      // chain generation absorbs new nodes into overrides AND writes new
-      // ticker_sectors rows, so the sector tab strip + filter need a fresh
-      // read to avoid the "leave page and come back" behavior.
+      // Refetch overrides + sector rollup. Chain generation absorbs new
+      // nodes into overrides AND writes new ticker_sectors rows, so the
+      // sector tab strip + filter need a fresh read to avoid the "leave
+      // page and come back" behavior.
       Promise.all([
         window.api.graph.listOverrides(),
         window.api.graph.listNodeOverrides(),
@@ -458,33 +400,6 @@ export function ValueChain({
           /* keep prior state */
         })
     })
-  }, [])
-
-  // Recent SEC filings (last 72h) — powers the 📄 badge on value-chain tiles
-  // to flag "something just got filed here". Only tickers with interesting
-  // forms in the window come back, so non-watchlist graph nodes won't appear
-  // here until they have cached filings.
-  const [recentFilingsMap, setRecentFilingsMap] = useState<Map<string, SecFiling[]>>(
-    () => new Map()
-  )
-  useEffect(() => {
-    let cancelled = false
-    const symbols = [...new Set(CHAIN.nodes.map((n) => n.symbol.toUpperCase()))]
-    const since = Date.now() - 72 * 60 * 60 * 1000
-    window.api.sec
-      .getRecentFilings(symbols, since, true)
-      .then((obj) => {
-        if (cancelled) return
-        const m = new Map<string, SecFiling[]>()
-        for (const sym of Object.keys(obj)) m.set(sym.toUpperCase(), obj[sym])
-        setRecentFilingsMap(m)
-      })
-      .catch((err: unknown) => {
-        console.warn('[valueChain] recent filings batch fetch failed', err)
-      })
-    return () => {
-      cancelled = true
-    }
   }, [])
   useEffect(() => {
     return window.api.sec.onUpdated((symbol) => {
