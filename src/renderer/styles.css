@@ -346,16 +346,29 @@
 
 /* Ticker marquee */
 @keyframes ticker-marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
 }
 .animate-ticker {
   animation: ticker-marquee 70s linear infinite;
-  /* Promote to its own compositor layer: the marquee runs forever, so paying
-     one-time GPU memory avoids repainting neighbors every frame. */
+  /* Force a GPU compositor layer up front. `will-change: transform` alone is
+     honored lazily by some browsers — first transform tick can re-composite,
+     and any neighbor reflow (e.g. a CollapsibleSection snap) can briefly paint
+     through the bar. translate3d(0) creates the layer immediately. */
   will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 .animate-ticker:hover { animation-play-state: paused; }
+/* Marquee viewport + strip containment. Without paint+layout containment,
+   a body reflow (collapsing a section, hiding content) repaints the whole
+   ticker container — visible as a brief flicker on the rolling bar. The
+   `contain` rule isolates the bar's paint and layout subtree from the rest
+   of the document so neighbor reflows can't dirty it. */
+.ticker-strip,
+.ticker-viewport {
+  contain: paint layout style;
+}
 /* Pause every CSS animation (marquee, animate-ping, animate-pulse, kenburns,
    etc.) while the window is hidden — GPU compositor was repainting layers
    nobody could see. */

@@ -761,7 +761,7 @@ function TickerStrip({
     setMode((m) => TICKER_MODES[(TICKER_MODES.indexOf(m) + 1) % TICKER_MODES.length])
   }
   return (
-    <div className="h-9 shrink-0 border-b border-edge bg-surface-1/40 overflow-hidden flex items-center">
+    <div className="ticker-strip h-9 shrink-0 border-b border-edge bg-surface-1/40 overflow-hidden flex items-center">
       <button
         type="button"
         onClick={cycle}
@@ -776,7 +776,7 @@ function TickerStrip({
           {style.label}
         </span>
       </button>
-      <div className="flex-1 overflow-hidden">
+      <div className="ticker-viewport flex-1 overflow-hidden">
         {mode === 'markets' ? (
           <MarketsReel onOpenStock={onOpenStock} />
         ) : mode === 'stories' ? (
