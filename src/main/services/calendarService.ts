@@ -8,7 +8,11 @@
 
 import { listTickers } from '../database/tickers'
 import { listFavoriteTeams } from '../database/favoriteTeams'
-import { getEarnings } from './yahooFinanceService'
+import { getEarnings, runBounded } from './yahooFinanceService'
+
+// Cap concurrent Yahoo earnings calls so the calendar's first cold render
+// doesn't fire 50+ parallel quoteSummary requests against the same crumb.
+const CALENDAR_EARNINGS_CONCURRENCY = 6
 import { listGames, LEAGUES } from './sportsService'
 import { loadConfig } from './configFileService'
 import {
@@ -160,8 +164,9 @@ async function fetchLaunches(now: number, horizon: number): Promise<CalendarEven
 async function collectEarnings(now: number, horizon: number): Promise<CalendarEvent[]> {
   const tickers = listTickers().filter((t) => t.isActive)
   if (tickers.length === 0) return []
-  const results = await Promise.all(
-    tickers.map(async (t) => {
+  const results = await runBounded(
+    tickers,
+    async (t) => {
       try {
         const earnings = await getEarnings(t.symbol)
         if (!earnings?.nextDate) return null
@@ -178,7 +183,8 @@ async function collectEarnings(now: number, horizon: number): Promise<CalendarEv
       } catch {
         return null
       }
-    })
+    },
+    CALENDAR_EARNINGS_CONCURRENCY
   )
   return results.filter((e): e is CalendarEvent => e !== null)
 }

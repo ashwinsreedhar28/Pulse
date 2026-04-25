@@ -1605,9 +1605,12 @@ async function fetchQuoteOne(symbol: string): Promise<StockQuote> {
 }
 
 // Simple bounded-parallelism runner. Walks the symbol list in waves of
-// YAHOO_QUOTES_CONCURRENCY promises so we never have more than that many
-// chart requests outstanding at once.
-async function runBounded<T, R>(
+// `concurrency` promises so we never have more than that many requests
+// outstanding at once. Exported so other Yahoo-touching services
+// (earningsService, calendarService) can share the same throttling
+// shape — unbounded Promise.all on quoteSummary endpoints triggers a
+// thundering-herd cookie-rotation on the first 401 and self-DoSes.
+export async function runBounded<T, R>(
   items: T[],
   worker: (item: T) => Promise<R>,
   concurrency: number

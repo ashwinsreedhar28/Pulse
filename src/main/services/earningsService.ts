@@ -8,7 +8,14 @@
 // fetch, and a second ValueChain render within the day hits the cache.
 
 import { getAllLastPeriodEnds } from '../database/tickerFinancials'
-import { getEarnings, getEarningsHistory } from './yahooFinanceService'
+import { getEarnings, getEarningsHistory, runBounded } from './yahooFinanceService'
+
+// Cap concurrent Yahoo quoteSummary fan-out. Each symbol makes 2 calls
+// (calendarEvents + earningsHistory), so concurrency 6 = 12 outstanding
+// requests. Yahoo throttles around 10/sec on quoteSummary; staying at or
+// below that prevents the thundering-herd cookie-rotation that would
+// happen if a 401 hit while 60+ calls were in flight.
+const EARNINGS_CONCURRENCY = 6
 
 // Trimmed-down beat/miss shape for the renderer. Omits Yahoo's raw period
 // tag — we have the unix ms and the renderer sorts on that.
@@ -84,8 +91,9 @@ export async function getEarningsBadgesForSymbols(
   const unique = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))]
   if (unique.length === 0) return []
   const periodEnds = getAllLastPeriodEnds()
-  const results = await Promise.all(
-    unique.map(async (sym) => {
+  return runBounded(
+    unique,
+    async (sym) => {
       try {
         const [earnings, history] = await Promise.all([
           getEarnings(sym).catch(() => null),
@@ -115,7 +123,7 @@ export async function getEarningsBadgesForSymbols(
           fetchedAt: null
         } satisfies EarningsBadge
       }
-    })
+    },
+    EARNINGS_CONCURRENCY
   )
-  return results
 }
