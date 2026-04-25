@@ -1185,6 +1185,12 @@ export interface GeneratedValueChainEdge {
   // before the chain is persisted. Null when the model emitted no ref
   // (typically because source='model').
   sourceRef?: string | null
+  // Free-text source attribution emitted by the model when source='model'.
+  // E.g. "Apple FY2023 10-K", "Bloomberg coverage 2022-2024". Surfaced as
+  // the citation badge label in the renderer instead of the generic "Model"
+  // so users see a real attribution string. Null when the model didn't
+  // attribute or when source != 'model'.
+  modelSource?: string | null
 }
 
 export interface GeneratedValueChainStage {
@@ -1360,7 +1366,8 @@ export async function generateCompanyValueChain(input: {
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
     `      "note": "one short sentence, <120 chars",\n` +
     `      "source": "filings" | "news" | "profile" | "model",\n` +
-    `      "sourceRef": "F" | "P" | "N1" | "N2" | ... (omit when source=model)\n` +
+    `      "sourceRef": "F" | "P" | "N1" | "N2" | ... (when source != "model"),\n` +
+    `      "modelSource": "short attribution" (REQUIRED when source = "model")\n` +
     `    }\n` +
     `  ]\n` +
     `}\n\n` +
@@ -1438,8 +1445,15 @@ export async function generateCompanyValueChain(input: {
     `the article that mentions the relationship.\n` +
     `- OMIT sourceRef when source="model".\n` +
     `- Only emit refs that actually appeared in the context. If you can't ` +
-    `find a matching ref for a claim, set source="model" and omit sourceRef ` +
-    `rather than fabricate one.\n` +
+    `find a matching ref for a claim, set source="model" and emit ` +
+    `modelSource instead of fabricating a sourceRef.\n` +
+    `\n` +
+    `Edge "modelSource" field — REQUIRED when source="model". Name WHERE ` +
+    `in your training the relationship comes from. Be specific:\n` +
+    `- Good: "Apple FY2023 10-K", "TSMC 2024 annual report", "Bloomberg ` +
+    `supply-chain coverage 2022-2024", "${input.symbol} investor day 2024".\n` +
+    `- Bad: "common knowledge", "general training", "public information".\n` +
+    `- Keep under 80 chars. Be specific or omit the edge entirely.\n` +
     `\n` +
     (input.userCorrectionsBlock
       ? `\n${input.userCorrectionsBlock}\n\n` +
@@ -1645,6 +1659,7 @@ export async function generateCompanyValueChain(input: {
                 note?: unknown
                 source?: unknown
                 sourceRef?: unknown
+                modelSource?: unknown
               }
           )
           .filter(
@@ -1664,13 +1679,18 @@ export async function generateCompanyValueChain(input: {
               typeof e.sourceRef === 'string' && (e.sourceRef as string).trim()
                 ? (e.sourceRef as string).trim()
                 : null
+            const modelSource =
+              typeof e.modelSource === 'string' && (e.modelSource as string).trim()
+                ? (e.modelSource as string).trim().slice(0, 80)
+                : null
             return {
               from: (e.from as string).trim().toUpperCase().replace(/\s+/g, '_'),
               to: (e.to as string).trim().toUpperCase().replace(/\s+/g, '_'),
               relationship: e.relationship as GeneratedValueChainEdge['relationship'],
               note: typeof e.note === 'string' ? (e.note as string).trim().slice(0, 180) : null,
               source,
-              sourceRef
+              sourceRef,
+              modelSource
             }
           })
           .filter((e) => e.from !== e.to)

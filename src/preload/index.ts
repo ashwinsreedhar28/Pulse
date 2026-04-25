@@ -474,6 +474,11 @@ export interface GraphEdgeOverride {
   // this edge naturally lives in. Nullable on pre-v35 rows until the
   // bootstrap service backfills.
   sectorId?: string | null
+  // Per-edge citation lifted from the per-ticker chain that the absorber
+  // pulled this edge from. Renders as a clickable badge in the diagram
+  // tooltip — same UX as the per-ticker chain card. Null on legacy rows
+  // and on hand-curated overrides.
+  citation?: CompanyValueChainEdgeCitation | null
 }
 
 // Auto-discovered node. Rendered as a first-class tile alongside the hand-
@@ -551,7 +556,16 @@ export type CompanyValueChainEdgeCitation =
       feedTitle: string | null
     }
   | { kind: 'profile' }
-  | { kind: 'model' }
+  | {
+      kind: 'model'
+      // Free-text source attribution from the model's training knowledge
+      // (e.g. "Apple FY2023 10-K", "Bloomberg coverage 2022-2024"). Not
+      // clickable — there's no URL — but the renderer shows it as the
+      // badge label instead of the generic "Model" so the user sees a
+      // real source name. Absent on legacy chains and on truly-no-attribution
+      // claims.
+      attribution?: string
+    }
 
 export interface CompanyValueChainEdge {
   from: string

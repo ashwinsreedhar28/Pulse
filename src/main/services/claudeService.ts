@@ -348,7 +348,8 @@ export async function generateCompanyValueChain(input: {
     `      "relationship": "supplier" | "customer" | "competitor" | "partner",\n` +
     `      "note": "one sentence, <120 chars, grounded in facts",\n` +
     `      "source": "filings" | "news" | "profile" | "model",\n` +
-    `      "sourceRef": "F" | "P" | "N1" | "N2" | ... (omit for source=model)\n` +
+    `      "sourceRef": "F" | "P" | "N1" | "N2" | ... (when source != "model"),\n` +
+    `      "modelSource": "short attribution string" (REQUIRED when source = "model")\n` +
     `    }\n` +
     `  ]\n` +
     `}\n\n` +
@@ -435,10 +436,22 @@ export async function generateCompanyValueChain(input: {
     `specific article. Pick the one that actually mentions the relationship — ` +
     `if multiple do, pick the most recent. NEVER guess a refId that wasn't ` +
     `supplied above.\n` +
-    `- OMIT sourceRef when source="model" (no document to cite).\n` +
+    `- OMIT sourceRef when source="model".\n` +
     `- If you set source="filings"/"news"/"profile" but you don't have a ` +
-    `matching ref above, downgrade source to "model" and omit sourceRef ` +
-    `rather than fabricate a citation.\n` +
+    `matching ref above, downgrade source to "model" and emit modelSource ` +
+    `instead of fabricating a sourceRef.\n` +
+    `\n` +
+    `Edge "modelSource" field — REQUIRED when source="model". Be specific ` +
+    `about WHERE in your training the relationship comes from. The user ` +
+    `will see this string verbatim as the citation label, so make it ` +
+    `useful — name the document, the publisher, the time period:\n` +
+    `- Good: "Apple FY2023 10-K (training data)", "TSMC 2024 annual ` +
+    `report", "Bloomberg supply-chain coverage 2022-2024", "industry ` +
+    `analyst consensus circa 2023", "${input.symbol} investor-day ` +
+    `disclosure 2024".\n` +
+    `- Bad: "common knowledge", "well known", "general training", ` +
+    `"public information" — these tell the user nothing.\n` +
+    `- Keep it under 80 chars. Be specific or omit the edge.\n` +
     `\n` +
     (input.userCorrectionsBlock
       ? `\n${input.userCorrectionsBlock}\n\n` +
@@ -561,6 +574,7 @@ export async function generateCompanyValueChain(input: {
         note?: unknown
         source?: unknown
         sourceRef?: unknown
+        modelSource?: unknown
       }
       const from = typeof row.from === 'string' ? row.from.trim().toUpperCase() : ''
       const to = typeof row.to === 'string' ? row.to.trim().toUpperCase() : ''
@@ -604,13 +618,18 @@ export async function generateCompanyValueChain(input: {
         typeof row.sourceRef === 'string' && row.sourceRef.trim()
           ? row.sourceRef.trim()
           : null
+      const modelSource =
+        typeof row.modelSource === 'string' && row.modelSource.trim()
+          ? row.modelSource.trim().slice(0, 80)
+          : null
       edgesOut.push({
         from,
         to,
         relationship: rel,
         note: typeof row.note === 'string' ? row.note.trim().slice(0, 200) : null,
         source,
-        sourceRef
+        sourceRef,
+        modelSource
       })
     }
   }

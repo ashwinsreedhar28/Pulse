@@ -234,7 +234,13 @@ export function absorbGeneratedChain(
       weight: 0.65,
       source,
       acceptedAt: now,
-      sectorId
+      sectorId,
+      // Forward the per-edge citation so the diagram tooltip + unified-
+      // graph chips can show clickable provenance (10-K URL, article URL,
+      // or model attribution string). Citations carry through ConsensusMerge
+      // via COALESCE — second-source merges keep the first citation rather
+      // than overwrite.
+      citation: edge.citation ?? null
     })
     edgesAdded += 1
   }

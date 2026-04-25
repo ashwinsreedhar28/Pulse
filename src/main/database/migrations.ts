@@ -1231,5 +1231,28 @@ export const migrations: Migration[] = [
       })
       txn()
     }
+  },
+  {
+    version: 41,
+    name: 'add citationJson column to graph_edge_overrides',
+    // Per-edge citation provenance for the unified graph. Edges absorbed
+    // from per-ticker chains carry a structured CompanyValueChainEdgeCitation
+    // (10-K accession + URL, or article id + url, or model-attribution
+    // string). The diagram tooltip + the unified-graph counterparty chips
+    // surface these so users can click through from any edge to the actual
+    // source document — same UX as the per-ticker chain card.
+    //
+    // Stored as JSON on a nullable column rather than its own table because
+    // (a) it's strictly per-edge metadata with no shared lookup, (b) there's
+    // no use-case to query "which edges cite this filing", and (c) edges
+    // can be added without overrides ever growing into the millions.
+    up: (db) => {
+      const cols = db.prepare(`PRAGMA table_info(graph_edge_overrides)`).all() as Array<{
+        name: string
+      }>
+      if (!cols.some((c) => c.name === 'citationJson')) {
+        db.exec(`ALTER TABLE graph_edge_overrides ADD COLUMN citationJson TEXT`)
+      }
+    }
   }
 ]

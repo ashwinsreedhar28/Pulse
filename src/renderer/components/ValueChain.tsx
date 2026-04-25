@@ -163,7 +163,8 @@ export function ValueChain({
   onOpenTicker,
   onActivateTicker,
   externalFocus,
-  onExternalFocusHandled
+  onExternalFocusHandled,
+  onOpenURL
 }: {
   tickers: Ticker[]
   quotes: StockQuote[]
@@ -177,6 +178,10 @@ export function ValueChain({
   // its request state (prevents re-focusing on every re-render).
   externalFocus?: string | null
   onExternalFocusHandled?: () => void
+  // Open a citation URL in the in-app reader. Wired into TransactionCluster
+  // so each edge's source pill (10-K filing, news article) becomes a
+  // clickable link that opens the cited document.
+  onOpenURL?: (url: string, title: string, subtitle?: string | null) => void
 }): JSX.Element {
   // Two focus sources: hover (transient) and lock (sticky, click-driven).
   // `lockedSymbol` wins when set — hover changes are silently recorded but
@@ -1464,6 +1469,7 @@ export function ValueChain({
                   onLeave={scheduleClear}
                   onContextMenu={(sym, x, y) => openCorrectionMenu(sym, 'supplier', x, y)}
                   correctedSymbols={correctedSymbolSet}
+                  onOpenCitation={onOpenURL}
                 />
                 <TransactionCluster
                   category="competitor"
@@ -1473,6 +1479,7 @@ export function ValueChain({
                   onLeave={scheduleClear}
                   onContextMenu={(sym, x, y) => openCorrectionMenu(sym, 'competitor', x, y)}
                   correctedSymbols={correctedSymbolSet}
+                  onOpenCitation={onOpenURL}
                 />
                 <TransactionCluster
                   category="customer"
@@ -1482,6 +1489,7 @@ export function ValueChain({
                   onLeave={scheduleClear}
                   onContextMenu={(sym, x, y) => openCorrectionMenu(sym, 'customer', x, y)}
                   correctedSymbols={correctedSymbolSet}
+                  onOpenCitation={onOpenURL}
                 />
               </div>
               {hiddenCorrections.length > 0 && (
@@ -1599,6 +1607,7 @@ export function ValueChain({
             onOpenTicker(id)
           }}
           onActivateTicker={onActivateTicker}
+          onOpenURL={onOpenURL}
         />
       )}
 

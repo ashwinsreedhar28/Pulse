@@ -60,7 +60,18 @@ export type CompanyValueChainEdgeCitation =
       feedTitle: string | null
     }
   | { kind: 'profile' } // Yahoo / SEC company profile blurb fed in
-  | { kind: 'model' } // Model's training knowledge only — no document
+  | {
+      kind: 'model'
+      // The model's free-text best guess at the source it learned the
+      // relationship from during training (e.g. "Apple FY2023 10-K",
+      // "Bloomberg coverage 2022-2024", "industry-standard supplier
+      // disclosure"). Not clickable — there's no URL to open — but
+      // surfaces a real attribution string instead of just "Model".
+      // Optional: present on edges generated after this feature shipped
+      // and where the model was confident enough to attribute; absent
+      // on legacy chains and on truly-no-attribution claims.
+      attribution?: string
+    }
 
 export interface CompanyValueChainEdge {
   from: string

@@ -3010,6 +3010,7 @@ function StocksPage({
             }}
             externalFocus={chainFocus}
             onExternalFocusHandled={() => setChainFocus(null)}
+            onOpenURL={onOpenURL}
           />
         ) : tickers.filter((t) => t.isActive).length === 0 ? (
           <div className="px-6 py-20 text-center text-sm text-zinc-500">

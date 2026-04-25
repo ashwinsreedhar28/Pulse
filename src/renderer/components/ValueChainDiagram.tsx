@@ -30,6 +30,10 @@ interface ChainEdge {
   // comma-joined consensus list) — drives which tone modifier the diagram
   // applies so 10-K-backed edges can render slightly more prominently.
   source?: string | null
+  // Per-edge citation lifted from the per-ticker chain that the absorber
+  // pulled this edge from. Surfaces in the hover/pinned tooltip as a
+  // clickable badge that opens the cited document in the in-app reader.
+  citation?: import('../../preload').CompanyValueChainEdgeCitation | null
 }
 interface ChainGraph {
   stages: ChainStage[]
@@ -144,6 +148,9 @@ interface LaidOutEdge {
   // Source chain ("news_cooccurrence,sec_10k_concentration" for multi-source
   // consensus edges). Null for static edges.
   source: string | null
+  // Per-edge citation (10-K filing, news article, model attribution).
+  // Surfaced in the hover/pinned tooltip as a clickable badge.
+  citation: import('../../preload').CompanyValueChainEdgeCitation | null
 }
 
 // Pinned tooltips are anchored in SVG coordinates so they move with pan/zoom.
@@ -156,6 +163,9 @@ interface PinnedTooltip {
   svgX: number
   svgY: number
   tone: EdgeTone
+  // Citation pulled from the source edge so the user can click through to
+  // the actual SEC filing / news article from the pinned tooltip too.
+  citation: import('../../preload').CompanyValueChainEdgeCitation | null
 }
 
 export function ValueChainDiagram({
@@ -164,7 +174,8 @@ export function ValueChainDiagram({
   quotes,
   onClose,
   onOpenTicker,
-  onActivateTicker
+  onActivateTicker,
+  onOpenURL
 }: {
   initialSymbol: string
   tickers: Ticker[]
@@ -172,6 +183,10 @@ export function ValueChainDiagram({
   onClose: () => void
   onOpenTicker: (tickerId: number) => void
   onActivateTicker: (tickerId: number) => void
+  // Open a citation URL in the in-app reader. When provided, edge tooltips
+  // (hover + pinned) render their citation as a clickable badge — clicking
+  // routes the cited 10-K / news article into the external-reader view.
+  onOpenURL?: (url: string, title: string, subtitle?: string | null) => void
 }): JSX.Element {
   // Multi-hop exploration state.
   //  - focusSet: every symbol currently pinned as a focus. Its suppliers,
@@ -243,7 +258,8 @@ export function ValueChainDiagram({
           to: o.toSymbol.toUpperCase(),
           note: o.note ?? undefined,
           weight: o.weight,
-          source: o.source
+          source: o.source,
+          citation: o.citation ?? null
         })
       } else if (o.relationship === 'customer') {
         out.push({
@@ -251,7 +267,8 @@ export function ValueChainDiagram({
           to: o.fromSymbol.toUpperCase(),
           note: o.note ?? undefined,
           weight: o.weight,
-          source: o.source
+          source: o.source,
+          citation: o.citation ?? null
         })
       }
     }
@@ -379,6 +396,7 @@ export function ValueChainDiagram({
     // note attached to each specific edge — this is what feeds per-focus arrow
     // stagger below. weight + source are captured so D1 (visual thickness)
     // can render overlay edges at the confidence the pipeline assigned them.
+    type EdgeCitation = import('../../preload').CompanyValueChainEdgeCitation
     const supplierUnion = new Map<
       string,
       {
@@ -386,6 +404,7 @@ export function ValueChainDiagram({
         notesByFocus: Map<string, string | null>
         weightByFocus: Map<string, number | null>
         sourceByFocus: Map<string, string | null>
+        citationByFocus: Map<string, EdgeCitation | null>
       }
     >()
     const customerUnion = new Map<
@@ -395,6 +414,7 @@ export function ValueChainDiagram({
         notesByFocus: Map<string, string | null>
         weightByFocus: Map<string, number | null>
         sourceByFocus: Map<string, string | null>
+        citationByFocus: Map<string, EdgeCitation | null>
       }
     >()
     // First-column-seen wins — a node that supplies one focus and buys from
@@ -403,14 +423,24 @@ export function ValueChainDiagram({
 
     // Edges between two focuses are rendered as lightweight loops off the
     // center column rather than dropping into the side columns.
-    const focusToFocus: { fromSym: string; toSym: string; note: string | null }[] = []
+    const focusToFocus: {
+      fromSym: string
+      toSym: string
+      note: string | null
+      citation: EdgeCitation | null
+    }[] = []
 
     for (const e of mergedEdges) {
       const fromIsFocus = focusSet.has(e.from)
       const toIsFocus = focusSet.has(e.to)
       if (!fromIsFocus && !toIsFocus) continue
       if (fromIsFocus && toIsFocus) {
-        focusToFocus.push({ fromSym: e.from, toSym: e.to, note: e.note ?? null })
+        focusToFocus.push({
+          fromSym: e.from,
+          toSym: e.to,
+          note: e.note ?? null,
+          citation: e.citation ?? null
+        })
         continue
       }
       // Exactly one endpoint is a focus.
@@ -432,13 +462,15 @@ export function ValueChainDiagram({
             node: otherNode,
             notesByFocus: new Map(),
             weightByFocus: new Map(),
-            sourceByFocus: new Map()
+            sourceByFocus: new Map(),
+            citationByFocus: new Map()
           }
           supplierUnion.set(otherSym, entry)
         }
         entry.notesByFocus.set(focusSym, e.note ?? null)
         entry.weightByFocus.set(focusSym, e.weight ?? null)
         entry.sourceByFocus.set(focusSym, e.source ?? null)
+        entry.citationByFocus.set(focusSym, e.citation ?? null)
       } else {
         let entry = customerUnion.get(otherSym)
         if (!entry) {
@@ -446,13 +478,15 @@ export function ValueChainDiagram({
             node: otherNode,
             notesByFocus: new Map(),
             weightByFocus: new Map(),
-            sourceByFocus: new Map()
+            sourceByFocus: new Map(),
+            citationByFocus: new Map()
           }
           customerUnion.set(otherSym, entry)
         }
         entry.notesByFocus.set(focusSym, e.note ?? null)
         entry.weightByFocus.set(focusSym, e.weight ?? null)
         entry.sourceByFocus.set(focusSym, e.source ?? null)
+        entry.citationByFocus.set(focusSym, e.citation ?? null)
       }
     }
 
@@ -579,6 +613,7 @@ export function ValueChainDiagram({
         note: string | null
         weight: number | null
         source: string | null
+        citation: EdgeCitation | null
       }[] = []
       for (const entry of supplierUnion.values()) {
         if (entry.notesByFocus.has(focusSym)) {
@@ -588,7 +623,8 @@ export function ValueChainDiagram({
               laid,
               note: entry.notesByFocus.get(focusSym) ?? null,
               weight: entry.weightByFocus.get(focusSym) ?? null,
-              source: entry.sourceByFocus.get(focusSym) ?? null
+              source: entry.sourceByFocus.get(focusSym) ?? null,
+              citation: entry.citationByFocus.get(focusSym) ?? null
             })
         }
       }
@@ -604,7 +640,8 @@ export function ValueChainDiagram({
           note: item.note,
           tone: 'supplier',
           weight: item.weight,
-          source: item.source
+          source: item.source,
+          citation: item.citation
         })
       })
 
@@ -613,6 +650,7 @@ export function ValueChainDiagram({
         note: string | null
         weight: number | null
         source: string | null
+        citation: EdgeCitation | null
       }[] = []
       for (const entry of customerUnion.values()) {
         if (entry.notesByFocus.has(focusSym)) {
@@ -622,7 +660,8 @@ export function ValueChainDiagram({
               laid,
               note: entry.notesByFocus.get(focusSym) ?? null,
               weight: entry.weightByFocus.get(focusSym) ?? null,
-              source: entry.sourceByFocus.get(focusSym) ?? null
+              source: entry.sourceByFocus.get(focusSym) ?? null,
+              citation: entry.citationByFocus.get(focusSym) ?? null
             })
         }
       }
@@ -638,7 +677,8 @@ export function ValueChainDiagram({
           note: item.note,
           tone: 'customer',
           weight: item.weight,
-          source: item.source
+          source: item.source,
+          citation: item.citation
         })
       })
     }
@@ -677,7 +717,8 @@ export function ValueChainDiagram({
         note: ff.note,
         tone,
         weight: null,
-        source: null
+        source: null,
+        citation: ff.citation
       })
     }
 
@@ -726,6 +767,7 @@ export function ValueChainDiagram({
     svgX: number
     svgY: number
     tone: EdgeTone
+    citation: import('../../preload').CompanyValueChainEdgeCitation | null
   } | null>(null)
   const [pinned, setPinned] = useState<PinnedTooltip[]>([])
   const pinnedIdRef = useRef(0)
@@ -962,7 +1004,14 @@ export function ValueChainDiagram({
     if (!pt) return
     setPinned((prev) => [
       ...prev,
-      { id: ++pinnedIdRef.current, note: edge.note!, svgX: pt.x, svgY: pt.y, tone: edge.tone }
+      {
+        id: ++pinnedIdRef.current,
+        note: edge.note!,
+        svgX: pt.x,
+        svgY: pt.y,
+        tone: edge.tone,
+        citation: edge.citation
+      }
     ])
   }
 
@@ -1163,13 +1212,27 @@ export function ValueChainDiagram({
                     setHoveredEdgeId(e.id)
                     if (e.note) {
                       const pt = clientToSvg(ev.clientX, ev.clientY)
-                      if (pt) setHoverTip({ note: e.note, svgX: pt.x, svgY: pt.y, tone: e.tone })
+                      if (pt)
+                        setHoverTip({
+                          note: e.note,
+                          svgX: pt.x,
+                          svgY: pt.y,
+                          tone: e.tone,
+                          citation: e.citation
+                        })
                     }
                   }}
                   onMouseMove={(ev) => {
                     if (e.note && hoveredEdgeId === e.id) {
                       const pt = clientToSvg(ev.clientX, ev.clientY)
-                      if (pt) setHoverTip({ note: e.note, svgX: pt.x, svgY: pt.y, tone: e.tone })
+                      if (pt)
+                        setHoverTip({
+                          note: e.note,
+                          svgX: pt.x,
+                          svgY: pt.y,
+                          tone: e.tone,
+                          citation: e.citation
+                        })
                     }
                   }}
                   onMouseLeave={() => {
@@ -1207,7 +1270,10 @@ export function ValueChainDiagram({
 
         {/* Hover preview tooltip — single, transient, replaced as the cursor
             moves across different edges. Tinted by edge tone so you can tell
-            at a glance whether you're reading a supplier or customer note. */}
+            at a glance whether you're reading a supplier or customer note.
+            Citation chip below the note is non-interactive on hover (clicks
+            would compete with the cursor moving over edges); to open the
+            cited document, click the edge to pin it first. */}
         {hoverTip &&
           (() => {
             const pt = svgToClient(hoverTip.svgX, hoverTip.svgY)
@@ -1215,7 +1281,7 @@ export function ValueChainDiagram({
             const t = TONE[hoverTip.tone]
             return (
               <div
-                className="pointer-events-none fixed z-[60] px-3 py-2 rounded-md backdrop-blur text-[11.5px] leading-snug max-w-[300px] shadow-lg"
+                className="pointer-events-none fixed z-[60] px-3 py-2 rounded-md backdrop-blur text-[11.5px] leading-snug max-w-[320px] shadow-lg"
                 style={{
                   left: pt.x + 14,
                   top: pt.y + 14,
@@ -1224,7 +1290,12 @@ export function ValueChainDiagram({
                   color: t.tipText
                 }}
               >
-                {hoverTip.note}
+                <div>{hoverTip.note}</div>
+                {hoverTip.citation && (
+                  <div className="mt-1.5 text-[10px] opacity-80">
+                    <DiagramCitationLabel citation={hoverTip.citation} />
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -1240,7 +1311,7 @@ export function ValueChainDiagram({
           return (
             <div
               key={p.id}
-              className="fixed z-[61] px-3 py-2 pr-7 rounded-md backdrop-blur text-[11.5px] leading-snug max-w-[300px] shadow-lg"
+              className="fixed z-[61] px-3 py-2 pr-7 rounded-md backdrop-blur text-[11.5px] leading-snug max-w-[320px] shadow-lg"
               style={{
                 left: pt.x + 14,
                 top: pt.y + 14,
@@ -1249,7 +1320,12 @@ export function ValueChainDiagram({
                 color: t.tipText
               }}
             >
-              {p.note}
+              <div>{p.note}</div>
+              {p.citation && (
+                <div className="mt-1.5">
+                  <DiagramCitationButton citation={p.citation} onOpen={onOpenURL} />
+                </div>
+              )}
               <button
                 onClick={() => setPinned((prev) => prev.filter((x) => x.id !== p.id))}
                 className="absolute top-1 right-1.5 text-zinc-400 hover:text-zinc-100 text-[14px] leading-none"
@@ -1532,5 +1608,114 @@ function NodeBox({
         </text>
       )}
     </g>
+  )
+}
+
+// Edge-citation badge formatter shared by hover preview + pinned tooltip.
+// Returns the short label string for a citation kind: e.g. "10-K", the
+// feed name truncated, or the model attribution. Keeps the formatting
+// logic in one place so the two tooltip surfaces stay in sync.
+function formatCitationLabel(
+  citation: import('../../preload').CompanyValueChainEdgeCitation
+): { label: string; fullText: string } {
+  if (citation.kind === 'filing') {
+    const dateStr = new Date(citation.filedAt).toISOString().slice(0, 10)
+    return {
+      label: `${citation.formType} · ${dateStr}`,
+      fullText: `${citation.formType} filed ${dateStr} · ${citation.accession}`
+    }
+  }
+  if (citation.kind === 'article') {
+    const dateStr = citation.publishedAt
+      ? new Date(citation.publishedAt).toISOString().slice(0, 10)
+      : ''
+    const sourceStr = citation.feedTitle ?? 'News'
+    return {
+      label: `${sourceStr}${dateStr ? ` · ${dateStr}` : ''}`,
+      fullText: `${citation.title}${dateStr ? ` (${dateStr})` : ''}`
+    }
+  }
+  if (citation.kind === 'profile') {
+    return { label: 'Company profile', fullText: 'From the company profile description' }
+  }
+  // model
+  if (citation.attribution) {
+    return {
+      label: citation.attribution,
+      fullText: `${citation.attribution} (model training knowledge)`
+    }
+  }
+  return {
+    label: 'Model knowledge',
+    fullText: 'From the model’s training knowledge — no document supplied'
+  }
+}
+
+// Non-interactive citation label for the hover-preview tooltip. Hover
+// tooltip itself is pointer-events:none so a clickable button wouldn't
+// receive events anyway — pin the edge first to interact with the cite.
+function DiagramCitationLabel({
+  citation
+}: {
+  citation: import('../../preload').CompanyValueChainEdgeCitation
+}): JSX.Element {
+  const { label } = formatCitationLabel(citation)
+  return <span>↳ {label}</span>
+}
+
+// Clickable citation chip for the pinned tooltip. When the citation is
+// a filing or article with a URL, renders as a button that opens the
+// document via the parent's onOpen handler. Otherwise (profile, model)
+// renders as a static label.
+function DiagramCitationButton({
+  citation,
+  onOpen
+}: {
+  citation: import('../../preload').CompanyValueChainEdgeCitation
+  onOpen?: (url: string, title: string, subtitle?: string | null) => void
+}): JSX.Element {
+  const { label, fullText } = formatCitationLabel(citation)
+  if (citation.kind === 'filing' && onOpen) {
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          onOpen(
+            citation.url,
+            `${citation.formType} (${new Date(citation.filedAt).toISOString().slice(0, 10)})`,
+            citation.accession
+          )
+        }
+        className="text-[10.5px] underline decoration-dotted underline-offset-2 hover:opacity-100 opacity-90 cursor-pointer"
+        title={`${fullText} — click to open SEC filing`}
+      >
+        ↳ {label}
+      </button>
+    )
+  }
+  if (citation.kind === 'article' && citation.url && onOpen) {
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          onOpen(
+            citation.url!,
+            citation.title,
+            citation.feedTitle
+              ? `${citation.feedTitle}${citation.publishedAt ? ` · ${new Date(citation.publishedAt).toISOString().slice(0, 10)}` : ''}`
+              : null
+          )
+        }
+        className="text-[10.5px] underline decoration-dotted underline-offset-2 hover:opacity-100 opacity-90 cursor-pointer"
+        title={`${fullText} — click to open article`}
+      >
+        ↳ {label}
+      </button>
+    )
+  }
+  return (
+    <span className="text-[10.5px] opacity-80" title={fullText}>
+      ↳ {label}
+    </span>
   )
 }

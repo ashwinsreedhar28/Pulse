@@ -307,6 +307,10 @@ type ChainEdge = {
   // attachCitations after canonicalizeEdges runs. Null when the model
   // didn't cite anything (typically when source='model').
   sourceRef?: string | null
+  // Free-text training-source attribution emitted when source='model'.
+  // Used by attachCitations to populate citation.attribution so the user
+  // sees a real source name instead of the generic "Model" label.
+  modelSource?: string | null
 }
 
 // Resolve the model-emitted sourceRef ("F", "P", "N1", ...) on each edge
@@ -358,7 +362,12 @@ function attachCitations(
         }
       }
     } else if (edge.source === 'model' || !ref) {
-      citation = { kind: 'model' }
+      // For model-grounded edges, lift the model's free-text attribution
+      // (e.g. "Apple FY2023 10-K") into the citation. The renderer
+      // displays this as the badge label instead of the generic "Model".
+      citation = edge.modelSource
+        ? { kind: 'model', attribution: edge.modelSource }
+        : { kind: 'model' }
     }
     return {
       from: edge.from,
@@ -467,7 +476,8 @@ function canonicalizeEdges(
       relationship: edge.relationship,
       note: edge.note,
       source: edge.source,
-      sourceRef: edge.sourceRef ?? null
+      sourceRef: edge.sourceRef ?? null,
+      modelSource: edge.modelSource ?? null
     })
   }
   if (dropped > 0) {

@@ -149,6 +149,14 @@ function SourceBadge({
         ? `${citation.feedTitle ?? 'Article'} · ${dateStr}`
         : (citation.feedTitle ?? null)
     }
+  } else if (citation?.kind === 'model' && citation.attribution) {
+    // Model-grounded edge with a free-text training attribution.
+    // Show the attribution as the badge label so the user sees a real
+    // source name (e.g. "Apple FY2023 10-K") instead of the generic
+    // "Model". Truncate to keep the pill compact; full text in tooltip.
+    const attr = citation.attribution
+    label = attr.length > 24 ? attr.slice(0, 22) + '…' : attr
+    title = `${attr} — from the model's training knowledge (no live link)`
   }
 
   const baseClasses = `shrink-0 inline-flex items-center px-1.5 py-[1px] rounded-full border text-[8.5px] font-semibold uppercase tracking-[0.16em] ${meta.className}`
