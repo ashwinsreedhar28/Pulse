@@ -1036,14 +1036,24 @@ async function bilateralAugmentCitations(
     const counterparty = from !== focus ? from : to
     if (counterparty && counterparty !== focus) counterpartySet.add(counterparty)
   }
-  if (counterpartySet.size === 0) return edges
+  if (counterpartySet.size === 0) {
+    console.log(
+      `[companyChain] bilateralAugmentCitations: 0 cite-less edges to scan for ${focus}`
+    )
+    return edges
+  }
 
   const hits = await fetchBilateralFilings({
     focusSymbol: focus,
     focusCompanyName,
     counterpartySymbols: [...counterpartySet]
   })
-  if (hits.length === 0) return edges
+  if (hits.length === 0) {
+    console.log(
+      `[companyChain] bilateralAugmentCitations: scanned ${counterpartySet.size} counterparty filing(s), 0 mentions found`
+    )
+    return edges
+  }
   // Index hits by counterparty for O(1) lookup when re-walking edges.
   const hitsByCounterparty = new Map<string, BilateralFilingHit>()
   for (const h of hits) hitsByCounterparty.set(h.counterpartySymbol.toUpperCase(), h)
@@ -1081,11 +1091,9 @@ async function bilateralAugmentCitations(
       citations: [...existing, cite]
     }
   })
-  if (attached > 0) {
-    console.log(
-      `[companyChain] bilateralAugmentCitations: +${attached} cites attached from counterparty filings`
-    )
-  }
+  console.log(
+    `[companyChain] bilateralAugmentCitations: scanned ${counterpartySet.size} counterparties, found ${hits.length} hit(s), +${attached} cites attached`
+  )
   return out
 }
 
@@ -1102,11 +1110,26 @@ async function concentrationAugmentCitations(
   const focus = focusSymbol.toUpperCase()
   const tenKs = getFilingsForSymbol(focus, 5).filter(isAnnualReport)
   const latest = tenKs[0]
-  if (!latest) return edges
+  if (!latest) {
+    console.log(
+      `[companyChain] concentrationAugmentCitations: no 10-K available for ${focus}`
+    )
+    return edges
+  }
   const body = await fetchFilingBody(latest)
-  if (!body) return edges
+  if (!body) {
+    console.log(
+      `[companyChain] concentrationAugmentCitations: failed to fetch 10-K body for ${focus}`
+    )
+    return edges
+  }
   const concentrations = parseCustomerConcentration(body.text)
-  if (concentrations.length === 0) return edges
+  if (concentrations.length === 0) {
+    console.log(
+      `[companyChain] concentrationAugmentCitations: no >10% customer-concentration disclosures found in ${focus}'s 10-K`
+    )
+    return edges
+  }
   // Build a name→ConcentrationDisclosure index. We match by "first word
   // contains" so "Apple" matches "Apple Inc." cleanly without dragging
   // in companies that happen to share later tokens.
@@ -1160,11 +1183,9 @@ async function concentrationAugmentCitations(
       citations: [...existing, cite]
     }
   })
-  if (attached > 0) {
-    console.log(
-      `[companyChain] concentrationAugmentCitations: +${attached} cites from focus 10-K customer-concentration disclosures`
-    )
-  }
+  console.log(
+    `[companyChain] concentrationAugmentCitations: parsed ${concentrations.length} disclosure(s) from ${focus}'s 10-K, +${attached} cites attached`
+  )
   return out
 }
 
@@ -1180,7 +1201,7 @@ async function webSearchAugmentCitations(
   edges: import('../database/companyValueChains').CompanyValueChainEdge[],
   focusSymbol: string,
   focusCompanyName: string,
-  maxSearches = 12
+  maxSearches = 8
 ): Promise<import('../database/companyValueChains').CompanyValueChainEdge[]> {
   const focus = focusSymbol.toUpperCase()
   // Find edges still missing a primary cite. Order by edge index so the
@@ -1203,8 +1224,26 @@ async function webSearchAugmentCitations(
   const cap = Math.min(maxSearches, targets.length)
   const next = [...edges]
   let attached = 0
+  let consumed = 0
+  let bailedOnRateLimit = false
+  // Pace sequential calls to stay under Anthropic's 50K-input-tokens-per-
+  // minute Haiku tier-1 limit. Each web-search call is ~3-5K input
+  // tokens (system + user + tool result), so 6 seconds between calls
+  // keeps us safely below 10 calls/min ≈ 50K tokens/min. The first call
+  // fires immediately; pacing applies to each subsequent call.
+  const PACING_MS = 6_000
+  let lastCallAt = 0
   for (let i = 0; i < cap; i++) {
     const t = targets[i]
+    consumed += 1
+    if (lastCallAt > 0) {
+      const since = Date.now() - lastCallAt
+      const wait = PACING_MS - since
+      if (wait > 0) {
+        await new Promise((resolve) => setTimeout(resolve, wait))
+      }
+    }
+    lastCallAt = Date.now()
     const system =
       `You are a citation finder. For the relationship described below, ` +
       `search the web ONCE for an SEC filing on sec.gov that documents ` +
@@ -1222,25 +1261,23 @@ async function webSearchAugmentCitations(
     const user =
       `Find an SEC filing URL that documents the ${t.relationship} relationship ` +
       `between ${focusCompanyName} (${focus}) and ${t.counterparty}.`
-    let raw: string | null = null
-    try {
-      raw = await callClaudeWithWebSearch({
-        model: CLAUDE_MODELS.classifier,
-        system,
-        user,
-        maxTokens: 1000,
-        maxSearches: 2
-      })
-    } catch (err) {
+    const result = await callClaudeWithWebSearch({
+      model: CLAUDE_MODELS.classifier,
+      system,
+      user,
+      maxTokens: 1000,
+      maxSearches: 1
+    })
+    if (result.kind === 'rate_limited') {
       console.warn(
-        `[companyChain] web-search augment failed for ${focus}↔${t.counterparty}:`,
-        err instanceof Error ? err.message : err
+        `[companyChain] web-search rate-limited on ${focus}↔${t.counterparty} after retry — bailing out of remaining ${cap - i - 1} edges`
       )
-      continue
+      bailedOnRateLimit = true
+      break
     }
-    if (!raw) continue
+    if (result.kind !== 'ok') continue
     // Parse JSON, tolerate prose / fences.
-    const m = raw.match(/\{[\s\S]*?\}/)
+    const m = result.text.match(/\{[\s\S]*?\}/)
     if (!m) continue
     let parsed: { url?: string | null; formType?: string; year?: number }
     try {
@@ -1285,11 +1322,14 @@ async function webSearchAugmentCitations(
     }
     attached += 1
   }
-  if (attached > 0) {
-    console.log(
-      `[companyChain] webSearchAugmentCitations: +${attached} cites from web-searched SEC filings`
-    )
-  }
+  // Always log so we know the augmenter ran even when 0 cites attached —
+  // the prior silent-on-zero behavior made it impossible to tell whether
+  // rate limiting or genuine "no SEC source exists" was the cause.
+  console.log(
+    `[companyChain] webSearchAugmentCitations: ran ${consumed}/${targets.length} cite-less edges, ` +
+      `+${attached} cites attached` +
+      (bailedOnRateLimit ? ' (bailed early on rate limit)' : '')
+  )
   return next
 }
 

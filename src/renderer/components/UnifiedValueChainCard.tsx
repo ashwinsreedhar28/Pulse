@@ -115,8 +115,14 @@ export function UnifiedValueChainCard({
   }
 
   const prepared = useMemo<PreparedChain | null>(() => {
-    // Preferred path: Claude-generated (or Ollama-fallback) chain.
-    if (row?.status === 'ready' && row.graph) {
+    // Preferred path: any saved chain with edges. We render generated
+    // content even during status='pending' so a regen click on a
+    // just-completed Claude chain doesn't visually replace it with the
+    // curated baseline mid-flight — the user wants to see "loading on
+    // top of my previous result", not "results disappeared then came
+    // back." Once the regen finishes, status flips to 'ready' and the
+    // saved graph swaps in cleanly.
+    if (row?.graph && row.graph.edges.length > 0) {
       return prepareFromGenerated(row, tickers)
     }
     // Fallback: curated supplyChainGraph.json entry, if any.

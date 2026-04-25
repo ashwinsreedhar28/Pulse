@@ -179,82 +179,121 @@ async function callClaude(options: ClaudeMessageOptions): Promise<string | null>
 // max_uses caps how many searches the model can run per request — keep
 // it tight (1-2) to bound cost. The tool name "web_search_20250305" is
 // Anthropic's stable identifier for the standard web search tool.
+// Result tagging so callers can distinguish "rate limited, give up the
+// rest of the batch" from "no answer, try the next edge". Plain null is
+// reserved for non-rate-limit failures (timeout, JSON shape issue, etc.).
+export type WebSearchResult =
+  | { kind: 'ok'; text: string }
+  | { kind: 'rate_limited' } // 429 even after retry — caller should pause
+  | { kind: 'empty' } // no useful text returned but the call succeeded
+  | { kind: 'error' } // network / shape failure
+
 export async function callClaudeWithWebSearch(options: {
   model: string
   system: string
   user: string
   maxTokens: number
   maxSearches?: number
-}): Promise<string | null> {
+}): Promise<WebSearchResult> {
   const apiKey = getPreferences().anthropicApiKey
-  if (!apiKey) return null
+  if (!apiKey) return { kind: 'error' }
 
   const messages: Array<{ role: 'user'; content: string }> = [
     { role: 'user', content: options.user }
   ]
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-  try {
-    const res = await fetch(ANTHROPIC_API, {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: options.model,
-        max_tokens: options.maxTokens,
-        system: options.system,
-        messages,
-        tools: [
-          {
-            type: 'web_search_20250305',
-            name: 'web_search',
-            max_uses: options.maxSearches ?? 2
-          }
-        ]
-      }),
-      signal: controller.signal
-    })
-    if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      console.warn(
-        `[claude] ${options.model} web-search call failed: HTTP ${res.status}`,
-        body.slice(0, 400)
-      )
-      return null
+  // One retry on 429. The Anthropic limit is per-minute on input tokens;
+  // a single back-off of ~30s usually clears the window. We don't loop
+  // indefinitely — the caller paces sequential calls and bails out of
+  // the batch when we report rate_limited.
+  const attempt = async (): Promise<WebSearchResult & { retryAfterMs?: number }> => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    try {
+      const res = await fetch(ANTHROPIC_API, {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': ANTHROPIC_VERSION,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: options.model,
+          max_tokens: options.maxTokens,
+          system: options.system,
+          messages,
+          tools: [
+            {
+              type: 'web_search_20250305',
+              name: 'web_search',
+              max_uses: options.maxSearches ?? 1
+            }
+          ]
+        }),
+        signal: controller.signal
+      })
+      if (res.status === 429) {
+        // Honor the API's retry-after when supplied. Cap at 45s so a
+        // wedged regen doesn't sleep indefinitely. Default to 30s when
+        // the header is missing (typical for Anthropic 429s, which lean
+        // on the docs URL instead of a header).
+        const retryAfterRaw = res.headers.get('retry-after')
+        const retryAfterSec = retryAfterRaw ? Number(retryAfterRaw) : NaN
+        const retryAfterMs = Number.isFinite(retryAfterSec)
+          ? Math.min(45_000, Math.max(1_000, retryAfterSec * 1000))
+          : 30_000
+        return { kind: 'rate_limited', retryAfterMs }
+      }
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        console.warn(
+          `[claude] ${options.model} web-search call failed: HTTP ${res.status}`,
+          body.slice(0, 200)
+        )
+        return { kind: 'error' }
+      }
+      const data = (await res.json()) as {
+        content?: Array<{ type: string; text?: string }>
+        stop_reason?: string
+      }
+      // Anthropic returns multiple content blocks when tools fire (text,
+      // tool_use, tool_result, more text). Concatenate text blocks for
+      // the synthesized answer.
+      const text = (data.content ?? [])
+        .filter((c) => c.type === 'text' && typeof c.text === 'string')
+        .map((c) => c.text!)
+        .join('\n')
+        .trim()
+      return text ? { kind: 'ok', text } : { kind: 'empty' }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log(
+          `[claude] ${options.model} web-search timed out after ${REQUEST_TIMEOUT_MS} ms`
+        )
+      } else {
+        console.warn(
+          `[claude] ${options.model} web-search error:`,
+          err instanceof Error ? err.message : err
+        )
+      }
+      return { kind: 'error' }
+    } finally {
+      clearTimeout(timer)
     }
-    const data = (await res.json()) as {
-      content?: Array<{ type: string; text?: string }>
-      stop_reason?: string
-    }
-    // Anthropic returns multiple content blocks when tools fire (text,
-    // tool_use, tool_result, more text). The final text block is the
-    // model's synthesized answer — concatenate all text blocks defensively
-    // in case the model spreads its answer.
-    const text = (data.content ?? [])
-      .filter((c) => c.type === 'text' && typeof c.text === 'string')
-      .map((c) => c.text!)
-      .join('\n')
-      .trim()
-    return text || null
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      console.log(
-        `[claude] ${options.model} web-search timed out after ${REQUEST_TIMEOUT_MS} ms`
-      )
-    } else {
-      console.warn(
-        `[claude] ${options.model} web-search error:`,
-        err instanceof Error ? err.message : err
-      )
-    }
-    return null
-  } finally {
-    clearTimeout(timer)
   }
+
+  const first = await attempt()
+  if (first.kind !== 'rate_limited') return first
+  // 429 path — wait then retry once. If the retry also 429s, return
+  // rate_limited so the caller can abort the batch.
+  const sleepMs = first.retryAfterMs ?? 30_000
+  console.log(
+    `[claude] web-search rate limited; sleeping ${Math.round(sleepMs / 1000)}s before retry`
+  )
+  await new Promise((resolve) => setTimeout(resolve, sleepMs))
+  const second = await attempt()
+  if (second.kind === 'rate_limited') return { kind: 'rate_limited' }
+  return second
 }
 
 // Re-export models so the caller can pick a cheap one (Haiku) for the
