@@ -130,13 +130,34 @@ export function upsertFilings(symbol: string, rows: SecFilingRaw[]): number {
   return tx(rows)
 }
 
-// Most-recent N filings for a symbol. Used by the ticker detail page.
-// Form filter is optional — pass a Set to narrow to specific types.
+// Most-recent N filings for a symbol. Used by the ticker detail page
+// and the chain-generator filing fetchers. Form filter is optional —
+// pass a Set to narrow to specific types. The form filter is pushed
+// into the SQL WHERE clause so an active filer (KLAC files Form 4s
+// constantly) doesn't mask its 10-Ks: a post-fetch filter on the 10
+// most-recent rows would routinely return zero 10-Ks for any ticker
+// with frequent insider-trade filings, even though the 10-K is in the
+// table just past row 10.
 export function getFilingsForSymbol(
   symbol: string,
   limit = 20,
   formFilter?: Set<string>
 ): SecFiling[] {
+  if (formFilter && formFilter.size > 0) {
+    const forms = [...formFilter]
+    const placeholders = forms.map(() => '?').join(',')
+    const rows = getDb()
+      .prepare<unknown[], RawFilingRow>(
+        `SELECT symbol, accessionNumber, cik, formType, filedAt, reportDate,
+                primaryDocument, primaryDocDescription, items, fetchedAt
+           FROM sec_filings
+          WHERE symbol = ? AND formType IN (${placeholders})
+          ORDER BY filedAt DESC
+          LIMIT ?`
+      )
+      .all(symbol.toUpperCase(), ...forms, limit)
+    return rows.map(hydrate)
+  }
   const rows = getDb()
     .prepare<[string, number], RawFilingRow>(
       `SELECT symbol, accessionNumber, cik, formType, filedAt, reportDate,
@@ -147,9 +168,7 @@ export function getFilingsForSymbol(
         LIMIT ?`
     )
     .all(symbol.toUpperCase(), limit)
-  const hydrated = rows.map(hydrate)
-  if (!formFilter) return hydrated
-  return hydrated.filter((f) => formFilter.has(f.formType))
+  return rows.map(hydrate)
 }
 
 // Recent filings for a batch of symbols, paired with a since-cutoff so the

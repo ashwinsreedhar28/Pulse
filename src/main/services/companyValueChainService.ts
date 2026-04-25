@@ -44,14 +44,6 @@ function isAnnualReport(filing: SecFiling): boolean {
   return filing.formType === '10-K' || filing.formType === '10-K/A'
 }
 
-function isQuarterlyReport(filing: SecFiling): boolean {
-  return filing.formType === '10-Q' || filing.formType === '10-Q/A'
-}
-
-function isCurrentReport(filing: SecFiling): boolean {
-  return filing.formType === '8-K' || filing.formType === '8-K/A'
-}
-
 // Minimal HTML→text extractor tailored to SEC EDGAR documents. Building
 // a full JSDOM (CSS parsing, layout box construction, scripting hooks)
 // per fetch was the heaviest sustained CPU/GC load during regenerateAll
@@ -155,7 +147,9 @@ async function fetchFilingExcerpt(
 }
 
 async function fetchTenKExcerpt(symbol: string): Promise<FilingExcerptResult | null> {
-  const filings = getFilingsForSymbol(symbol, 10).filter(isAnnualReport)
+  // Form-filter pushed into SQL so we always find the most recent 10-K
+  // even when it's behind dozens of Form 4 insider-trade filings.
+  const filings = getFilingsForSymbol(symbol, 5, new Set(['10-K', '10-K/A']))
   const latest = filings[0]
   if (!latest) return null
   return fetchFilingExcerpt(
@@ -171,7 +165,7 @@ async function fetchTenKExcerpt(symbol: string): Promise<FilingExcerptResult | n
 }
 
 async function fetchTenQExcerpt(symbol: string): Promise<FilingExcerptResult | null> {
-  const filings = getFilingsForSymbol(symbol, 10).filter(isQuarterlyReport)
+  const filings = getFilingsForSymbol(symbol, 5, new Set(['10-Q', '10-Q/A']))
   const latest = filings[0]
   if (!latest) return null
   return fetchFilingExcerpt(
@@ -195,7 +189,7 @@ async function fetchEightKExcerpt(symbol: string): Promise<FilingExcerptResult |
   //   8.01 = "other events" (catch-all for press releases)
   // We slice broadly — most 8-Ks are short enough that a 5k-char window
   // captures the substance.
-  const filings = getFilingsForSymbol(symbol, 10).filter(isCurrentReport)
+  const filings = getFilingsForSymbol(symbol, 5, new Set(['8-K', '8-K/A']))
   const latest = filings[0]
   if (!latest) return null
   return fetchFilingExcerpt(
@@ -375,21 +369,39 @@ async function fetchBilateralFilings(input: {
   // Sequential fetches to be polite to SEC. Per-counterparty timeout
   // already lives in fetchFilingBody so a single hung filing doesn't
   // tank the whole pass.
+  // Per-counterparty diagnostic counters so the orchestrator log shows
+  // exactly where bilateral fell off — was it CIK miss, body fetch fail,
+  // no mention, or genuine clean scan?
+  let noFiling = 0
+  let bodyFetchFailed = 0
+  let noMention = 0
   for (const sym of symbols) {
     if (sym === focusUpper) continue
-    const filings = getFilingsForSymbol(sym, 8)
-    if (filings.length === 0) continue
-    // Prefer the most recent 10-K, fall back to 10-Q for richer body
-    // scan. 8-Ks tend to be too narrow for relationship discovery.
+    // Look for 10-K/10-Q specifically. The earlier "8 most-recent of any
+    // form" approach often returned only Form 4s for active filers,
+    // making this whole pass a no-op.
+    const annualOrQuarterly = getFilingsForSymbol(
+      sym,
+      3,
+      new Set(['10-K', '10-K/A', '10-Q', '10-Q/A'])
+    )
+    if (annualOrQuarterly.length === 0) {
+      noFiling += 1
+      continue
+    }
+    // Prefer the most recent 10-K — much richer narrative than 10-Q.
     const candidate =
-      filings.find(isAnnualReport) ??
-      filings.find(isQuarterlyReport) ??
-      null
-    if (!candidate) continue
+      annualOrQuarterly.find(isAnnualReport) ?? annualOrQuarterly[0]
     const body = await fetchFilingBody(candidate)
-    if (!body) continue
+    if (!body) {
+      bodyFetchFailed += 1
+      continue
+    }
     const m = mentionRe.exec(body.text)
-    if (!m) continue
+    if (!m) {
+      noMention += 1
+      continue
+    }
     const start = Math.max(0, m.index - 200)
     const excerpt = body.text.slice(start, Math.min(body.text.length, start + 600)).trim()
     results.push({
@@ -399,6 +411,11 @@ async function fetchBilateralFilings(input: {
       excerpt
     })
   }
+  console.log(
+    `[companyChain] fetchBilateralFilings ${input.focusSymbol}: ` +
+      `${results.length} hit(s), ${noFiling} no-10K/Q, ${bodyFetchFailed} body-fetch-failed, ` +
+      `${noMention} no-mention (search terms: ${uniqAlternates.join('|')})`
+  )
   return results
 }
 
@@ -1118,7 +1135,7 @@ async function concentrationAugmentCitations(
   focusSymbol: string
 ): Promise<import('../database/companyValueChains').CompanyValueChainEdge[]> {
   const focus = focusSymbol.toUpperCase()
-  const tenKs = getFilingsForSymbol(focus, 5).filter(isAnnualReport)
+  const tenKs = getFilingsForSymbol(focus, 3, new Set(['10-K', '10-K/A']))
   const latest = tenKs[0]
   if (!latest) {
     console.log(
@@ -1555,15 +1572,18 @@ export async function generateCompanyChain(input: {
       new Promise((resolve) => setTimeout(resolve, 60_000))
     ])
   ])
-  // Diagnostic: log what we ended up with for the focus's filings cache
-  // so we can tell at-a-glance whether SEC fetch worked. Counts only —
-  // detailed body fetch happens later via fetchTenKExcerpt etc.
-  const cachedFilings = getFilingsForSymbol(sym, 20)
-  const has10K = cachedFilings.some(isAnnualReport)
-  const has10Q = cachedFilings.some(isQuarterlyReport)
-  const has8K = cachedFilings.some(isCurrentReport)
+  // Diagnostic: confirm the focus's 10-K / 10-Q / 8-K are individually
+  // findable via form-filtered queries. Earlier we did `limit 20` then
+  // post-filter by form, which returned 0 10-Ks for active filers like
+  // KLAC because Form 4 insider trades dominated the recency window.
+  const has10K = getFilingsForSymbol(sym, 1, new Set(['10-K', '10-K/A'])).length > 0
+  const has10Q = getFilingsForSymbol(sym, 1, new Set(['10-Q', '10-Q/A'])).length > 0
+  const has8K = getFilingsForSymbol(sym, 1, new Set(['8-K', '8-K/A'])).length > 0
+  const totalFilings = getFilingsForSymbol(sym, 1).length > 0
+    ? getFilingsForSymbol(sym, 200).length
+    : 0
   console.log(
-    `[companyChain] post-warmup SEC cache for ${sym}: ${cachedFilings.length} filing(s) ` +
+    `[companyChain] post-warmup SEC cache for ${sym}: ${totalFilings} filing(s) ` +
       `(10-K=${has10K}, 10-Q=${has10Q}, 8-K=${has8K})`
   )
 

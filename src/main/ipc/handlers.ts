@@ -60,6 +60,7 @@ import {
   deleteEdgeOverride,
   listEdgeOverrides
 } from '../database/graphOverrides'
+import { listCompanyValueChainSymbols } from '../database/companyValueChains'
 import {
   deleteNodeOverride,
   listNodeOverrides
@@ -442,7 +443,8 @@ export function registerDbIpc(): void {
         sectorsWithContent,
         primaryIndex,
         edgeOverrides,
-        nodeOverrides
+        nodeOverrides,
+        generatedChainSymbols
       ] = await Promise.all([
         Promise.resolve(computeSnapshotsForSymbols(symbols)),
         getEarningsBadgesForSymbols(symbols),
@@ -450,7 +452,8 @@ export function registerDbIpc(): void {
         Promise.resolve(listSectorsWithContent()),
         Promise.resolve(buildPrimarySectorIndex()),
         Promise.resolve(listEdgeOverrides()),
-        Promise.resolve(listNodeOverrides())
+        Promise.resolve(listNodeOverrides()),
+        Promise.resolve(listCompanyValueChainSymbols())
       ])
       const filingsMap = getRecentFilingsForSymbols(symbols, sinceMs, INTERESTING_FORMS)
       const recentFilings: Record<string, unknown[]> = {}
@@ -469,7 +472,8 @@ export function registerDbIpc(): void {
         primaryIndex,
         edgeOverrides,
         nodeOverrides,
-        recentFilings
+        recentFilings,
+        generatedChainSymbols
       }
     }
   )

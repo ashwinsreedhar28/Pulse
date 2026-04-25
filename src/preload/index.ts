@@ -1400,6 +1400,11 @@ const api = {
       edgeOverrides: GraphEdgeOverride[]
       nodeOverrides: GraphNodeOverride[]
       recentFilings: Record<string, SecFiling[]>
+      // Symbols (uppercase) that have a saved generated chain. Used by the
+      // unified Value Chain renderer to suppress static-graph edges for
+      // any focus the user has regenerated, so the unified view doesn't
+      // keep showing stale curated edges after a regen.
+      generatedChainSymbols: string[]
     }> =>
       invoke('valueChain:getMountBundle', symbols, filingsSinceMs),
     getOptionsSnapshot: (symbol: string) =>

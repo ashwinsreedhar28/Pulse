@@ -310,6 +310,13 @@ export function ValueChain({
   // Refreshes on every graph:updated broadcast.
   const [edgeOverrides, setEdgeOverrides] = useState<GraphEdgeOverride[]>([])
   const [nodeOverrides, setNodeOverrides] = useState<GraphNodeOverride[]>([])
+  // Symbols the user has regenerated. The unified view drops static-graph
+  // edges that touch any of these focuses, so a freshly-regenerated KLAC
+  // doesn't keep its stale curated edges to INTC/TSM/MU showing while the
+  // detail page already reflects the new (cited-only) chain.
+  const [generatedChainSymbols, setGeneratedChainSymbols] = useState<Set<string>>(
+    () => new Set()
+  )
   // Unified-graph sector state: drives the GICS tab strip + sector filter.
   const [sectorsWithContent, setSectorsWithContent] = useState<SectorWithContent[]>([])
   const [primaryIndex, setPrimaryIndex] = useState<Record<string, string>>({})
@@ -370,6 +377,9 @@ export function ValueChain({
         setEstimatesMap(est)
         setEdgeOverrides(bundle.edgeOverrides)
         setNodeOverrides(bundle.nodeOverrides)
+        setGeneratedChainSymbols(
+          new Set(bundle.generatedChainSymbols.map((s) => s.toUpperCase()))
+        )
         setSectorsWithContent(bundle.sectorsWithContent)
         setPrimaryIndex(bundle.primaryIndex)
         const filings = new Map<string, SecFiling[]>()
@@ -443,6 +453,22 @@ export function ValueChain({
         .catch(() => {
           /* keep prior state */
         })
+    })
+  }, [])
+  // companyChain:updated fires on every regen — track the focus into
+  // generatedChainSymbols so the unified view drops stale curated edges
+  // for that ticker immediately. Set never shrinks during a session
+  // (chains are only ever deleted via dev tools); the next mount-bundle
+  // fetch on app reload re-syncs from DB.
+  useEffect(() => {
+    return window.api.stocks.onCompanyChainUpdated((symbol: string) => {
+      setGeneratedChainSymbols((prev) => {
+        const sym = symbol.toUpperCase()
+        if (prev.has(sym)) return prev
+        const next = new Set(prev)
+        next.add(sym)
+        return next
+      })
     })
   }, [])
   // Incremental backfill: when nodeOverrides changes (e.g. chain
@@ -712,9 +738,20 @@ export function ValueChain({
     // (swaps endpoints + relabels), so the override table holds one
     // canonical form per directed relationship. Legacy customer rows from
     // older absorptions are still handled with an endpoint swap as a
-    // safety net. Dedupe by (from, to) at the end so cross-chain
-    // duplicates don't render the same counterparty twice.
-    const out: ValueChainEdge[] = [...CHAIN.edges]
+    // safety net.
+    //
+    // Order matters for the dedupe loop below: override edges go FIRST
+    // so they win over static edges for the same (from, to) pair. Then
+    // static edges fill in pairs no override covers.
+    //
+    // Static-edge filter: when EITHER endpoint of a static edge is a
+    // focus the user has regenerated, the static edge is dropped — the
+    // generated chain is the user's source of truth, and stale curated
+    // edges that the new chain doesn't include should not keep showing.
+    // Without this filter, regenerating KLAC would still leave the
+    // unified view showing curated KLAC→INTC, KLAC→TSM, KLAC→MU edges
+    // even though the generated chain replaced them.
+    const out: ValueChainEdge[] = []
     for (const o of edgeOverrides) {
       // Pull citations from override; fall back to legacy single-cite shape.
       const cites: CompanyValueChainEdgeCitation[] =
@@ -752,6 +789,23 @@ export function ValueChain({
         })
       }
     }
+    // Now layer static edges in for pairs no override covered, but skip
+    // any static edge touching a regenerated focus (its generated chain
+    // is canonical).
+    const overrideKeys = new Set(out.map((e) => `${e.from}→${e.to}`))
+    for (const e of CHAIN.edges) {
+      const fromUpper = e.from.toUpperCase()
+      const toUpper = e.to.toUpperCase()
+      if (
+        generatedChainSymbols.has(fromUpper) ||
+        generatedChainSymbols.has(toUpper)
+      ) {
+        continue
+      }
+      const key = `${fromUpper}→${toUpper}`
+      if (overrideKeys.has(key)) continue
+      out.push({ ...e, from: fromUpper, to: toUpper })
+    }
     const seen = new Set<string>()
     const deduped: ValueChainEdge[] = []
     for (const edge of out) {
@@ -761,15 +815,24 @@ export function ValueChain({
       deduped.push(edge)
     }
     return deduped
-  }, [edgeOverrides])
+  }, [edgeOverrides, generatedChainSymbols])
 
   // Static competitor pairs + competitor-typed overrides. Same shape as the
   // module-level COMPETITOR_MAP built from supplyChainGraph.json's competitors
   // array — Map<symbol, Set<peer>>, symmetric.
   const mergedCompetitorMap = useMemo<Map<string, Set<string>>>(() => {
     const m = new Map<string, Set<string>>()
+    // Static competitors first, but skip pairs touching any regenerated
+    // focus — same rule as mergedDirectionalEdges above. The generated
+    // chain is canonical for that focus's relationships.
     for (const [k, v] of COMPETITOR_MAP) {
-      m.set(k, new Set(v))
+      if (generatedChainSymbols.has(k)) continue
+      const filtered = new Set<string>()
+      for (const peer of v) {
+        if (generatedChainSymbols.has(peer)) continue
+        filtered.add(peer)
+      }
+      if (filtered.size > 0) m.set(k, filtered)
     }
     for (const o of edgeOverrides) {
       if (o.relationship !== 'competitor') continue
@@ -781,7 +844,7 @@ export function ValueChain({
       m.get(b)!.add(a)
     }
     return m
-  }, [edgeOverrides])
+  }, [edgeOverrides, generatedChainSymbols])
 
   const { outgoing, incoming } = useMemo(() => {
     const out = new Map<string, ValueChainEdge[]>()
