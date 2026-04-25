@@ -175,7 +175,12 @@ export function PeerCompareModal({
 
   return (
     <div
-      className="no-drag fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+      // Solid-ish overlay instead of backdrop-blur — the blur filter
+      // recomputes per frame against the constantly-animating rolling
+      // ticker bar behind it, which shows as jitter on the modal edge.
+      // 88% opacity gives the same "focus this modal" effect without
+      // the per-frame GPU cost.
+      className="no-drag fixed inset-0 z-50 bg-black/[0.88] flex items-center justify-center p-6"
       onClick={onClose}
     >
       <div
