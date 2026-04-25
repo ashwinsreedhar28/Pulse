@@ -89,8 +89,15 @@ export function setCompanyValueChain(input: {
   sourceContext?: string | null
 }): void {
   const now = Date.now()
-  getDb()
-    .prepare(
+  const sym = input.symbol.toUpperCase()
+  const db = getDb()
+  // Wrap chain-row write + edge-mentions refresh in one transaction so the
+  // denormalized table can never drift from the JSON source of truth: a
+  // crash mid-write leaves both tables either pre- or post-state, never
+  // mixed. The mentions table is consulted by getEdgesMentioningSymbol on
+  // every regen — see migration v40.
+  db.transaction(() => {
+    db.prepare(
       `INSERT INTO company_value_chains
          (symbol, status, graphJson, sourceContext, generatedAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, ?)
@@ -100,15 +107,36 @@ export function setCompanyValueChain(input: {
          sourceContext = excluded.sourceContext,
          generatedAt = excluded.generatedAt,
          updatedAt = excluded.updatedAt`
-    )
-    .run(
-      input.symbol.toUpperCase(),
+    ).run(
+      sym,
       input.status,
       input.graph ? JSON.stringify(input.graph) : null,
       input.sourceContext ?? null,
       input.graph ? now : null,
       now
     )
+
+    // Refresh edge mentions: nuke this focus's prior mentions then insert
+    // one row per current edge. INSERT OR IGNORE skips duplicates within
+    // the same chain (rare — model occasionally emits the same edge twice).
+    db.prepare(`DELETE FROM chain_edge_mentions WHERE sourceFocus = ?`).run(sym)
+    if (input.graph?.edges?.length) {
+      const insertStmt = db.prepare(
+        `INSERT OR IGNORE INTO chain_edge_mentions
+           (sourceFocus, fromSym, toSym, relationship, note)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      for (const e of input.graph.edges) {
+        insertStmt.run(
+          sym,
+          e.from.toUpperCase(),
+          e.to.toUpperCase(),
+          e.relationship,
+          e.note
+        )
+      }
+    }
+  })()
 }
 
 export function getCompanyValueChain(symbol: string): CompanyValueChainRow | null {
@@ -123,9 +151,12 @@ export function getCompanyValueChain(symbol: string): CompanyValueChainRow | nul
 }
 
 export function deleteCompanyValueChain(symbol: string): void {
-  getDb()
-    .prepare(`DELETE FROM company_value_chains WHERE symbol = ?`)
-    .run(symbol.toUpperCase())
+  const sym = symbol.toUpperCase()
+  const db = getDb()
+  db.transaction(() => {
+    db.prepare(`DELETE FROM company_value_chains WHERE symbol = ?`).run(sym)
+    db.prepare(`DELETE FROM chain_edge_mentions WHERE sourceFocus = ?`).run(sym)
+  })()
 }
 
 // List every symbol that currently has a chain row. Used by the bulk
@@ -160,9 +191,11 @@ export function getEdgesMentioningSymbol(
   limit = 30
 ): CrossChainEdgeMention[] {
   const sym = symbol.toUpperCase()
-  // json_each unpacks the edges array into rows. The outer SELECT pulls the
-  // chain's focus symbol alongside each edge. We include both from= and to=
-  // matches so mentions land regardless of edge direction.
+  // Indexed lookup against the denormalized chain_edge_mentions table
+  // (migration v40). Two endpoint indexes (idx_*_from / idx_*_to) make
+  // the OR cheap; sourceFocus != ? filters out self-mentions. Replaces
+  // the prior json_each cross-join scan that was the slowest read path
+  // in the chain pipeline.
   const rows = getDb()
     .prepare<
       [string, string, string, number],
@@ -174,22 +207,21 @@ export function getEdgesMentioningSymbol(
         note: string | null
       }
     >(
-      `SELECT c.symbol                                        AS sourceFocus,
-              json_extract(e.value, '$.from')                 AS fromSym,
-              json_extract(e.value, '$.to')                   AS toSym,
-              json_extract(e.value, '$.relationship')         AS rel,
-              json_extract(e.value, '$.note')                 AS note
-         FROM company_value_chains c, json_each(c.graphJson, '$.edges') AS e
-        WHERE c.status = 'ready'
-          AND c.symbol != ?
-          AND (json_extract(e.value, '$.from') = ?
-            OR json_extract(e.value, '$.to')   = ?)
+      `SELECT sourceFocus, fromSym, toSym, relationship AS rel, note
+         FROM chain_edge_mentions
+        WHERE (fromSym = ? OR toSym = ?)
+          AND sourceFocus != ?
         LIMIT ?`
     )
     .all(sym, sym, sym, limit)
   const out: CrossChainEdgeMention[] = []
   for (const r of rows) {
-    if (r.rel !== 'supplier' && r.rel !== 'customer' && r.rel !== 'competitor' && r.rel !== 'partner') {
+    if (
+      r.rel !== 'supplier' &&
+      r.rel !== 'customer' &&
+      r.rel !== 'competitor' &&
+      r.rel !== 'partner'
+    ) {
       continue
     }
     out.push({

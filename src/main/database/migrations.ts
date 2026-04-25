@@ -1156,5 +1156,80 @@ export const migrations: Migration[] = [
           ON chain_corrections(focusSymbol);
       `)
     }
+  },
+  {
+    version: 40,
+    name: 'denormalize chain edges into chain_edge_mentions for fast lookup',
+    // getEdgesMentioningSymbol used to run `json_each(c.graphJson, '$.edges')`
+    // cross-joined against every company_value_chains row, then JSON-extract
+    // each edge — unindexed scan + parse-per-row, called on every chain
+    // regen (so once per ticker during boot auto-regen). With 100+ stored
+    // chains × dozens of edges this was the slowest read path in the chain
+    // pipeline.
+    //
+    // Denormalize to one row per edge keyed by (sourceFocus, fromSym, toSym,
+    // relationship). Two endpoint indexes let "edges mentioning X on either
+    // side" run as two indexed lookups. Write-path replaces all rows for a
+    // sourceFocus inside the same transaction as setCompanyValueChain so
+    // the table can never drift from the JSON source of truth.
+    //
+    // Backfill: populates from existing graphJson once at end of migration.
+    // Subsequent boots are no-ops because writers keep the table fresh.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS chain_edge_mentions (
+          sourceFocus TEXT NOT NULL,
+          fromSym TEXT NOT NULL,
+          toSym TEXT NOT NULL,
+          relationship TEXT NOT NULL,
+          note TEXT,
+          PRIMARY KEY (sourceFocus, fromSym, toSym, relationship)
+        );
+        CREATE INDEX IF NOT EXISTS idx_chain_edge_mentions_from
+          ON chain_edge_mentions(fromSym, sourceFocus);
+        CREATE INDEX IF NOT EXISTS idx_chain_edge_mentions_to
+          ON chain_edge_mentions(toSym, sourceFocus);
+      `)
+
+      // Backfill from existing chains. Walks every ready chain row, parses
+      // the graphJson, and inserts one mentions row per edge. Wrapped in a
+      // transaction for atomicity + speed (single fsync).
+      const chains = db
+        .prepare<[], { symbol: string; graphJson: string | null }>(
+          `SELECT symbol, graphJson FROM company_value_chains
+            WHERE status = 'ready' AND graphJson IS NOT NULL`
+        )
+        .all()
+      const insertStmt = db.prepare(
+        `INSERT OR IGNORE INTO chain_edge_mentions
+           (sourceFocus, fromSym, toSym, relationship, note)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      const txn = db.transaction(() => {
+        for (const c of chains) {
+          if (!c.graphJson) continue
+          let parsed: { edges?: Array<{ from?: unknown; to?: unknown; relationship?: unknown; note?: unknown }> }
+          try {
+            parsed = JSON.parse(c.graphJson)
+          } catch {
+            continue
+          }
+          if (!Array.isArray(parsed.edges)) continue
+          for (const e of parsed.edges) {
+            if (typeof e?.from !== 'string' || typeof e?.to !== 'string') continue
+            if (typeof e?.relationship !== 'string') continue
+            const note = typeof e?.note === 'string' ? e.note : null
+            insertStmt.run(
+              c.symbol.toUpperCase(),
+              e.from.toUpperCase(),
+              e.to.toUpperCase(),
+              e.relationship,
+              note
+            )
+          }
+        }
+      })
+      txn()
+    }
   }
 ]
