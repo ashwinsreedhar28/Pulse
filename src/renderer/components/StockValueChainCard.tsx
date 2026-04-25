@@ -130,7 +130,10 @@ function SourceBadge({
 
   if (citation?.kind === 'filing') {
     const dateStr = formatCiteDate(citation.filedAt)
-    label = citation.formType
+    // Show form type + date on the pill so the user can see WHEN the
+    // filing was made without hovering. Date is the most-asked-about
+    // detail when judging whether a citation is current.
+    label = dateStr ? `${citation.formType} · ${dateStr}` : citation.formType
     title = `${citation.formType} filed ${dateStr} · ${citation.accession} — click to open SEC filing`
     openArgs = {
       url: citation.url,
@@ -140,7 +143,10 @@ function SourceBadge({
   } else if (citation?.kind === 'article' && citation.url) {
     const dateStr = formatCiteDate(citation.publishedAt)
     const sourceStr = citation.feedTitle ?? 'News'
-    label = sourceStr.length > 14 ? sourceStr.slice(0, 12) + '…' : sourceStr
+    // Show source + date on the pill (e.g. "Reuters · 2025-04-22").
+    // More generous truncation budget now that the pill has its own row.
+    const truncatedSource = sourceStr.length > 22 ? sourceStr.slice(0, 20) + '…' : sourceStr
+    label = dateStr ? `${truncatedSource} · ${dateStr}` : truncatedSource
     title = `${citation.title}${dateStr ? ` (${dateStr})` : ''} — click to open`
     openArgs = {
       url: citation.url,
@@ -153,13 +159,15 @@ function SourceBadge({
     // Model-grounded edge with a free-text training attribution.
     // Show the attribution as the badge label so the user sees a real
     // source name (e.g. "Apple FY2023 10-K") instead of the generic
-    // "Model". Truncate to keep the pill compact; full text in tooltip.
+    // "Model". Generous truncation now that the pill has its own row.
     const attr = citation.attribution
-    label = attr.length > 24 ? attr.slice(0, 22) + '…' : attr
+    label = attr.length > 48 ? attr.slice(0, 46) + '…' : attr
     title = `${attr} — from the model's training knowledge (no live link)`
   }
 
-  const baseClasses = `shrink-0 inline-flex items-center px-1.5 py-[1px] rounded-full border text-[8.5px] font-semibold uppercase tracking-[0.16em] ${meta.className}`
+  // 10.5px pill text is small but readable. The previous 8.5px was eye-
+  // strain tiny. Padding bumped slightly to match the larger glyph height.
+  const baseClasses = `inline-flex items-center px-2 py-[2px] rounded-full border text-[10.5px] font-semibold uppercase tracking-[0.12em] max-w-full ${meta.className}`
 
   if (openArgs && onOpen) {
     const args = openArgs
@@ -559,8 +567,16 @@ export function TransactionCluster({
                         )}
                       </div>
                       {item.note && (
-                        <div className="text-[11px] leading-snug text-zinc-400 mt-0.5 flex items-start gap-1.5">
-                          <span className="flex-1 min-w-0">{item.note}</span>
+                        <div className="text-[11px] leading-snug text-zinc-400 mt-0.5">
+                          {item.note}
+                        </div>
+                      )}
+                      {/* Citation pill on its own row below the note so it
+                          stays readable even with long wrapping notes, and
+                          renders even when there's no note (citation alone
+                          is meaningful provenance). */}
+                      {item.source && (
+                        <div className="mt-1">
                           <SourceBadge
                             source={item.source}
                             citation={item.citation}
