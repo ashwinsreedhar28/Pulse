@@ -888,6 +888,22 @@ export function ValueChain({
 
   const closeCorrectionMenu = (): void => setCorrectionMenu(null)
 
+  // Refetch the focus's corrections list. Used by both correction handlers
+  // to refresh state after a write — kept in a `finally` so a partial
+  // failure on the write itself doesn't strand the UI on stale state.
+  // We deliberately do NOT refetch the chain here: corrections are merged
+  // into the displayed buckets locally (combinedSuppliers/Customers/
+  // Competitors useMemo below), so the corrections list change alone
+  // invalidates that memo without an extra IPC round-trip.
+  const refetchCorrections = async (sym: string): Promise<void> => {
+    try {
+      const fresh = await window.api.chainCorrections.list(sym)
+      setFocusCorrections(fresh)
+    } catch {
+      /* keep prior state */
+    }
+  }
+
   const handleCorrectionSelect = async (action: ChainCorrectionAction): Promise<void> => {
     if (!correctionMenu || !focusSymbol) return
     const { symbol } = correctionMenu
@@ -895,10 +911,13 @@ export function ValueChain({
       if (action.type === 'remove') {
         // Remove ALL corrections for this subject — there's at most a few
         // and the UX intent of "Remove correction" is total reversion.
+        // allSettled (not all) so a partial failure still lets the rest
+        // through; we surface failures via console but never let a single
+        // delete failure strand the UI.
         const targets = focusCorrections.filter(
           (c) => c.subjectKey.toUpperCase() === symbol.toUpperCase()
         )
-        await Promise.all(
+        const results = await Promise.allSettled(
           targets.map((c) =>
             window.api.chainCorrections.delete({
               focusSymbol,
@@ -908,6 +927,11 @@ export function ValueChain({
             })
           )
         )
+        for (const r of results) {
+          if (r.status === 'rejected') {
+            console.warn('[chainCorrection] partial remove failure:', r.reason)
+          }
+        }
       } else {
         await window.api.chainCorrections.upsert({
           focusSymbol,
@@ -922,18 +946,10 @@ export function ValueChain({
                 : null
         })
       }
-      // Optimistic refetch so the chain re-renders without waiting for the
-      // chainCorrections:updated broadcast (which fires from main but may
-      // race with the ticker-detail render path).
-      const fresh = await window.api.chainCorrections.list(focusSymbol)
-      setFocusCorrections(fresh)
-      // Also re-pull the chain itself — corrections are applied at chain
-      // read time on the main side, so we need a fresh chain to see the
-      // not-relevant filter / direction flip take effect.
-      const row = await window.api.stocks.getCompanyChain(focusSymbol)
-      setFocusChain(row?.status === 'ready' ? row.graph : null)
     } catch (err) {
       console.warn('[chainCorrection] failed to apply:', err)
+    } finally {
+      await refetchCorrections(focusSymbol)
     }
   }
 
@@ -946,12 +962,10 @@ export function ValueChain({
         subjectKey,
         correctionType: 'not-relevant'
       })
-      const fresh = await window.api.chainCorrections.list(focusSymbol)
-      setFocusCorrections(fresh)
-      const row = await window.api.stocks.getCompanyChain(focusSymbol)
-      setFocusChain(row?.status === 'ready' ? row.graph : null)
     } catch (err) {
       console.warn('[chainCorrection] restore failed:', err)
+    } finally {
+      await refetchCorrections(focusSymbol)
     }
   }
 

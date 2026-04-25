@@ -18,11 +18,32 @@ import { useCallback, useEffect, useState } from 'react'
 
 const STORAGE_PREFIX = 'pulse:collapsed:'
 
+// Legacy keys that pre-date the unified `pulse:collapsed:*` namespace. When
+// migrating a panel onto useCollapsedSection, register its old key here and
+// the hook will migrate the value through on first read (then drop the old
+// key) so existing user preferences survive the upgrade.
+const LEGACY_KEYS: Record<string, string> = {
+  calendar: 'pulse:calendarCollapsed'
+}
+
 function readInitial(key: string, fallback: boolean): boolean {
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + key)
     if (raw === 'true') return true
     if (raw === 'false') return false
+    const legacyKey = LEGACY_KEYS[key]
+    if (legacyKey) {
+      const legacy = localStorage.getItem(legacyKey)
+      if (legacy === 'true' || legacy === 'false') {
+        try {
+          localStorage.setItem(STORAGE_PREFIX + key, legacy)
+          localStorage.removeItem(legacyKey)
+        } catch {
+          /* swallow — fallthrough to returning the legacy value uncached */
+        }
+        return legacy === 'true'
+      }
+    }
     return fallback
   } catch {
     return fallback

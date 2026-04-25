@@ -172,34 +172,49 @@ export function applyCorrectionsToChain(chain: CompanyValueChain): CompanyValueC
     if (counterparty) {
       const newRel = relationshipFix.get(counterparty)
       const newDir = directionFix.get(counterparty)
-      if (newRel) {
-        // wrong-relationship overrides whatever shape the original edge had.
-        // Normalize to focus-as-from for supplier/customer; symmetric rels
-        // (competitor/partner) keep the original direction.
-        if (newRel === 'supplier' || newRel === 'customer') {
-          edges.push({
-            from: newRel === 'supplier' ? counterparty : focus,
-            to: newRel === 'supplier' ? focus : counterparty,
-            relationship: newRel,
+      // EDGE SCHEMA INVARIANT: relationship='customer' on a (from, to) edge
+      // means "from BUYS from to" (i.e. from is the customer side). So an
+      // edge expressing "counterparty is a customer of focus" — the user's
+      // intent for direction='customer' or relationship='customer' — must
+      // emit relationship='supplier' with focus on the FROM side (focus
+      // supplies counterparty). Equivalently: relationship='customer' with
+      // counterparty on the FROM side. We pick the supplier form for both
+      // because unverifiedExtras (in ValueChain.tsx) is more permissive
+      // about the supplier shape and renders consistently.
+      const buildEdge = (
+        target: 'supplier' | 'customer' | 'competitor' | 'partner'
+      ): typeof e => {
+        if (target === 'supplier') {
+          // counter SUPPLIES focus → counter is FROM, focus is TO
+          return {
+            from: counterparty as string,
+            to: focus,
+            relationship: 'supplier',
             note: e.note,
             source: e.source ?? null
-          })
-        } else {
-          edges.push({ ...e, relationship: newRel })
+          }
         }
+        if (target === 'customer') {
+          // counter is CUSTOMER of focus = focus SUPPLIES counter
+          // → focus is FROM, counter is TO, relationship='supplier'
+          return {
+            from: focus,
+            to: counterparty as string,
+            relationship: 'supplier',
+            note: e.note,
+            source: e.source ?? null
+          }
+        }
+        // competitor/partner are symmetric; keep the original (from, to)
+        // ordering and just swap the relationship.
+        return { ...e, relationship: target }
+      }
+      if (newRel) {
+        edges.push(buildEdge(newRel))
         continue
       }
       if (newDir) {
-        // wrong-direction is a flip between supplier/customer. Re-emit the
-        // edge with the user's direction. We discard the original
-        // relationship — direction implies it.
-        edges.push({
-          from: newDir === 'supplier' ? counterparty : focus,
-          to: newDir === 'supplier' ? focus : counterparty,
-          relationship: newDir,
-          note: e.note,
-          source: e.source ?? null
-        })
+        edges.push(buildEdge(newDir))
         continue
       }
     }
