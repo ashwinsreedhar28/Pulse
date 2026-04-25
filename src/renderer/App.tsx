@@ -1131,7 +1131,7 @@ function GameTickerItem({
       title={`${game.away.shortName} @ ${game.home.shortName}`}
       className="flex items-center gap-2 text-[11px] hover:bg-surface-2/80 rounded px-2 py-0.5 -mx-2 transition-colors shrink-0"
     >
-      <span className={`font-bold uppercase tracking-[0.16em] tabular-nums shrink-0 w-[52px] ${statusColor}`}>
+      <span className={`font-bold uppercase tracking-[0.16em] tabular-nums shrink-0 min-w-[52px] ${statusColor}`}>
         {timeLabel}
       </span>
       <span className="relative font-semibold tracking-[0.08em] text-zinc-100">
