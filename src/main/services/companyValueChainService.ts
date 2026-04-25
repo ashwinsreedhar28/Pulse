@@ -355,16 +355,22 @@ async function fetchBilateralFilings(input: {
   const symbols = input.counterpartySymbols.slice(0, cap)
   const focusUpper = input.focusSymbol.toUpperCase()
   // Build a set of focus-mention search terms: the ticker + the company
-  // name's distinctive head word (drops "Inc" / "Corp" / "Ltd").
+  // name's distinctive tokens (corp-suffixes stripped). Threshold is 3
+  // chars — "KLA" / "AMD" / "AMC" are real company-name tokens that
+  // counterparty filings reference and that 4-char gating used to
+  // silently drop. Word boundaries (\b) protect against false positives
+  // from common prefixes like "ADM" hitting "admit".
   const stopSuffix = /\b(Inc\.?|Incorporated|Corp\.?|Corporation|Ltd\.?|Limited|LLC|Company|Co\.?|Holdings|Group|PLC|N\.V\.|S\.A\.|AG)\b/gi
   const cleanedName = input.focusCompanyName.replace(stopSuffix, '').trim()
-  const nameKeyword = cleanedName.split(/\s+/)[0]?.trim()
-  const mentionRe = new RegExp(
-    `\\b(${focusUpper}` +
-      (nameKeyword && nameKeyword.length >= 4 ? `|${nameKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` : '') +
-      `)\\b`,
-    'i'
-  )
+  const nameTokens = cleanedName
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3)
+  const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const alternates = [focusUpper, ...nameTokens.map(escapeRe)]
+  // Dedupe: focusUpper might already be one of the name tokens (rare).
+  const uniqAlternates = [...new Set(alternates)]
+  const mentionRe = new RegExp(`\\b(${uniqAlternates.join('|')})\\b`, 'i')
   const results: BilateralFilingHit[] = []
   // Sequential fetches to be polite to SEC. Per-counterparty timeout
   // already lives in fetchFilingBody so a single hung filing doesn't
@@ -517,7 +523,11 @@ function fetchRecentNews(symbol: string, companyName?: string): RecentNewsRow[] 
     const cleaned = (companyName ?? '').replace(stopSuffix, '').trim()
     const head = cleaned.split(/\s+/)[0]?.trim() ?? ''
     const keys = [upper]
-    if (head.length >= 4) keys.push(head)
+    // 3-char threshold so "KLA" / "AMD" / "AMC" pass — these are real
+    // company-name tokens that LIKE-search will hit reliably with the %
+    // wildcards. Earlier 4-char gate dropped them, leaving the focus
+    // with zero news matches.
+    if (head.length >= 3) keys.push(head)
     const placeholders = keys
       .map(() => `(LOWER(a.title) LIKE ? OR LOWER(a.summary) LIKE ?)`)
       .join(' OR ')
@@ -1275,22 +1285,51 @@ async function webSearchAugmentCitations(
       bailedOnRateLimit = true
       break
     }
-    if (result.kind !== 'ok') continue
+    if (result.kind !== 'ok') {
+      console.log(
+        `[companyChain] web-search ${focus}↔${t.counterparty}: ${result.kind}`
+      )
+      continue
+    }
     // Parse JSON, tolerate prose / fences.
     const m = result.text.match(/\{[\s\S]*?\}/)
-    if (!m) continue
+    if (!m) {
+      console.log(
+        `[companyChain] web-search ${focus}↔${t.counterparty}: no JSON in response — "${result.text.slice(0, 120)}"`
+      )
+      continue
+    }
     let parsed: { url?: string | null; formType?: string; year?: number }
     try {
       parsed = JSON.parse(m[0]) as typeof parsed
     } catch {
+      console.log(
+        `[companyChain] web-search ${focus}↔${t.counterparty}: JSON parse failed — "${m[0].slice(0, 120)}"`
+      )
       continue
     }
     const url = typeof parsed.url === 'string' ? parsed.url.trim() : ''
-    if (!url || !/^https:\/\/www\.sec\.gov\/Archives\//i.test(url)) continue
+    if (!url) {
+      console.log(
+        `[companyChain] web-search ${focus}↔${t.counterparty}: model returned url=null (no SEC source found)`
+      )
+      continue
+    }
+    if (!/^https:\/\/www\.sec\.gov\/Archives\//i.test(url)) {
+      console.log(
+        `[companyChain] web-search ${focus}↔${t.counterparty}: rejected non-Archives URL "${url}"`
+      )
+      continue
+    }
     // Extract CIK + accession from a canonical Archives URL of the form:
     //   https://www.sec.gov/Archives/edgar/data/{CIK}/{ACCESSION-NO-DASHES}/{file}
     const urlMatch = url.match(/\/Archives\/edgar\/data\/(\d+)\/([0-9]{18}|[0-9-]{20})/i)
-    if (!urlMatch) continue
+    if (!urlMatch) {
+      console.log(
+        `[companyChain] web-search ${focus}↔${t.counterparty}: Archives URL didn't match accession pattern — "${url}"`
+      )
+      continue
+    }
     const cik = urlMatch[1]
     const accessionRaw = urlMatch[2]
     // Normalize accession to dashed form (XXXXXXXXXX-XX-XXXXXX).
@@ -1500,14 +1539,33 @@ export async function generateCompanyChain(input: {
       )
       return null
     }),
-    // Don't await filings hard — if SEC is rate-limited the profile is
-    // usually enough. Race a 12-second ceiling so the generate click
-    // doesn't stall on a slow EDGAR fetch.
+    // Wait for SEC filings — without the 10-K we lose the focus's most
+    // important grounding source. The earlier 12s race kept timing out
+    // on slower EDGAR responses, leaving fetchTenKExcerpt with nothing
+    // to read and concentrationAugmentCitations with no body to parse.
+    // 60s ceiling so a wedged EDGAR doesn't stall the click forever.
     Promise.race([
-      forceRefreshFilings(sym).catch(() => null),
-      new Promise((resolve) => setTimeout(resolve, 12_000))
+      forceRefreshFilings(sym).catch((err) => {
+        console.warn(
+          `[companyChain] forceRefreshFilings failed for ${sym}:`,
+          err instanceof Error ? err.message : err
+        )
+        return null
+      }),
+      new Promise((resolve) => setTimeout(resolve, 60_000))
     ])
   ])
+  // Diagnostic: log what we ended up with for the focus's filings cache
+  // so we can tell at-a-glance whether SEC fetch worked. Counts only —
+  // detailed body fetch happens later via fetchTenKExcerpt etc.
+  const cachedFilings = getFilingsForSymbol(sym, 20)
+  const has10K = cachedFilings.some(isAnnualReport)
+  const has10Q = cachedFilings.some(isQuarterlyReport)
+  const has8K = cachedFilings.some(isCurrentReport)
+  console.log(
+    `[companyChain] post-warmup SEC cache for ${sym}: ${cachedFilings.length} filing(s) ` +
+      `(10-K=${has10K}, 10-Q=${has10Q}, 8-K=${has8K})`
+  )
 
   // Now gather what landed during the warm-up (plus whatever was already in
   // cache from prior sessions). We fetch THREE SEC filings (10-K + 8-K +
