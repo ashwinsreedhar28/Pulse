@@ -76,7 +76,7 @@ function fireNotification(
     title,
     body,
     importance: 'urgent',
-    clickAction: { kind: 'game', gameId: game.id }
+    clickAction: { kind: 'game', payload: { leagueId: game.leagueId, leaguePath: game.leaguePath, eventId: game.id } }
   })
 }
 
@@ -211,7 +211,7 @@ function fireScoreChangeIfAny(game: Game, prev: GameState, curr: GameState): voi
     title: `${league}: ${scoredBy} scored`,
     body: scoreLine,
     importance: 'urgent',
-    clickAction: { kind: 'game', gameId: game.id }
+    clickAction: { kind: 'game', payload: { leagueId: game.leagueId, leaguePath: game.leaguePath, eventId: game.id } }
   })
 }
 
@@ -257,7 +257,7 @@ async function scanNbaMilestones(): Promise<void> {
                 title: `NBA: ${player.athlete} ${pts} pts`,
                 body: `${teamName} vs ${opponent}.`,
                 importance: 'urgent',
-                clickAction: { kind: 'game', gameId: g.id }
+                clickAction: { kind: 'game', payload: { leagueId: g.leagueId, leaguePath: g.leaguePath, eventId: g.id } }
               })
             }
           }

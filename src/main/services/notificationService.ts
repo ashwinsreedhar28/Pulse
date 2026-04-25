@@ -28,10 +28,15 @@ import { getPreferences } from '../database/preferences'
 // Click-routing payload — opens the right place inside Pulse when the user
 // clicks the OS notification. Sources hand us a structured action; the
 // dispatcher wires it onto the Notification's click event.
+//
+// Shape note: 'game' carries the full SportsGameOpenPayload (leagueId,
+// leaguePath, eventId) because the renderer's existing onOpenGame
+// subscriber expects that object — passing a bare gameId would break
+// when consumed.
 export type NotificationClickAction =
   | { kind: 'article'; articleId: number }
   | { kind: 'symbol'; symbol: string }
-  | { kind: 'game'; gameId: string }
+  | { kind: 'game'; payload: { leagueId: string; leaguePath: string; eventId: string } }
   | { kind: 'url'; url: string }
   | { kind: 'route'; route: 'stocks' | 'sports' | 'home' }
   | null
@@ -146,12 +151,14 @@ function attachClickHandler(notif: Notification, action: NotificationClickAction
       }
       case 'game': {
         for (const win of BrowserWindow.getAllWindows()) {
-          if (!win.isDestroyed()) win.webContents.send('sports:openGame', action.gameId)
+          if (!win.isDestroyed()) win.webContents.send('sports:openGame', action.payload)
         }
         return
       }
       case 'url': {
-        if (action.url.startsWith('http')) void shell.openExternal(action.url)
+        // Strict http/https check — bare startsWith('http') would accept
+        // 'httpfoo://...' which shell.openExternal would happily launch.
+        if (/^https?:\/\//i.test(action.url)) void shell.openExternal(action.url)
         return
       }
       case 'route': {

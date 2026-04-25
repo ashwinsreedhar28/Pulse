@@ -1182,6 +1182,17 @@ const api = {
       return (): void => {
         ipcRenderer.off('app:ollamaStatus', listener)
       }
+    },
+    // Notification click → switch to a top-level route. Fired by the
+    // central notificationService for digest + macro-shock notifications
+    // whose click action is `{ kind: 'route', route: 'home' | 'stocks' |
+    // 'sports' }`.
+    onNavigate: (cb: (route: 'home' | 'stocks' | 'sports') => void): (() => void) => {
+      const listener = (_e: unknown, route: 'home' | 'stocks' | 'sports'): void => cb(route)
+      ipcRenderer.on('app:navigate', listener)
+      return (): void => {
+        ipcRenderer.off('app:navigate', listener)
+      }
     }
   },
   categories: {

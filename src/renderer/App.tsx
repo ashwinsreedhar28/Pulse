@@ -389,6 +389,41 @@ export default function App(): JSX.Element {
     return unsub
   }, [handleTickerOpenStock])
 
+  // Notification click → open a sports game's detail. Fired for fav-team
+  // started/final/score-change alerts and league-wide NBA milestones.
+  // Routes through handleCalendarOpenGame which already does the listGames
+  // → match → handleTickerOpenGame fan-in.
+  useEffect(() => {
+    const unsub = window.api.sports.onOpenGame((payload) => {
+      handleCalendarOpenGame(payload.leagueId, payload.eventId)
+    })
+    return unsub
+  }, [handleCalendarOpenGame])
+
+  // Notification click → switch top-level route. Used by the digest
+  // notification (route to home), macro-shock alerts (home), and any
+  // future source that wants a coarse-grained navigation rather than
+  // a specific entity.
+  useEffect(() => {
+    const unsub = window.api.app.onNavigate((route) => {
+      if (route === 'stocks') {
+        setStocksOpen(true)
+      } else if (route === 'sports') {
+        setSportsOpen(true)
+      } else {
+        // 'home' = back to the article feed (close any modals).
+        setStocksOpen(false)
+        setSportsOpen(false)
+        setDiscoveryOpen(false)
+        setHyperOpen(false)
+        setReelsOpen(false)
+        setSelectedId(null)
+        setExternalView(null)
+      }
+    })
+    return unsub
+  }, [])
+
   // Eyebrow color tracks the filter-tab underline: Top Stories = red-500,
   // Finance = yellow-400, News = accent/blue. When a sidebar category is
   // active the domain dot's color (yellow or blue) is used instead so the
