@@ -43,7 +43,8 @@ export interface ChainCorrectionMenuProps {
 const CATEGORY_LABEL: Record<Category, string> = {
   supplier: 'supplier',
   customer: 'customer',
-  competitor: 'competitor'
+  competitor: 'competitor',
+  partner: 'partner'
 }
 
 interface MenuItem {

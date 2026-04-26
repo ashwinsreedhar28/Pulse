@@ -160,11 +160,19 @@ const COMPETITOR_MAP: Map<string, Set<string>> = (() => {
 })()
 
 // Role precedence when a tile matches multiple relationships to the focus:
-//   focus > competitor > both (customer+supplier) > customer > supplier
+//   focus > competitor > partner > both (customer+supplier) > customer > supplier
 // Competitor wins over directional roles because a supplier-who-also-competes
 // (e.g. INTC selling Xeon to AMZN while also competing with AWS Graviton) is
-// a more unusual and informative signal than the directional one.
-type RelatedRole = 'focus' | 'customer' | 'supplier' | 'both' | 'competitor'
+// a more unusual and informative signal than the directional one. Partner
+// sits below competitor (rivalry is more salient) but above directional
+// roles since strategic alliances reshape supply/demand math.
+type RelatedRole =
+  | 'focus'
+  | 'customer'
+  | 'supplier'
+  | 'both'
+  | 'competitor'
+  | 'partner'
 
 export function ValueChain({
   tickers,
@@ -211,6 +219,15 @@ export function ValueChain({
   // one render so React has applied the sectorId='all' swap and the tile
   // actually exists in the DOM by the time we call scrollIntoView.
   const [pendingScroll, setPendingScroll] = useState<string | null>(null)
+  // Last externalFocus value we've already locked onto. The parent keeps
+  // chainFocus sticky (so chain↔holdings tab switches re-lock the same
+  // ticker), which means our externalFocus prop holds the same string
+  // across many parent re-renders. Without this ref the focus effect
+  // would re-fire whenever the parent re-renders with a fresh
+  // onExternalFocusHandled identity (e.g. after `+ Watchlist` causes
+  // setTickers → re-render), snapping the user's manual lock back to
+  // chainFocus.
+  const lastAppliedExternalFocus = useRef<string | null>(null)
   // Single/double-click discrimination. The first click starts a timer; a
   // second click inside the window cancels the timer and runs the
   // double-click action (open detail). Otherwise the timer fires and runs
@@ -248,6 +265,14 @@ export function ValueChain({
   useEffect(() => {
     if (!externalFocus) return
     const upper = externalFocus.toUpperCase()
+    // Bail when the parent merely re-rendered with the same focus string —
+    // we've already applied this exact value. Without this guard the user's
+    // manual click-to-lock gets clobbered every time the parent re-renders
+    // (e.g. setTickers after `+ Watchlist`), because onExternalFocusHandled
+    // is a fresh inline `() => {}` on each render and that's enough to
+    // invalidate the dep array.
+    if (lastAppliedExternalFocus.current === upper) return
+    lastAppliedExternalFocus.current = upper
     setLockedSymbol(upper)
     setSectorId('all')
     setPendingScroll(upper)
@@ -777,7 +802,7 @@ export function ValueChain({
             ? 'news'
             : 'model'
         : null
-      if (o.relationship === 'supplier' || o.relationship === 'partner') {
+      if (o.relationship === 'supplier') {
         const from = o.fromSymbol.toUpperCase()
         const to = o.toSymbol.toUpperCase()
         out.push({
@@ -798,6 +823,10 @@ export function ValueChain({
           source: inferredSource
         })
       }
+      // Partner edges deliberately excluded here — they're symmetric and
+      // tracked in mergedPartnerMap instead, just like competitor pairs.
+      // Previously we lumped them into the supplier-direction bucket which
+      // caused partnerships to render under "Suppliers" in the focus panel.
     }
     // Now layer static edges in for pairs no override covered, but skip
     // any static edge touching a regenerated focus (its generated chain
@@ -861,6 +890,27 @@ export function ValueChain({
     return m
   }, [edgeOverrides, generatedChainSymbols])
 
+  // Strategic-alliance pairs from the overrides table. Symmetric like the
+  // competitor map — partnerships have no inherent direction (Microsoft↔
+  // OpenAI, NVIDIA↔TSMC's CoWoS, AAPL↔SK Hynix HBM). The static
+  // supplyChainGraph.json doesn't carry partners (only customer/supplier +
+  // competitor pairs), so this map is sourced entirely from generated
+  // chains. Cross-chain partner pairs follow the same union rule as
+  // competitors.
+  const mergedPartnerMap = useMemo<Map<string, Set<string>>>(() => {
+    const m = new Map<string, Set<string>>()
+    for (const o of edgeOverrides) {
+      if (o.relationship !== 'partner') continue
+      const a = o.fromSymbol.toUpperCase()
+      const b = o.toSymbol.toUpperCase()
+      if (!m.has(a)) m.set(a, new Set())
+      if (!m.has(b)) m.set(b, new Set())
+      m.get(a)!.add(b)
+      m.get(b)!.add(a)
+    }
+    return m
+  }, [edgeOverrides])
+
   const { outgoing, incoming } = useMemo(() => {
     const out = new Map<string, ValueChainEdge[]>()
     const inc = new Map<string, ValueChainEdge[]>()
@@ -895,8 +945,26 @@ export function ValueChain({
       if (!visibleSymbols.has(peer)) continue
       m.set(peer, 'competitor')
     }
+    // Partners override directional roles but lose to competitor — matches
+    // the precedence comment on RelatedRole. A peer that's already tagged
+    // 'competitor' stays competitor; otherwise the partner role wins over
+    // any prior directional tag (a partner-who-also-supplies is still
+    // primarily a partner, since the alliance is the more informative
+    // signal).
+    for (const peer of mergedPartnerMap.get(focusSymbol) ?? []) {
+      if (!visibleSymbols.has(peer)) continue
+      if (m.get(peer) === 'competitor') continue
+      m.set(peer, 'partner')
+    }
     return m
-  }, [focusSymbol, outgoing, incoming, visibleSymbols, mergedCompetitorMap])
+  }, [
+    focusSymbol,
+    outgoing,
+    incoming,
+    visibleSymbols,
+    mergedCompetitorMap,
+    mergedPartnerMap
+  ])
 
   const focusCompetitors = useMemo(() => {
     if (!focusSymbol) return []
@@ -904,6 +972,13 @@ export function ValueChain({
     if (!peers) return []
     return [...peers].filter((s) => visibleSymbols.has(s)).sort()
   }, [focusSymbol, visibleSymbols, mergedCompetitorMap])
+
+  const focusPartners = useMemo(() => {
+    if (!focusSymbol) return []
+    const peers = mergedPartnerMap.get(focusSymbol)
+    if (!peers) return []
+    return [...peers].filter((s) => visibleSymbols.has(s)).sort()
+  }, [focusSymbol, visibleSymbols, mergedPartnerMap])
 
   // Per-ticker generated chain for the currently-focused symbol. Only the
   // unverified nodes feed the focus panel — verified counterparties are
@@ -1253,6 +1328,11 @@ export function ValueChain({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [focusCompetitors, nodeBySymbol, stageLabelById, tickerBySymbol]
   )
+  const partnerItems = useMemo(
+    () => focusPartners.map((sym) => buildCounterparty(sym, null)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [focusPartners, nodeBySymbol, stageLabelById, tickerBySymbol]
+  )
 
   // Append unverified counterparties from the focus's per-ticker chain.
   // The absorber drops edges that touch unverified nodes (no tickers row
@@ -1263,10 +1343,16 @@ export function ValueChain({
   // / competitor arrays with `unverified: true` so the cluster renders
   // them as muted, non-interactive chips.
   const unverifiedExtras = useMemo(() => {
-    const empty = { suppliers: [], customers: [], competitors: [] } as {
+    const empty = {
+      suppliers: [],
+      customers: [],
+      competitors: [],
+      partners: []
+    } as {
       suppliers: Counterparty[]
       customers: Counterparty[]
       competitors: Counterparty[]
+      partners: Counterparty[]
     }
     if (!focusSymbol || !focusChain) return empty
     const focus = focusSymbol.toUpperCase()
@@ -1298,7 +1384,12 @@ export function ValueChain({
         source
       }
     }
-    const out = { suppliers: [] as Counterparty[], customers: [] as Counterparty[], competitors: [] as Counterparty[] }
+    const out = {
+      suppliers: [] as Counterparty[],
+      customers: [] as Counterparty[],
+      competitors: [] as Counterparty[],
+      partners: [] as Counterparty[]
+    }
     const seen = new Set<string>()
     const push = (
       bucket: keyof typeof out,
@@ -1336,10 +1427,11 @@ export function ValueChain({
         continue
       }
       if (rel === 'partner') {
-        // Symmetric: fold into customers when focus is `from`, suppliers
-        // otherwise — matches UnifiedValueChainCard's convention so the
-        // two surfaces agree on where partners land.
-        push(from === focus ? 'customers' : 'suppliers', counter, e.note ?? null, cites, src)
+        // First-class partner cluster — strategic alliances are symmetric
+        // and conceptually distinct from supply/customer flows. Both
+        // sides go into the same partners bucket regardless of which
+        // side of the edge the focus sits on.
+        push('partners', counter, e.note ?? null, cites, src)
         continue
       }
       // supplier/customer: translate to focus perspective.
@@ -1369,16 +1461,23 @@ export function ValueChain({
   //   - 'not-relevant' → drop from every bucket
   //   - 'wrong-direction' → move between supplier/customer
   //   - 'wrong-relationship' → move into the named bucket
-  const { combinedCustomers, combinedSuppliers, combinedCompetitors } = useMemo(() => {
+  const {
+    combinedCustomers,
+    combinedSuppliers,
+    combinedCompetitors,
+    combinedPartners
+  } = useMemo(() => {
     const rawCustomers = [...customerItems, ...unverifiedExtras.customers]
     const rawSuppliers = [...supplierItems, ...unverifiedExtras.suppliers]
     const rawCompetitors = [...competitorItems, ...unverifiedExtras.competitors]
+    const rawPartners = [...partnerItems, ...unverifiedExtras.partners]
 
     if (focusCorrections.length === 0) {
       return {
         combinedCustomers: rawCustomers,
         combinedSuppliers: rawSuppliers,
-        combinedCompetitors: rawCompetitors
+        combinedCompetitors: rawCompetitors,
+        combinedPartners: rawPartners
       }
     }
 
@@ -1419,51 +1518,58 @@ export function ValueChain({
     const sup = filterAndExtract(rawSuppliers)
     const cus = filterAndExtract(rawCustomers)
     const com = filterAndExtract(rawCompetitors)
+    const par = filterAndExtract(rawPartners)
 
-    // Reinsert moved chips into the bucket the user picked. Partner folds
-    // into customers (mirrors the unverifiedExtras convention above so the
-    // two surfaces agree on partner placement). Dedupe by symbol since the
-    // same chip may appear in both graph + chain sources.
+    // Reinsert moved chips into the bucket the user picked. Partner is now
+    // a real bucket — wrong-relationship → partner actually lands in the
+    // partners cluster instead of being coerced to customer like before.
+    // Dedupe by symbol since the same chip may appear in both graph +
+    // chain sources.
     const reinsertBuckets: Record<
-      'supplier' | 'customer' | 'competitor',
+      'supplier' | 'customer' | 'competitor' | 'partner',
       Counterparty[]
     > = {
       supplier: sup.kept,
       customer: cus.kept,
-      competitor: com.kept
+      competitor: com.kept,
+      partner: par.kept
     }
     const seen: Record<string, Set<string>> = {
       supplier: new Set(sup.kept.map((x) => x.symbol.toUpperCase())),
       customer: new Set(cus.kept.map((x) => x.symbol.toUpperCase())),
-      competitor: new Set(com.kept.map((x) => x.symbol.toUpperCase()))
+      competitor: new Set(com.kept.map((x) => x.symbol.toUpperCase())),
+      partner: new Set(par.kept.map((x) => x.symbol.toUpperCase()))
     }
-    for (const item of [...sup.moved, ...cus.moved, ...com.moved]) {
+    for (const item of [...sup.moved, ...cus.moved, ...com.moved, ...par.moved]) {
       const target = moveTo.get(item.symbol.toUpperCase())
       if (!target) continue
-      const bucket = target === 'partner' ? 'customer' : target
-      if (seen[bucket].has(item.symbol.toUpperCase())) continue
-      seen[bucket].add(item.symbol.toUpperCase())
-      reinsertBuckets[bucket].push(item)
+      if (seen[target].has(item.symbol.toUpperCase())) continue
+      seen[target].add(item.symbol.toUpperCase())
+      reinsertBuckets[target].push(item)
     }
 
     return {
       combinedCustomers: reinsertBuckets.customer,
       combinedSuppliers: reinsertBuckets.supplier,
-      combinedCompetitors: reinsertBuckets.competitor
+      combinedCompetitors: reinsertBuckets.competitor,
+      combinedPartners: reinsertBuckets.partner
     }
   }, [
     customerItems,
     supplierItems,
     competitorItems,
+    partnerItems,
     unverifiedExtras.customers,
     unverifiedExtras.suppliers,
     unverifiedExtras.competitors,
+    unverifiedExtras.partners,
     focusCorrections
   ])
   const presentCategories: Category[] = []
   if (combinedSuppliers.length > 0) presentCategories.push('supplier')
   if (combinedCompetitors.length > 0) presentCategories.push('competitor')
   if (combinedCustomers.length > 0) presentCategories.push('customer')
+  if (combinedPartners.length > 0) presentCategories.push('partner')
   const { boxShadow: focusBoxShadow, glowBackground: focusGlow } = categoryGlow(presentCategories)
 
   return (
@@ -1694,45 +1800,85 @@ export function ValueChain({
                   earnings={earningsMap.get(focusSymbol!)}
                 />
               </header>
-              <div
-                className={`relative flex-1 grid grid-cols-1 gap-4 px-4 py-3 overflow-y-auto ${
-                  presentCategories.length === 3
-                    ? 'md:grid-cols-3'
-                    : presentCategories.length === 2
-                      ? 'md:grid-cols-2'
-                      : ''
-                }`}
-              >
-                <TransactionCluster
-                  category="supplier"
-                  items={combinedSuppliers}
-                  onPick={toggleLock}
-                  onHover={focusTile}
-                  onLeave={scheduleClear}
-                  onContextMenu={(sym, x, y) => openCorrectionMenu(sym, 'supplier', x, y)}
-                  correctedSymbols={correctedSymbolSet}
-                  onOpenCitation={onOpenURL}
-                />
-                <TransactionCluster
-                  category="competitor"
-                  items={combinedCompetitors}
-                  onPick={toggleLock}
-                  onHover={focusTile}
-                  onLeave={scheduleClear}
-                  onContextMenu={(sym, x, y) => openCorrectionMenu(sym, 'competitor', x, y)}
-                  correctedSymbols={correctedSymbolSet}
-                  onOpenCitation={onOpenURL}
-                />
-                <TransactionCluster
-                  category="customer"
-                  items={combinedCustomers}
-                  onPick={toggleLock}
-                  onHover={focusTile}
-                  onLeave={scheduleClear}
-                  onContextMenu={(sym, x, y) => openCorrectionMenu(sym, 'customer', x, y)}
-                  correctedSymbols={correctedSymbolSet}
-                  onOpenCitation={onOpenURL}
-                />
+              <div className="relative flex-1 px-4 py-3 overflow-y-auto">
+                {(() => {
+                  // Layout: keep the three directional/competitor clusters in
+                  // their original 1/2/3-up grid (column count derives from how
+                  // many of supplier/competitor/customer have items), then
+                  // drop the partner cluster as a full-width row below. A
+                  // 4-column grid would pinch the chip rows on narrower
+                  // detail panels, and partners are conceptually a separate
+                  // dimension (alliance vs. flow) anyway.
+                  const trioCount = [
+                    combinedSuppliers.length > 0,
+                    combinedCompetitors.length > 0,
+                    combinedCustomers.length > 0
+                  ].filter(Boolean).length
+                  const gridCols =
+                    trioCount === 3
+                      ? 'md:grid-cols-3'
+                      : trioCount === 2
+                        ? 'md:grid-cols-2'
+                        : ''
+                  return (
+                    <>
+                      <div className={`grid grid-cols-1 gap-4 ${gridCols}`}>
+                        <TransactionCluster
+                          category="supplier"
+                          items={combinedSuppliers}
+                          onPick={toggleLock}
+                          onHover={focusTile}
+                          onLeave={scheduleClear}
+                          onContextMenu={(sym, x, y) =>
+                            openCorrectionMenu(sym, 'supplier', x, y)
+                          }
+                          correctedSymbols={correctedSymbolSet}
+                          onOpenCitation={onOpenURL}
+                        />
+                        <TransactionCluster
+                          category="competitor"
+                          items={combinedCompetitors}
+                          onPick={toggleLock}
+                          onHover={focusTile}
+                          onLeave={scheduleClear}
+                          onContextMenu={(sym, x, y) =>
+                            openCorrectionMenu(sym, 'competitor', x, y)
+                          }
+                          correctedSymbols={correctedSymbolSet}
+                          onOpenCitation={onOpenURL}
+                        />
+                        <TransactionCluster
+                          category="customer"
+                          items={combinedCustomers}
+                          onPick={toggleLock}
+                          onHover={focusTile}
+                          onLeave={scheduleClear}
+                          onContextMenu={(sym, x, y) =>
+                            openCorrectionMenu(sym, 'customer', x, y)
+                          }
+                          correctedSymbols={correctedSymbolSet}
+                          onOpenCitation={onOpenURL}
+                        />
+                      </div>
+                      {combinedPartners.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-edge/30">
+                          <TransactionCluster
+                            category="partner"
+                            items={combinedPartners}
+                            onPick={toggleLock}
+                            onHover={focusTile}
+                            onLeave={scheduleClear}
+                            onContextMenu={(sym, x, y) =>
+                              openCorrectionMenu(sym, 'partner', x, y)
+                            }
+                            correctedSymbols={correctedSymbolSet}
+                            onOpenCitation={onOpenURL}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
               {hiddenCorrections.length > 0 && (
                 <div className="px-4 py-2 border-t border-edge/40 bg-surface-1/40">
@@ -2007,6 +2153,8 @@ function ValueChainTile({
     tone = 'border-emerald-400/70 bg-indigo-500/[0.06] shadow-[0_0_0_1px_rgba(99,102,241,0.35)]'
   } else if (role === 'competitor') {
     tone = 'border-orange-400/80 bg-orange-500/[0.08] shadow-[0_0_0_1px_rgba(249,115,22,0.35)]'
+  } else if (role === 'partner') {
+    tone = 'border-sky-400/80 bg-sky-500/[0.08] shadow-[0_0_0_1px_rgba(14,165,233,0.35)]'
   } else if (inWatchlist) {
     tone = 'border-edge/70 bg-surface-1 hover:border-edge'
   } else if (hasTickerRow) {

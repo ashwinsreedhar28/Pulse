@@ -35,7 +35,7 @@ interface ChainGraph {
 
 const CHAIN = graph as unknown as ChainGraph
 
-export type Category = 'customer' | 'supplier' | 'competitor'
+export type Category = 'customer' | 'supplier' | 'competitor' | 'partner'
 
 export interface Counterparty {
   symbol: string
@@ -277,6 +277,25 @@ export const TONE: Record<
     glowRgba: 'rgba(249, 115, 22, 0.13)',
     shadowRgba: 'rgba(249, 115, 22, 0.5)',
     glowOrigin: '50% 0%'
+  },
+  // Strategic alliances — joint ventures, integration partnerships,
+  // co-development. Symmetric (no direction) like competitors but
+  // semantically distinct. Sky/cyan reads as "alliance/connection" and
+  // doesn't collide with the indigo-blue of suppliers.
+  partner: {
+    label: 'Partners',
+    glyph: '↔',
+    accent: 'text-sky-300',
+    chipBorder: 'border-sky-400/50',
+    chipBg: 'bg-sky-500/10',
+    chipText: 'text-sky-100',
+    chipRing: 'ring-sky-500/30',
+    chipHoverBg: 'hover:bg-sky-500/25',
+    headerAccent: 'text-sky-400',
+    rail: 'bg-sky-500/60',
+    glowRgba: 'rgba(14, 165, 233, 0.13)',
+    shadowRgba: 'rgba(14, 165, 233, 0.5)',
+    glowOrigin: '0% 50%'
   }
 }
 

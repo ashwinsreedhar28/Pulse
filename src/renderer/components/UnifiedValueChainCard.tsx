@@ -60,6 +60,7 @@ interface PreparedChain {
   suppliers: Counterparty[]
   customers: Counterparty[]
   competitors: Counterparty[]
+  partners: Counterparty[]
   sourceContext: string | null
   generatedAt: number | null
 }
@@ -198,16 +199,28 @@ export function UnifiedValueChainCard({
   if (prepared.customers.length > 0) presentCategories.push('customer')
   if (prepared.suppliers.length > 0) presentCategories.push('supplier')
   if (prepared.competitors.length > 0) presentCategories.push('competitor')
+  if (prepared.partners.length > 0) presentCategories.push('partner')
   const { boxShadow, glowBackground } = categoryGlow(presentCategories)
+  // Partners render as a full-width row below the trio rather than a 4th
+  // column — a 4-up grid would pinch chip rows on narrower detail panels,
+  // and partners are a separate dimension (alliance vs. flow) anyway.
+  const trioCount = [
+    prepared.suppliers.length > 0,
+    prepared.competitors.length > 0,
+    prepared.customers.length > 0
+  ].filter(Boolean).length
   const gridColsClass =
-    presentCategories.length === 3
+    trioCount === 3
       ? 'md:grid-cols-3'
-      : presentCategories.length === 2
+      : trioCount === 2
         ? 'md:grid-cols-2'
         : ''
 
   const linkCount =
-    prepared.customers.length + prepared.suppliers.length + prepared.competitors.length
+    prepared.customers.length +
+    prepared.suppliers.length +
+    prepared.competitors.length +
+    prepared.partners.length
   const sourceLabel =
     prepared.source === 'claude'
       ? 'Claude'
@@ -306,6 +319,16 @@ export function UnifiedValueChainCard({
           onOpenCitation={onOpenCitation}
         />
       </div>
+      {prepared.partners.length > 0 && (
+        <div className="mt-6 pt-6 border-t border-edge/30">
+          <TransactionCluster
+            category="partner"
+            items={prepared.partners}
+            onPick={onOpenTicker}
+            onOpenCitation={onOpenCitation}
+          />
+        </div>
+      )}
     </CollapsibleSection>
   )
 }
@@ -360,6 +383,10 @@ function prepareFromCurated(upper: string, tickers: Ticker[]): PreparedChain | n
     suppliers,
     customers,
     competitors,
+    // Static supplyChainGraph.json carries no partner edges — only
+    // customer/supplier directional + competitor pairs. Partners only
+    // exist on generated chains (handled in prepareFromGenerated below).
+    partners: [],
     sourceContext: null,
     generatedAt: null
   }
@@ -417,15 +444,18 @@ function prepareFromGenerated(
   }
 
   // Same role-bucketing logic as the ValueChain page's focus panel, so
-  // supplier / customer / competitor semantics stay consistent across
-  // views. Partner edges fold into customer (looking down-chain) when the
-  // focus is the `from` side, supplier (looking up) when it's `to`.
+  // supplier / customer / competitor / partner semantics stay consistent
+  // across views. Partner is now a first-class bucket (rendered as a
+  // sky-toned full-width row below the trio); previously we folded
+  // partners into customer/supplier based on edge direction.
   const suppliers: Counterparty[] = []
   const customers: Counterparty[] = []
   const competitors: Counterparty[] = []
+  const partners: Counterparty[] = []
   const seenSuppliers = new Set<string>()
   const seenCustomers = new Set<string>()
   const seenCompetitors = new Set<string>()
+  const seenPartners = new Set<string>()
 
   for (const e of graph.edges) {
     const from = e.from.toUpperCase()
@@ -474,14 +504,13 @@ function prepareFromGenerated(
       continue
     }
     if (rel === 'partner') {
-      // Symmetric — fold into customers when focus is `from`, suppliers
-      // otherwise. This matches ValueChain's logic.
-      if (from === focus && !seenCustomers.has(to)) {
-        customers.push(toCounterparty(to, note, source, citations))
-        seenCustomers.add(to)
-      } else if (to === focus && !seenSuppliers.has(from)) {
-        suppliers.push(toCounterparty(from, note, source, citations))
-        seenSuppliers.add(from)
+      // First-class partner bucket — both sides land in the same
+      // partners cluster regardless of which side of the edge the focus
+      // sits on, because partnerships are symmetric (no flow direction).
+      const counter = from === focus ? to : from
+      if (counter && counter !== focus && !seenPartners.has(counter)) {
+        partners.push(toCounterparty(counter, note, source, citations))
+        seenPartners.add(counter)
       }
     }
   }
@@ -555,21 +584,20 @@ function prepareFromGenerated(
       continue
     }
     if (o.relationship === 'partner') {
-      // Match focus-page convention: focus=from → fold to customers,
-      // focus=to → fold to suppliers.
-      if (from === focus) {
-        if (seenCustomers.has(counterparty)) continue
-        customers.push(toCounterparty(counterparty, note, inferredSource, cites))
-        seenCustomers.add(counterparty)
-      } else {
-        if (seenSuppliers.has(counterparty)) continue
-        suppliers.push(toCounterparty(counterparty, note, inferredSource, cites))
-        seenSuppliers.add(counterparty)
-      }
+      // First-class partner bucket — symmetric, so direction doesn't
+      // matter. Same logic as the focus-chain partner branch above.
+      if (seenPartners.has(counterparty)) continue
+      partners.push(toCounterparty(counterparty, note, inferredSource, cites))
+      seenPartners.add(counterparty)
     }
   }
 
-  if (suppliers.length === 0 && customers.length === 0 && competitors.length === 0) {
+  if (
+    suppliers.length === 0 &&
+    customers.length === 0 &&
+    competitors.length === 0 &&
+    partners.length === 0
+  ) {
     return null
   }
 
@@ -590,6 +618,7 @@ function prepareFromGenerated(
     suppliers,
     customers,
     competitors,
+    partners,
     sourceContext: sourceContext || null,
     generatedAt: row.generatedAt ?? null
   }
