@@ -7,6 +7,7 @@ import { Hyperintelligence } from './components/Hyperintelligence'
 import { Reels } from './components/Reels'
 import { CalendarStrip } from './components/CalendarStrip'
 import { ExternalReader } from './components/ExternalReader'
+import { FindBar } from './components/FindBar'
 import { ValueChain } from './components/ValueChain'
 import { UnifiedValueChainCard } from './components/UnifiedValueChainCard'
 import { ValueChainDiagram } from './components/ValueChainDiagram'
@@ -171,6 +172,27 @@ export default function App(): JSX.Element {
     subtitle: string | null
     initialReader?: ReaderResult | null
   } | null>(null)
+  // Find-in-page state. Cmd+F (or Ctrl+F on non-mac) opens a small
+  // overlay that searches the current document. When a webview is the
+  // active surface we route to its own findInPage instead.
+  const [findOpen, setFindOpen] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const cmdOrCtrl = e.metaKey || e.ctrlKey
+      if (cmdOrCtrl && e.key.toLowerCase() === 'f') {
+        // Don't intercept when the user is typing in an input that
+        // probably wants browser-default behavior — but the overlay is
+        // useful in any context, so we always open. Stops the OS-level
+        // beep / native menu from also firing.
+        e.preventDefault()
+        setFindOpen(true)
+      } else if (e.key === 'Escape' && findOpen) {
+        setFindOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return (): void => window.removeEventListener('keydown', onKey)
+  }, [findOpen])
 
   const handleOpenURL = useCallback(
     (url: string, title: string, subtitle?: string | null): void => {
@@ -697,6 +719,16 @@ export default function App(): JSX.Element {
           }}
           onDataChanged={handleSettingsChange}
           initialTab={settingsInitialTab}
+        />
+      )}
+      {findOpen && (
+        <FindBar
+          // Route to the currently mounted <webview>, if any. Detected
+          // at render time via querySelector — ExternalReader's web
+          // mode mounts a single <webview>, otherwise the find runs
+          // on the host webContents (reader DOM, app chrome, etc.).
+          webview={document.querySelector<HTMLElement>('webview')}
+          onClose={() => setFindOpen(false)}
         />
       )}
     </div>

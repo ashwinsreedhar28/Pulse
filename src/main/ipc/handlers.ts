@@ -140,6 +140,31 @@ import {
 } from '../database/hyperChats'
 
 export function registerDbIpc(): void {
+  // Find-in-page bridge. The renderer's reader content is regular DOM,
+  // but Electron doesn't fire Cmd+F → native find UI by default. We
+  // expose webContents.findInPage / stopFindInPage and forward the
+  // 'found-in-page' event back so the renderer can show match counts
+  // in a custom FindBar overlay.
+  ipcMain.handle(
+    'find:start',
+    (e, query: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }) => {
+      const text = (query ?? '').trim()
+      if (!text) return null
+      const win = BrowserWindow.fromWebContents(e.sender)
+      win?.webContents.findInPage(text, {
+        forward: options?.forward ?? true,
+        findNext: options?.findNext ?? false,
+        matchCase: options?.matchCase ?? false
+      })
+      return null
+    }
+  )
+  ipcMain.handle('find:stop', (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    win?.webContents.stopFindInPage('clearSelection')
+    return null
+  })
+
   // categories
   ipcMain.handle('db:categories:list', () => categoriesDb.listCategories())
   ipcMain.handle('db:categories:create', (_e, name: string, domain: categoriesDb.Domain) =>

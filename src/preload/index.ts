@@ -1327,6 +1327,31 @@ const api = {
     smartLookup: (term: string, context?: string) =>
       invoke<SmartLookup | null>('reader:smartLookup', term, context)
   },
+  // Find-in-page API. start() runs a search via the host webContents'
+  // findInPage; the result fires back asynchronously through the
+  // 'find:result' broadcast. stop() clears the highlight. onResult
+  // returns an unsubscribe so callers can clean up on unmount.
+  find: {
+    start: (
+      query: string,
+      options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }
+    ) => invoke<null>('find:start', query, options),
+    stop: () => invoke<null>('find:stop'),
+    onResult: (
+      cb: (payload: {
+        requestId: number
+        matches: number
+        activeMatchOrdinal: number
+        finalUpdate: boolean
+      }) => void
+    ): (() => void) => {
+      const listener = (_e: unknown, payload: Parameters<typeof cb>[0]): void => cb(payload)
+      ipcRenderer.on('find:result', listener)
+      return (): void => {
+        ipcRenderer.off('find:result', listener)
+      }
+    }
+  },
   relevance: {
     get: (input: RelevanceRequestInput) =>
       invoke<RelevanceResponse>('relevance:get', input),

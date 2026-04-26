@@ -246,6 +246,22 @@ function createMainWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  // Forward findInPage results to the renderer so the FindBar overlay
+  // can show match counts + active-match index. Each result carries
+  // requestId / matches / activeMatchOrdinal — the renderer doesn't
+  // care about requestId for our single-bar model, but we forward
+  // everything in case we surface multi-find later.
+  win.webContents.on('found-in-page', (_event, result) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send('find:result', {
+        requestId: result.requestId,
+        matches: result.matches,
+        activeMatchOrdinal: result.activeMatchOrdinal,
+        finalUpdate: result.finalUpdate
+      })
+    }
+  })
+
   win.loadURL(getRendererURL('main'))
   return win
 }
