@@ -5,10 +5,17 @@
 
 import { getDb } from './connection'
 
+// 'Q' = quarter, 'A' = full fiscal year. Most tickers ship quarterly
+// statements via Yahoo's timeseries endpoint, but a non-trivial slice of
+// non-US ADRs (Japanese, some EU) only have annual data. The fetcher
+// falls back to annual when quarterly returns empty, and computeSnapshot
+// in financialsService treats annual rows as "TTM at FY-end".
+export type FinancialPeriodType = 'Q' | 'A'
+
 export interface TickerFinancialRow {
   symbol: string
   periodEnd: number // unix ms — quarter end date
-  periodType: 'Q'
+  periodType: FinancialPeriodType
   revenue: number | null
   operatingCashFlow: number | null
   capex: number | null // absolute value (Yahoo reports negative)
@@ -37,7 +44,7 @@ function hydrate(row: RawRow): TickerFinancialRow {
   return {
     symbol: row.symbol,
     periodEnd: row.periodEnd,
-    periodType: (row.periodType as 'Q') ?? 'Q',
+    periodType: row.periodType === 'A' ? 'A' : 'Q',
     revenue: row.revenue,
     operatingCashFlow: row.operatingCashFlow,
     capex: row.capex,
@@ -52,6 +59,11 @@ function hydrate(row: RawRow): TickerFinancialRow {
 export interface UpsertFinancialInput {
   symbol: string
   periodEnd: number
+  // 'Q' for quarterly statements (the common case), 'A' for annual when
+  // the ticker only has full-year data on Yahoo (e.g. many Japanese ADRs).
+  // Defaults to 'Q' when unset for backward compatibility with older
+  // call sites that hardcoded the cadence.
+  periodType?: FinancialPeriodType
   revenue: number | null
   operatingCashFlow: number | null
   capex: number | null
@@ -72,9 +84,10 @@ export function upsertQuarters(rows: UpsertFinancialInput[]): number {
        (symbol, periodEnd, periodType, revenue, operatingCashFlow, capex,
         freeCashFlow, netIncome, grossProfit, currency, fetchedAt)
      VALUES
-       (@symbol, @periodEnd, 'Q', @revenue, @operatingCashFlow, @capex,
+       (@symbol, @periodEnd, @periodType, @revenue, @operatingCashFlow, @capex,
         @freeCashFlow, @netIncome, @grossProfit, @currency, @fetchedAt)
      ON CONFLICT(symbol, periodEnd) DO UPDATE SET
+       periodType = excluded.periodType,
        revenue = excluded.revenue,
        operatingCashFlow = excluded.operatingCashFlow,
        capex = excluded.capex,
@@ -95,6 +108,7 @@ export function upsertQuarters(rows: UpsertFinancialInput[]): number {
       stmt.run({
         symbol: r.symbol.toUpperCase(),
         periodEnd: r.periodEnd,
+        periodType: r.periodType ?? 'Q',
         revenue: r.revenue,
         operatingCashFlow: r.operatingCashFlow,
         capex: r.capex !== null ? Math.abs(r.capex) : null,

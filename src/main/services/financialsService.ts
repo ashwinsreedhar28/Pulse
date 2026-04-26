@@ -68,6 +68,11 @@ export interface FinancialQuarter {
 export interface FinancialsSnapshot {
   symbol: string
   currency: string | null
+  // 'quarterly' (the common case — 8 quarters ÷ TTM by sum-of-4) or
+  // 'annual' (Yahoo only ships full-year statements for this ticker;
+  // each entry in `quarters` is one fiscal year, TTM = the latest year,
+  // YoY = latest vs prior year). UI relabels accordingly.
+  cadence: 'quarterly' | 'annual'
   quarters: FinancialQuarter[] // most-recent first
   ttm: {
     revenue: number | null
@@ -113,7 +118,15 @@ function safeRatio(num: number | null, den: number | null): number | null {
 }
 
 export function computeSnapshot(symbol: string): FinancialsSnapshot {
-  const rows = getQuarters(symbol, MAX_QUARTERS)
+  const allRows = getQuarters(symbol, MAX_QUARTERS)
+  // Prefer quarterly when available; only when a ticker has zero quarterly
+  // rows do we fall back to annual (e.g. Japanese ADRs like ATEYY where
+  // Yahoo's timeseries endpoint only carries full-year statements). Mixing
+  // the two would distort TTM math, so a clean either/or split.
+  const quarterlyRows = allRows.filter((r) => r.periodType === 'Q')
+  const annualRows = allRows.filter((r) => r.periodType === 'A')
+  const useAnnual = quarterlyRows.length === 0 && annualRows.length > 0
+  const rows = useAnnual ? annualRows : quarterlyRows
   const currency = rows.find((r) => r.currency)?.currency ?? null
 
   const quarters: FinancialQuarter[] = rows.map((r) => ({
@@ -126,30 +139,46 @@ export function computeSnapshot(symbol: string): FinancialsSnapshot {
     grossProfit: r.grossProfit
   }))
 
-  const ttmRevenue = sumLast(rows, 4, (r) => r.revenue)
-  const ttmFcf = sumLast(rows, 4, (r) => r.freeCashFlow)
-  const ttmOcf = sumLast(rows, 4, (r) => r.operatingCashFlow)
-  const ttmNet = sumLast(rows, 4, (r) => r.netIncome)
+  // For quarterly cadence, TTM is sum of the last 4 quarters and YoY
+  // compares index 0 against index 4. For annual cadence, the latest
+  // fiscal year ALREADY is a TTM, and YoY compares the latest year
+  // (index 0) against the prior year (index 1).
+  const ttmRevenue = useAnnual
+    ? rows[0]?.revenue ?? null
+    : sumLast(rows, 4, (r) => r.revenue)
+  const ttmFcf = useAnnual
+    ? rows[0]?.freeCashFlow ?? null
+    : sumLast(rows, 4, (r) => r.freeCashFlow)
+  const ttmOcf = useAnnual
+    ? rows[0]?.operatingCashFlow ?? null
+    : sumLast(rows, 4, (r) => r.operatingCashFlow)
+  const ttmNet = useAnnual
+    ? rows[0]?.netIncome ?? null
+    : sumLast(rows, 4, (r) => r.netIncome)
 
   const fcfMargin =
     ttmFcf !== null && ttmRevenue !== null && ttmRevenue !== 0 ? ttmFcf / ttmRevenue : null
   const ocfMargin =
     ttmOcf !== null && ttmRevenue !== null && ttmRevenue !== 0 ? ttmOcf / ttmRevenue : null
 
-  // QoQ compares most recent quarter (index 0) against the one before (1).
-  // YoY compares index 0 against index 4 (four quarters back).
   const q0 = rows[0]
   const q1 = rows[1]
-  const q4 = rows[4]
+  // For annual cadence the YoY index is 1 (prior year); QoQ doesn't apply,
+  // so we leave it null rather than misrepresent year-over-year as QoQ.
+  const yoyIndex = useAnnual ? 1 : 4
+  const qYoy = rows[yoyIndex]
 
-  const qoqRevenue = safeRatio(q0?.revenue ?? null, q1?.revenue ?? null)
-  const qoqFcf = safeRatio(q0?.freeCashFlow ?? null, q1?.freeCashFlow ?? null)
-  const yoyRevenue = safeRatio(q0?.revenue ?? null, q4?.revenue ?? null)
-  const yoyFcf = safeRatio(q0?.freeCashFlow ?? null, q4?.freeCashFlow ?? null)
+  const qoqRevenue = useAnnual ? null : safeRatio(q0?.revenue ?? null, q1?.revenue ?? null)
+  const qoqFcf = useAnnual
+    ? null
+    : safeRatio(q0?.freeCashFlow ?? null, q1?.freeCashFlow ?? null)
+  const yoyRevenue = safeRatio(q0?.revenue ?? null, qYoy?.revenue ?? null)
+  const yoyFcf = safeRatio(q0?.freeCashFlow ?? null, qYoy?.freeCashFlow ?? null)
 
   return {
     symbol: symbol.toUpperCase(),
     currency,
+    cadence: useAnnual ? 'annual' : 'quarterly',
     quarters,
     ttm: {
       revenue: ttmRevenue,
@@ -188,6 +217,7 @@ export async function refreshFinancials(symbol: string): Promise<number | null> 
   const rows = points.map((p) => ({
     symbol: symbol.toUpperCase(),
     periodEnd: p.endDate,
+    periodType: p.periodType,
     revenue: p.revenue,
     operatingCashFlow: p.operatingCashFlow,
     capex: p.capex,

@@ -282,6 +282,13 @@ export function registerDbIpc(): void {
     // the detail page has data to render on first open.
     void forceRefreshFilings(t.symbol)
     void forceRefreshEstimates(t.symbol)
+    // Financials warm-up. Without this, the FCF/revenue tiles on the
+    // detail page render blank ("—") until the 6h maintenance sweep
+    // happens to pick the symbol up — confusing for the user since
+    // every other panel populates immediately on add.
+    void forceRefreshFinancials(t.symbol).catch((err) =>
+      console.warn(`[financials] post-create refresh failed for ${t.symbol}:`, err)
+    )
     // Personal-relevance cache keys off the watchlist, so any mutation
     // there must blow it away — otherwise cached "Why this matters" rows
     // miss the newly added ticker.
@@ -312,6 +319,9 @@ export function registerDbIpc(): void {
     void ensureCompanyProfile(t.symbol, t.companyName ?? t.symbol)
     void forceRefreshFilings(t.symbol)
     void forceRefreshEstimates(t.symbol)
+    void forceRefreshFinancials(t.symbol).catch((err) =>
+      console.warn(`[financials] post-activate refresh failed for ${t.symbol}:`, err)
+    )
     invalidateAllRelevance()
     return t
   })

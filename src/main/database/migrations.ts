@@ -1347,5 +1347,18 @@ export const migrations: Migration[] = [
           ON research_topics(createdAt DESC);
       `)
     }
+  },
+  {
+    version: 45,
+    name: 'invalidate company_profiles for HQ/country prompt update',
+    // The describeCompany prompt now requires the HQ country/city in the
+    // one-sentence description. Existing cached profiles were generated
+    // under the old prompt and won't include location, so wipe them and
+    // let prefetchAllCompanyProfiles repopulate on next boot. Cheap —
+    // each profile is one local Ollama call and the prefetcher is bounded
+    // to one ticker at a time so it doesn't compete with interactive work.
+    up: (db) => {
+      db.exec(`DELETE FROM company_profiles;`)
+    }
   }
 ]

@@ -377,6 +377,11 @@ export interface FinancialQuarter {
 export interface FinancialsSnapshot {
   symbol: string
   currency: string | null
+  // 'quarterly' is the common case (8 quarters of data). 'annual' kicks in
+  // for tickers Yahoo only carries full-year statements for (e.g. several
+  // Japanese ADRs like ATEYY) — each entry in `quarters` is one fiscal
+  // year and the UI relabels accordingly ("Last 4 years").
+  cadence: 'quarterly' | 'annual'
   quarters: FinancialQuarter[]
   ttm: {
     revenue: number | null

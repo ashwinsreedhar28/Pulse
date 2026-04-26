@@ -306,6 +306,11 @@ export async function getFundamentals(symbol: string): Promise<Fundamentals | nu
 // only change on earnings.
 export interface QuarterlyFinancialPoint {
   endDate: number // unix ms
+  // 'Q' for quarterly statements, 'A' when Yahoo only has annual data for
+  // this ticker (typical for many non-US ADRs). Caller persists this on
+  // the row so computeSnapshot in financialsService knows which cadence
+  // it's reading.
+  periodType: 'Q' | 'A'
   revenue: number | null
   netIncome: number | null
   grossProfit: number | null
@@ -357,23 +362,26 @@ function parseIsoDate(raw: string | undefined): number | null {
   return Number.isFinite(ms) ? ms : null
 }
 
-export async function getQuarterlyFinancials(
-  symbol: string
+// Shared timeseries fetch + parse for either quarterly or annual cadence.
+// Yahoo encodes both with the same response shape — the only difference
+// is the field-name prefix ("quarterly*" vs "annual*"). Returns the
+// parsed points + a flag for whether the response had any data.
+async function fetchTimeseriesPoints(
+  symbol: string,
+  cadence: 'Q' | 'A'
 ): Promise<QuarterlyFinancialPoint[]> {
-  const sym = symbol.trim().toUpperCase()
-  if (!sym) return []
-
+  const prefix = cadence === 'Q' ? 'quarterly' : 'annual'
   const types = [
-    'quarterlyTotalRevenue',
-    'quarterlyOperatingCashFlow',
-    'quarterlyCapitalExpenditure',
-    'quarterlyFreeCashFlow',
-    'quarterlyNetIncome',
-    'quarterlyGrossProfit'
+    `${prefix}TotalRevenue`,
+    `${prefix}OperatingCashFlow`,
+    `${prefix}CapitalExpenditure`,
+    `${prefix}FreeCashFlow`,
+    `${prefix}NetIncome`,
+    `${prefix}GrossProfit`
   ].join(',')
   const nowSec = Math.floor(Date.now() / 1000)
   const url =
-    `${YAHOO_TIMESERIES_BASE}${encodeURIComponent(sym)}?type=${types}` +
+    `${YAHOO_TIMESERIES_BASE}${encodeURIComponent(symbol)}?type=${types}` +
     `&period1=0&period2=${nowSec}`
 
   const controller = new AbortController()
@@ -391,7 +399,7 @@ export async function getQuarterlyFinancials(
     json = (await res.json()) as TimeseriesResponse
   } catch (err) {
     console.warn(
-      '[yahoo] quarterly timeseries fetch failed:',
+      `[yahoo] ${prefix} timeseries fetch failed:`,
       err instanceof Error ? err.message : err
     )
     return []
@@ -402,19 +410,19 @@ export async function getQuarterlyFinancials(
   const series = json.timeseries.result ?? []
   if (series.length === 0) return []
 
-  // One bucket per quarter-end date. As each series streams in we patch its
+  // One bucket per period-end date. As each series streams in we patch its
   // field onto the bucket keyed by endDate — Yahoo aligns them perfectly so
   // a union join is enough without any fuzzy date matching.
   const byEnd = new Map<number, QuarterlyFinancialPoint>()
   let currency: string | null = null
 
   const fieldMap: Record<string, keyof QuarterlyFinancialPoint> = {
-    quarterlyTotalRevenue: 'revenue',
-    quarterlyOperatingCashFlow: 'operatingCashFlow',
-    quarterlyCapitalExpenditure: 'capex',
-    quarterlyFreeCashFlow: 'freeCashFlow',
-    quarterlyNetIncome: 'netIncome',
-    quarterlyGrossProfit: 'grossProfit'
+    [`${prefix}TotalRevenue`]: 'revenue',
+    [`${prefix}OperatingCashFlow`]: 'operatingCashFlow',
+    [`${prefix}CapitalExpenditure`]: 'capex',
+    [`${prefix}FreeCashFlow`]: 'freeCashFlow',
+    [`${prefix}NetIncome`]: 'netIncome',
+    [`${prefix}GrossProfit`]: 'grossProfit'
   }
 
   for (const s of series) {
@@ -437,6 +445,7 @@ export async function getQuarterlyFinancials(
       if (!point) {
         point = {
           endDate,
+          periodType: cadence,
           revenue: null,
           netIncome: null,
           grossProfit: null,
@@ -461,8 +470,30 @@ export async function getQuarterlyFinancials(
     point.currency = currency
   }
 
-  const out = [...byEnd.values()].sort((a, b) => b.endDate - a.endDate)
-  return out
+  return [...byEnd.values()].sort((a, b) => b.endDate - a.endDate)
+}
+
+export async function getQuarterlyFinancials(
+  symbol: string
+): Promise<QuarterlyFinancialPoint[]> {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return []
+
+  const quarterly = await fetchTimeseriesPoints(sym, 'Q')
+  if (quarterly.length > 0) return quarterly
+
+  // Quarterly empty — Yahoo doesn't carry sub-annual statements for this
+  // ticker (common for non-US ADRs like Japanese 6857/ATEYY where only
+  // full-year data is filed). Fall back to annual so the FCF/revenue
+  // tiles still light up. Caller will see periodType='A' on the rows
+  // and relabel "Last 8 quarters" → "Last 4 years" in the UI.
+  const annual = await fetchTimeseriesPoints(sym, 'A')
+  if (annual.length > 0) {
+    console.log(
+      `[yahoo] ${sym}: no quarterly statements available, using annual fallback (${annual.length} years)`
+    )
+  }
+  return annual
 }
 
 export interface EarningsCalendar {
