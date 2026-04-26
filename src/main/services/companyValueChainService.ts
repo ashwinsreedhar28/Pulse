@@ -1643,6 +1643,16 @@ async function edgarFullTextSearchAugmentCitations(
   // requires phrase matches in quotes for multi-word strings.
   const stopSuffix = /\b(Inc\.?|Incorporated|Corp\.?|Corporation|Ltd\.?|Limited|LLC|Company|Co\.?|Holdings|Group|PLC|N\.V\.|S\.A\.|AG)\b/gi
   const focusName = focusCompanyName.replace(stopSuffix, '').trim()
+  // Compute a 5-year date window. EDGAR FTS sorts by relevance by
+  // default — without explicit start AND end dates, an old filing
+  // (sometimes 20 years back) that strongly matches the query string
+  // can come back as the top hit. dateRange=custom requires BOTH
+  // startdt + enddt to be respected; missing enddt silently disabled
+  // the filter in the prior version.
+  const today = new Date()
+  const enddt = today.toISOString().slice(0, 10)
+  const startYear = today.getUTCFullYear() - 5
+  const startdt = `${startYear}-01-01`
   // Sequential to be polite; SEC's published rate limit is 10 req/s.
   // Per-call timeout of 8s is plenty for the EDGAR FTS endpoint.
   for (let i = 0; i < cap; i++) {
@@ -1651,7 +1661,7 @@ async function edgarFullTextSearchAugmentCitations(
     const query = `"${focusName}" "${counterpartyClean}"`
     const url =
       `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}` +
-      `&forms=10-K,10-Q,8-K&dateRange=custom&startdt=2018-01-01`
+      `&forms=10-K,10-Q,8-K&dateRange=custom&startdt=${startdt}&enddt=${enddt}`
     try {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 8_000)
@@ -1684,17 +1694,27 @@ async function edgarFullTextSearchAugmentCitations(
         zeroHits += 1
         continue
       }
+      // Sort by file_date DESC so we prefer the most recent filing
+      // when relevance is comparable. EDGAR FTS's default relevance
+      // sort can surface an old highly-matching filing ahead of a
+      // newer-but-equally-relevant one — for a chain that's meant to
+      // reflect CURRENT business relationships we want recency to win.
+      const sorted = [...hits].sort((a, b) => {
+        const da = a._source?.file_date ? Date.parse(a._source.file_date) : 0
+        const db = b._source?.file_date ? Date.parse(b._source.file_date) : 0
+        return db - da
+      })
       // Prefer a hit FILED BY the focus or counterparty themselves —
-      // those are first-party documentation. Falls back to top hit
-      // when no first-party match exists.
-      const focusHit = hits.find((h) => {
+      // those are first-party documentation. After sorting by date,
+      // the first-party finder gets the most recent first-party hit.
+      const focusHit = sorted.find((h) => {
         const display = (h._source?.display_names ?? []).join(' ').toLowerCase()
         return (
           display.includes(focusCompanyName.toLowerCase()) ||
           display.includes(t.counterpartyName.toLowerCase())
         )
       })
-      const top = focusHit ?? hits[0]
+      const top = focusHit ?? sorted[0]
       const source = top._source
       if (!source) continue
       const accession = source.adsh
