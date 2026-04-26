@@ -1169,6 +1169,87 @@ export interface MorningBriefRow {
   provider: 'claude' | 'ollama' | null
 }
 
+// ---- Research (academia) ---------------------------------------------------
+//
+// Semantic Scholar paper metadata that the renderer consumes. We keep it
+// flat (no nested authors object) so React can render lists without
+// re-mapping. ID is Semantic Scholar's `paperId`; arXivId / doi are
+// optional external refs the renderer uses to deep-link to PDFs.
+export interface ResearchPaper {
+  paperId: string
+  title: string
+  abstract: string | null
+  year: number | null
+  authors: string[] // up to ~5 — we truncate at fetch time
+  venue: string | null
+  citationCount: number
+  influentialCitationCount: number
+  // Best canonical URL: openAccessPdf when available, else paper landing.
+  url: string | null
+  pdfUrl: string | null
+  arxivId: string | null
+  doi: string | null
+}
+
+// One citation reference inside a research-brief bullet. `paperId` lets
+// the renderer route to the in-app paper detail panel; `url` is the
+// fallback canonical link (arXiv abstract or S2 landing).
+export interface ResearchBriefCitation {
+  paperId: string
+  label: string // "Smith et al. 2024" — short, scannable
+  url: string | null
+}
+export interface ResearchBriefBullet {
+  text: string
+  citations: ResearchBriefCitation[]
+}
+export interface ResearchBriefSection {
+  // 'findings' / 'trends' / 'methods' / 'datasets' / 'open-questions' /
+  // 'notable'. Renderer styles by kind; unknown kinds get a generic look.
+  kind: string
+  title: string
+  bullets: ResearchBriefBullet[]
+}
+export interface ResearchBriefPayload {
+  headline: string
+  generatedAtIso: string
+  sections: ResearchBriefSection[]
+  // Diagnostic context for the brief — surfaced under the headline.
+  inputs: {
+    query: string
+    papersConsidered: number
+    papersFiltered: number
+  }
+}
+
+// Saved research topic — a query the user wants to track. The
+// scheduler regenerates the brief weekly so the user gets fresh
+// synthesis on subsequent visits without re-typing the search.
+export interface ResearchTopic {
+  id: number
+  query: string
+  label: string // display name, defaults to query
+  createdAt: number
+  lastBriefAt: number | null
+}
+
+// Persisted brief tied to a topic. Topic-less briefs (one-shot
+// searches the user didn't save) aren't persisted.
+export interface ResearchBriefRow {
+  topicId: number
+  generatedAt: number
+  payload: ResearchBriefPayload
+  paperIds: string[] // for the cards rendered alongside the brief
+}
+
+// One-shot search response — no DB persistence, just the brief + the
+// papers it synthesized over (so the renderer can show paper cards
+// underneath the brief).
+export interface ResearchSearchResult {
+  brief: ResearchBriefPayload
+  papers: ResearchPaper[]
+}
+
 // FRED macro panel snapshot. Mirror of FredSeriesSnapshot from the main
 // process. `format` tells the renderer how to print latestValue:
 // 'percent' → '4.50%', 'percent-change-yoy' → '+3.1%', 'index' → '14.85',
@@ -1555,6 +1636,38 @@ const api = {
         ipcRenderer.off('morningBrief:updated', listener)
       }
     }
+  },
+  research: {
+    // One-shot search: hits Semantic Scholar + Claude synthesis
+    // immediately. Use when the user types a query without saving.
+    search: (query: string): Promise<ResearchSearchResult> =>
+      invoke<ResearchSearchResult>('research:search', query),
+    // Saved-topic management. Topics are persisted; their briefs
+    // refresh weekly via the background scheduler.
+    listTopics: (): Promise<ResearchTopic[]> =>
+      invoke<ResearchTopic[]>('research:listTopics'),
+    createTopic: (input: { query: string; label?: string }): Promise<ResearchTopic> =>
+      invoke<ResearchTopic>('research:createTopic', input),
+    deleteTopic: (id: number): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('research:deleteTopic', id),
+    getBrief: (topicId: number): Promise<ResearchBriefRow | null> =>
+      invoke<ResearchBriefRow | null>('research:getBrief', topicId),
+    refreshTopic: (topicId: number): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('research:refreshTopic', topicId),
+    onTopicUpdated: (cb: (topicId: number) => void): (() => void) => {
+      const listener = (_e: unknown, id: number): void => cb(id)
+      ipcRenderer.on('research:topic-updated', listener)
+      return (): void => {
+        ipcRenderer.off('research:topic-updated', listener)
+      }
+    },
+    // Per-paper detail panel + citation lineage.
+    getPaper: (paperId: string): Promise<ResearchPaper | null> =>
+      invoke<ResearchPaper | null>('research:getPaper', paperId),
+    listCiting: (paperId: string): Promise<ResearchPaper[]> =>
+      invoke<ResearchPaper[]>('research:listCiting', paperId),
+    listReferences: (paperId: string): Promise<ResearchPaper[]> =>
+      invoke<ResearchPaper[]>('research:listReferences', paperId)
   },
   fred: {
     getSnapshot: (): Promise<FredSeriesSnapshot[]> =>

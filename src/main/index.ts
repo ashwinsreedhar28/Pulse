@@ -696,6 +696,12 @@ app.whenReady().then(async () => {
   const { startFredScheduler } = await import('./services/fredService')
   startFredScheduler()
 
+  // Research-tab saved-topic scheduler. Walks research_topics every
+  // 30 min and re-syntheses any topic whose lastBriefAt is more than
+  // 7 days old (or never refreshed). No-op when no topics exist.
+  const { startResearchScheduler } = await import('./services/researchScheduler')
+  startResearchScheduler()
+
   // Hold the splash until every boot service is ready — otherwise heavy
   // background loads (SDXL, Kokoro) cause jitter the moment the main window
   // opens. A 180s watchdog caps the worst case (first-run model downloads).

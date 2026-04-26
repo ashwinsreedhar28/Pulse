@@ -643,6 +643,56 @@ export function registerDbIpc(): void {
     return { ok: true }
   })
 
+  // ---- Research (academia search + multi-paper synthesis) -----------------
+  ipcMain.handle('research:search', async (_e, query: string) => {
+    const { searchAndSynthesize } = await import('../services/researchService')
+    return searchAndSynthesize(query)
+  })
+  ipcMain.handle('research:listTopics', async () => {
+    const { listResearchTopics } = await import('../database/researchTopics')
+    return listResearchTopics()
+  })
+  ipcMain.handle(
+    'research:createTopic',
+    async (_e, input: { query: string; label?: string }) => {
+      const { createResearchTopic } = await import('../database/researchTopics')
+      const topic = createResearchTopic(input)
+      // Kick off the first synthesis in the background so the user
+      // sees a brief on next visit without waiting for the weekly tick.
+      const { refreshTopicNow } = await import('../services/researchScheduler')
+      void refreshTopicNow(topic.id)
+      return topic
+    }
+  )
+  ipcMain.handle('research:deleteTopic', async (_e, id: number) => {
+    const { deleteResearchTopic } = await import('../database/researchTopics')
+    const { deleteResearchBrief } = await import('../database/researchBriefs')
+    deleteResearchBrief(id)
+    deleteResearchTopic(id)
+    return { ok: true }
+  })
+  ipcMain.handle('research:getBrief', async (_e, topicId: number) => {
+    const { getResearchBrief } = await import('../database/researchBriefs')
+    return getResearchBrief(topicId)
+  })
+  ipcMain.handle('research:refreshTopic', async (_e, topicId: number) => {
+    const { refreshTopicNow } = await import('../services/researchScheduler')
+    void refreshTopicNow(topicId)
+    return { ok: true }
+  })
+  ipcMain.handle('research:getPaper', async (_e, paperId: string) => {
+    const { getPaper } = await import('../services/researchService')
+    return getPaper(paperId)
+  })
+  ipcMain.handle('research:listCiting', async (_e, paperId: string) => {
+    const { listCitingPapers } = await import('../services/researchService')
+    return listCitingPapers(paperId)
+  })
+  ipcMain.handle('research:listReferences', async (_e, paperId: string) => {
+    const { listReferencedPapers } = await import('../services/researchService')
+    return listReferencedPapers(paperId)
+  })
+
   // ---- FRED macro panel ----------------------------------------------------
   ipcMain.handle('fred:getSnapshot', async () => {
     const { getMacroSnapshot } = await import('../services/fredService')

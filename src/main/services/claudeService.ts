@@ -106,7 +106,7 @@ interface ClaudeMessageOptions {
   maxTokens: number
 }
 
-async function callClaude(options: ClaudeMessageOptions): Promise<string | null> {
+export async function callClaude(options: ClaudeMessageOptions): Promise<string | null> {
   const apiKey = getPreferences().anthropicApiKey
   if (!apiKey) return null
 

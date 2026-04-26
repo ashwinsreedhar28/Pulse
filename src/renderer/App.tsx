@@ -8,6 +8,7 @@ import { Reels } from './components/Reels'
 import { CalendarStrip } from './components/CalendarStrip'
 import { ExternalReader } from './components/ExternalReader'
 import { FindBar } from './components/FindBar'
+import { ResearchPage } from './components/ResearchPage'
 import { CollapseChevron, useCollapsedSection } from './components/collapseUI'
 import { ValueChain } from './components/ValueChain'
 import { UnifiedValueChainCard } from './components/UnifiedValueChainCard'
@@ -184,6 +185,7 @@ export default function App(): JSX.Element {
   )
   const [stocksOpen, setStocksOpen] = useState(false)
   const [sportsOpen, setSportsOpen] = useState(false)
+  const [researchOpen, setResearchOpen] = useState(false)
   const [pendingStockSymbol, setPendingStockSymbol] = useState<string | null>(null)
   const [pendingGame, setPendingGame] = useState<Game | null>(null)
   const [density, setDensity] = useState<'compact' | 'comfortable'>('comfortable')
@@ -664,6 +666,17 @@ export default function App(): JSX.Element {
           setBookmarksOnly(false)
           setSelectedId(null)
         }}
+        researchActive={researchOpen}
+        onShowResearch={() => {
+          setResearchOpen(true)
+          setSportsOpen(false)
+          setStocksOpen(false)
+          setDiscoveryOpen(false)
+          setHyperOpen(false)
+          setReelsOpen(false)
+          setBookmarksOnly(false)
+          setSelectedId(null)
+        }}
         flashPending={mediaPipelineEnabled ? flashPending : null}
       />
       <main className="flex-1 min-h-0 overflow-hidden relative">
@@ -694,6 +707,11 @@ export default function App(): JSX.Element {
               setPendingGame(null)
             }}
             initialGame={pendingGame}
+            onOpenURL={handleOpenURL}
+          />
+        ) : researchOpen ? (
+          <ResearchPage
+            onClose={() => setResearchOpen(false)}
             onOpenURL={handleOpenURL}
           />
         ) : discoveryOpen ? (
@@ -1486,6 +1504,8 @@ function TopNav({
   onShowStocks,
   sportsActive,
   onShowSports,
+  researchActive,
+  onShowResearch,
   flashPending
 }: {
   filter: DomainFilter
@@ -1510,6 +1530,8 @@ function TopNav({
   onShowStocks: () => void
   sportsActive: boolean
   onShowSports: () => void
+  researchActive: boolean
+  onShowResearch: () => void
   flashPending: { articleId: number; title: string } | null
 }): JSX.Element {
   const primaryActive =
@@ -1519,6 +1541,7 @@ function TopNav({
     !hyperActive &&
     !stocksActive &&
     !sportsActive &&
+    !researchActive &&
     !reelsActive
   const visibleCategories = categories.filter((c) => {
     if (filter === 'finance') return c.domain === 'finance'
@@ -1575,6 +1598,17 @@ function TopNav({
           Sports
           {sportsActive && (
             <span className="absolute left-2 right-2 -bottom-px h-[2px] bg-orange-400 rounded-full" />
+          )}
+        </button>
+        <button
+          onClick={onShowResearch}
+          className={`relative px-3 py-2 text-[12px] font-semibold tracking-[0.02em] transition-colors ${
+            researchActive ? 'text-zinc-50' : 'text-zinc-500 hover:text-zinc-200'
+          }`}
+        >
+          Research
+          {researchActive && (
+            <span className="absolute left-2 right-2 -bottom-px h-[2px] bg-violet-400 rounded-full" />
           )}
         </button>
         <span className="w-px h-5 bg-edge mx-2" />

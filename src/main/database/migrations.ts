@@ -1317,5 +1317,35 @@ export const migrations: Migration[] = [
         insert.run(feed.title, feed.url, cat.id)
       }
     }
+  },
+  {
+    version: 44,
+    name: 'research_topics + research_briefs (saved-topic synthesis)',
+    // Two new tables that back the Research tab's saved-topic feature.
+    // research_topics: user-facing list of saved keyword searches,
+    // each one paired with a label for display. Briefs regenerate
+    // weekly via researchScheduler; we cache the latest in
+    // research_briefs keyed by topicId so the UI can render
+    // immediately on tab open without waiting for a re-fetch.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS research_topics (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          query TEXT NOT NULL,
+          label TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          lastBriefAt INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS research_briefs (
+          topicId INTEGER PRIMARY KEY,
+          generatedAt INTEGER NOT NULL,
+          payloadJson TEXT NOT NULL,
+          paperIdsJson TEXT NOT NULL,
+          FOREIGN KEY (topicId) REFERENCES research_topics(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_research_topics_createdAt
+          ON research_topics(createdAt DESC);
+      `)
+    }
   }
 ]
