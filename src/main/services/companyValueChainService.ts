@@ -575,12 +575,19 @@ function fetchRecentNews(symbol: string, companyName?: string): RecentNewsRow[] 
     const stopSuffix = /\b(Inc\.?|Incorporated|Corp\.?|Corporation|Ltd\.?|Limited|LLC|Company|Co\.?|Holdings|Group|PLC|N\.V\.|S\.A\.|AG)\b/gi
     const cleaned = (companyName ?? '').replace(stopSuffix, '').trim()
     const head = cleaned.split(/\s+/)[0]?.trim() ?? ''
-    const keys = [upper]
-    // 3-char threshold so "KLA" / "AMD" / "AMC" pass — these are real
-    // company-name tokens that LIKE-search will hit reliably with the %
-    // wildcards. Earlier 4-char gate dropped them, leaving the focus
-    // with zero news matches.
+    const keys: string[] = []
+    // Ticker only safe when ≥3 chars. Single- or two-letter tickers
+    // (F, T, V, C, ON, GM, KO) substring-match basically every article
+    // — Ford's news pool would otherwise fill with sports articles
+    // containing the letter F. For short tickers we rely on the company
+    // name only.
+    if (upper.length >= 3) keys.push(upper)
     if (head.length >= 3) keys.push(head)
+    if (keys.length === 0) {
+      // No reliable search key available; skip fallback rather than
+      // pull in junk via a 1-char wildcard.
+      return matched
+    }
     const placeholders = keys
       .map(() => `(LOWER(a.title) LIKE ? OR LOWER(a.summary) LIKE ?)`)
       .join(' OR ')
@@ -982,19 +989,65 @@ function resolveRef(
   return null
 }
 
+// Build a word-boundary haystack matcher for an edge endpoint that
+// avoids the short-ticker substring trap. Single-letter or two-letter
+// tickers (F, T, V, C, ON, GM, KO) substring-match basically every
+// article — Ford's news pool would pull every headline containing the
+// letter F. Word boundaries fix the obvious case ("FOOTBALL" doesn't
+// match "\bF\b"), but we still tighten further: tickers <3 chars are
+// only used in combination with a company-name needle, since "F" or
+// "ON" still appear as standalone words in plenty of headlines.
+function buildEndpointMatcher(
+  symbol: string,
+  name: string | undefined
+): ((haystack: string) => boolean) | null {
+  const upper = symbol.toUpperCase()
+  const stopSuffix = /\b(Inc\.?|Incorporated|Corp\.?|Corporation|Ltd\.?|Limited|LLC|Company|Co\.?|Holdings|Group|PLC|N\.V\.|S\.A\.|AG)\b/gi
+  const cleaned = (name ?? '').replace(stopSuffix, '').trim()
+  const head = cleaned.split(/\s+/)[0]?.trim().toUpperCase() ?? ''
+  const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const needles: string[] = []
+  if (upper.length >= 3) needles.push(upper)
+  if (head.length >= 4 && head !== upper) needles.push(head)
+  if (cleaned.length >= 5) {
+    const cleanedUpper = cleaned.toUpperCase()
+    if (cleanedUpper !== head && cleanedUpper !== upper) {
+      needles.push(cleanedUpper)
+    }
+  }
+  if (needles.length === 0) {
+    // No reliable needle (e.g. ticker is "F" and company name unknown).
+    // Caller should treat this endpoint as un-matchable.
+    return null
+  }
+  const regexes = needles.map((n) => new RegExp(`\\b${escape(n)}\\b`))
+  return (haystack: string): boolean => regexes.some((re) => re.test(haystack))
+}
+
 // Auto-augmentation: scan the supplied article context for any pieces
-// that mention BOTH endpoints of the edge (or the focus + the
-// counterparty). Add those as additional supporting citations beyond
-// what the model picked. Catches the common case where the model
-// grounded an edge in the 10-K and forgot that Bloomberg also covered
-// it. Capped at 2 extra cites per edge to keep the pill stack readable.
+// that mention BOTH endpoints of the edge. Add those as additional
+// supporting citations beyond what the model picked. Catches the
+// common case where the model grounded an edge in the 10-K and forgot
+// that Bloomberg also covered it. Capped at 2 extras per edge.
 function autoAugmentArticleCitations(
   edge: ChainEdge,
   articlesByRef: Map<string, ArticleCitationData>,
-  alreadyCited: Set<string>
+  alreadyCited: Set<string>,
+  nameBySymbol: Map<string, string>
 ): import('../database/companyValueChains').CompanyValueChainEdgeCitation[] {
-  const fromUpper = edge.from.toUpperCase()
-  const toUpper = edge.to.toUpperCase()
+  const fromMatcher = buildEndpointMatcher(
+    edge.from,
+    nameBySymbol.get(edge.from.toUpperCase())
+  )
+  const toMatcher = buildEndpointMatcher(
+    edge.to,
+    nameBySymbol.get(edge.to.toUpperCase())
+  )
+  // If we can't reliably build a matcher for either endpoint (no usable
+  // ticker, no usable company name), skip auto-augment. Better no
+  // article cite than a sports article attached because of a one-letter
+  // ticker substring collision.
+  if (!fromMatcher || !toMatcher) return []
   const extras: import('../database/companyValueChains').CompanyValueChainEdgeCitation[] = []
   for (const [refId, a] of articlesByRef) {
     if (extras.length >= 2) break
@@ -1002,10 +1055,7 @@ function autoAugmentArticleCitations(
     const articleIdKey = `__articleId:${a.articleId}`
     if (alreadyCited.has(articleIdKey)) continue
     const haystack = `${a.title} ${a.feedTitle ?? ''}`.toUpperCase()
-    // Article mentions both endpoints by symbol — strong signal it
-    // covers this exact relationship. We don't try to match by company
-    // name (too many false positives without a name resolver here).
-    if (haystack.includes(fromUpper) && haystack.includes(toUpper)) {
+    if (fromMatcher(haystack) && toMatcher(haystack)) {
       extras.push({
         kind: 'article',
         articleId: a.articleId,
@@ -1030,7 +1080,8 @@ function attachCitations(
   edges: ChainEdge[],
   filingsByRef: Map<string, FilingCitationData>,
   articlesByRef: Map<string, ArticleCitationData>,
-  focusSymbol: string
+  focusSymbol: string,
+  nameBySymbol: Map<string, string>
 ): import('../database/companyValueChains').CompanyValueChainEdge[] {
   const out: import('../database/companyValueChains').CompanyValueChainEdge[] = []
   let augmented = 0
@@ -1062,7 +1113,7 @@ function attachCitations(
     // Auto-augment: scan supplied articles for ones mentioning BOTH
     // endpoints. Adds up to 2 extra citations beyond what the model
     // chose — catches "the 10-K AND Bloomberg covered this" for free.
-    const extras = autoAugmentArticleCitations(edge, articlesByRef, seenRefs)
+    const extras = autoAugmentArticleCitations(edge, articlesByRef, seenRefs, nameBySymbol)
     if (extras.length > 0) {
       citations.push(...extras)
       augmented += extras.length
@@ -2502,8 +2553,17 @@ export async function generateCompanyChain(input: {
   // each a chance to resolve cite-less edges before they fall off.
   const filingsByRef = new Map(filingsPayload.map((f) => [f.refId, f]))
   const articlesByRef = new Map(articlesPayload.map((a) => [a.refId, a]))
+  // Build a {symbol → company name} map for the article-cross-reference
+  // auto-augment so it can use word-boundary name matching for short
+  // tickers (F, T, V, ON, GM, KO) instead of substring matching that
+  // would otherwise pull in any article containing the letter.
+  const nameBySymbol = new Map<string, string>()
+  nameBySymbol.set(sym, input.companyName)
+  for (const n of resolvedNodes) {
+    nameBySymbol.set(n.symbol.toUpperCase(), n.name)
+  }
   // Step 1: refs + pattern + article-cross-reference auto-augment.
-  let citedEdges = attachCitations(canonicalEdges, filingsByRef, articlesByRef, sym)
+  let citedEdges = attachCitations(canonicalEdges, filingsByRef, articlesByRef, sym, nameBySymbol)
   // Step 1.5: pre-warm counterparty SEC cache. Without this, bilateral
   // fetching is a no-op for any focus whose counterparties haven't been
   // independently regenerated — getFilingsForSymbol returns empty, so
