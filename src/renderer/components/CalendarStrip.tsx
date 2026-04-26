@@ -112,11 +112,16 @@ export function CalendarStrip({
         <span className="text-[11px] tabular-nums text-zinc-500">
           {total} {total === 1 ? 'item' : 'items'}
         </span>
-        {collapsed && (
+        {collapsed ? (
           <SummaryStrip groups={groups} onOpenDay={() => setCollapsed(false)} />
+        ) : (
+          // Divider only renders in the expanded state. When collapsed,
+          // SummaryStrip already fills the row — keeping the divider here
+          // would force the pills to share flex space with it, clipping
+          // the trailing days behind the range label.
+          <span className="h-px flex-1 bg-edge/60 mx-1" />
         )}
-        <span className="h-px flex-1 bg-edge/60 mx-1" />
-        <span className="text-[11px] tabular-nums text-zinc-500">{rangeLabel}</span>
+        <span className="text-[11px] tabular-nums text-zinc-500 shrink-0">{rangeLabel}</span>
         <CollapseChevron open={!collapsed} className="text-zinc-500" />
       </button>
       {!collapsed && (

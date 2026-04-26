@@ -1925,7 +1925,7 @@ export function ValueChain({
         {stageGroups.map(({ stage, nodes }, idx) => (
           <div key={stage.id} className="relative">
             <div className="flex items-center gap-3 mb-2">
-              <div className="text-[9px] font-semibold uppercase tracking-[0.22em] text-zinc-500 w-[200px] shrink-0 whitespace-nowrap">
+              <div className="text-[9px] font-semibold uppercase tracking-[0.22em] text-zinc-500 shrink-0 whitespace-nowrap">
                 {String(idx + 1).padStart(2, '0')} · {stage.label}
               </div>
               <span className="h-px flex-1 bg-edge/60" />
