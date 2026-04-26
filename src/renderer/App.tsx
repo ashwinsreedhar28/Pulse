@@ -5647,17 +5647,40 @@ function GameDetailBody({
           <h3 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400 mb-4">
             Team stats
           </h3>
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4 gap-y-2 text-[12px]">
-            <div className="text-right text-[10px] uppercase tracking-[0.18em] text-zinc-500">
-              {detail.away.abbreviation}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 text-center">Stat</div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">
-              {detail.home.abbreviation}
-            </div>
-            {detail.stats.map((s) => (
-              <FragmentRow key={s.label} stat={s} />
-            ))}
+          {/* Two-column layout for the stat list — pairs of stats sit
+              side-by-side so a 22-stat NBA game renders in ~11 rows
+              instead of 22. Each column is its own [away | label |
+              home] grid. Splits the array down the middle so the
+              first half sits on the left, second half on the right. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
+            {(() => {
+              const half = Math.ceil(detail.stats.length / 2)
+              const left = detail.stats.slice(0, half)
+              const right = detail.stats.slice(half)
+              const renderColumn = (
+                items: typeof detail.stats,
+                key: string
+              ): JSX.Element => (
+                <div
+                  key={key}
+                  className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-3 gap-y-1.5 text-[12px]"
+                >
+                  <div className="text-right text-[9.5px] uppercase tracking-[0.18em] text-zinc-500">
+                    {detail.away.abbreviation}
+                  </div>
+                  <div className="text-[9.5px] uppercase tracking-[0.18em] text-zinc-500 text-center">
+                    Stat
+                  </div>
+                  <div className="text-[9.5px] uppercase tracking-[0.18em] text-zinc-500">
+                    {detail.home.abbreviation}
+                  </div>
+                  {items.map((s) => (
+                    <FragmentRow key={s.label} stat={s} />
+                  ))}
+                </div>
+              )
+              return [renderColumn(left, 'left'), renderColumn(right, 'right')]
+            })()}
           </div>
         </section>
       )}
@@ -5722,22 +5745,29 @@ function LeaderColumn({
   label: string
   leaders: GameDetail['leaders']
 }): JSX.Element {
+  // One row per leader: [CATEGORY] [Athlete name].................. [Value]
+  // Tightens 3 stacked lines per leader → 1 line, freeing the right
+  // half of the panel that was previously empty space below the
+  // sparse leader list.
   return (
     <div>
       <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500 mb-2">
         {label}
       </div>
-      <ul className="space-y-1.5">
+      <ul className="space-y-1">
         {leaders.length === 0 && <li className="text-[11px] text-zinc-500">—</li>}
         {leaders.map((l, i) => (
-          <li key={i} className="flex items-baseline justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
-                {l.category}
-              </div>
-              <div className="text-[12px] text-zinc-200 truncate">{l.athlete || '—'}</div>
-            </div>
-            <div className="text-[12px] tabular-nums text-zinc-100 shrink-0">{l.value}</div>
+          <li
+            key={i}
+            className="grid grid-cols-[68px_1fr_auto] items-baseline gap-2 py-0.5"
+          >
+            <span className="text-[9.5px] uppercase tracking-[0.18em] text-zinc-500">
+              {l.category}
+            </span>
+            <span className="text-[12px] text-zinc-200 truncate">
+              {l.athlete || '—'}
+            </span>
+            <span className="text-[12px] tabular-nums text-zinc-100">{l.value}</span>
           </li>
         ))}
       </ul>
