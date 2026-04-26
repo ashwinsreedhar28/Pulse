@@ -1584,6 +1584,14 @@ const api = {
       invoke<{ ok: boolean }>('stocks:regenerateAllChainsForceClaude'),
     getRegenerateAllProgress: (): Promise<RegenerateAllProgress> =>
       invoke<RegenerateAllProgress>('stocks:getRegenerateAllProgress'),
+    // Manual reset of today's Claude usage counter. Call from DevTools
+    // after a one-shot bypass run (regenerate-all) inflated the count
+    // past the daily cap, otherwise subsequent Claude calls fall back
+    // to Ollama until UTC midnight.
+    resetClaudeUsage: (): Promise<{ date: string; count: number; cap: number }> =>
+      invoke<{ date: string; count: number; cap: number }>('stocks:resetClaudeUsage'),
+    getClaudeUsage: (): Promise<{ date: string; count: number; cap: number }> =>
+      invoke<{ date: string; count: number; cap: number }>('stocks:getClaudeUsage'),
     onRegenerateAllProgress: (cb: (p: RegenerateAllProgress) => void): (() => void) => {
       const listener = (_e: unknown, p: RegenerateAllProgress): void => cb(p)
       ipcRenderer.on('chainRegen:progress', listener)

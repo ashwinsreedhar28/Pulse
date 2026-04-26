@@ -111,10 +111,18 @@ export function recordClaudeCall(): void {
   rollCounterIfNewDay()
   const counter = ensureCounterLoaded()
   counter.count += 1
-  try {
-    setClaudeUsageState(counter)
-  } catch (err) {
-    console.warn('[aiClient] Failed to persist Claude usage increment:', err)
+  // Only persist when the cap gate is actually enforced. Otherwise a
+  // one-shot bypass run (regenerate-all, ~250 calls) poisons the
+  // persisted counter and blocks every Claude call for the rest of the
+  // day — exactly the failure mode the cap is supposed to *prevent*.
+  // In-memory increment still happens so the per-100-call telemetry
+  // log line works for visibility during heavy runs.
+  if (!CAP_GATE_DISABLED) {
+    try {
+      setClaudeUsageState(counter)
+    } catch (err) {
+      console.warn('[aiClient] Failed to persist Claude usage increment:', err)
+    }
   }
   // Soft warnings only fire when the cap is actually enforced. With
   // CAP_GATE_DISABLED=true the messages would be misleading ("falling
@@ -149,6 +157,23 @@ export function recordClaudeCall(): void {
       `[aiClient] Claude usage at ${counter.count} call(s) today (${counter.date}) — cap gate DISABLED for testing.`
     )
   }
+}
+
+// Manually clear today's counter. Use after a one-shot bypass run that
+// inflated the count (e.g. regenerate-all on the watchlist) — without
+// this, every subsequent Claude call within the same UTC day gets
+// blocked by the cap because count > cap. Exposed via IPC so the user
+// can call it from DevTools when needed.
+export function resetClaudeUsage(): { date: string; count: number; cap: number } {
+  const today = utcDateKey()
+  claudeCounter = { date: today, count: 0 }
+  try {
+    setClaudeUsageState(claudeCounter)
+  } catch (err) {
+    console.warn('[aiClient] Failed to persist Claude usage reset:', err)
+  }
+  console.log(`[aiClient] Claude usage counter manually reset for ${today}.`)
+  return { date: today, count: 0, cap: DAILY_CLAUDE_CAP }
 }
 
 export function getClaudeUsage(): { date: string; count: number; cap: number } {

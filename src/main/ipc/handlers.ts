@@ -637,6 +637,18 @@ export function registerDbIpc(): void {
     const { getRegenerateAllProgress } = await import('../services/companyValueChainService')
     return getRegenerateAllProgress()
   })
+  // Manual reset of today's Claude usage counter. Use after a one-shot
+  // bypass run (regen-all with the gate disabled) inflated the counter
+  // — without this, the rest of the day's Claude calls fall back to
+  // Ollama because count > cap. Returns the new state for confirmation.
+  ipcMain.handle('stocks:resetClaudeUsage', async () => {
+    const { resetClaudeUsage } = await import('../services/aiClient')
+    return resetClaudeUsage()
+  })
+  ipcMain.handle('stocks:getClaudeUsage', async () => {
+    const { getClaudeUsage } = await import('../services/aiClient')
+    return getClaudeUsage()
+  })
 
   // ---- Daily morning brief --------------------------------------------------
   // Read the cached brief (returns null when nothing's been generated yet),
