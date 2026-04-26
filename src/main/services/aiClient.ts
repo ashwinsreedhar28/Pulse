@@ -116,23 +116,30 @@ export function recordClaudeCall(): void {
   } catch (err) {
     console.warn('[aiClient] Failed to persist Claude usage increment:', err)
   }
-  // Soft warning at 50% of cap so the user has a chance to throttle
-  // their own usage before the hard ceiling kicks in.
-  if (
-    Number.isFinite(DAILY_CLAUDE_CAP) &&
-    counter.count === Math.floor(DAILY_CLAUDE_CAP / 2)
-  ) {
-    console.warn(
-      `[aiClient] Claude usage at ${counter.count}/${DAILY_CLAUDE_CAP} for ${counter.date} — about halfway to today's safety cap.`
-    )
-  }
-  if (
-    Number.isFinite(DAILY_CLAUDE_CAP) &&
-    counter.count === DAILY_CLAUDE_CAP
-  ) {
-    console.warn(
-      `[aiClient] Claude daily cap (${DAILY_CLAUDE_CAP}) reached for ${counter.date}. Subsequent routed calls fall back to Ollama until UTC midnight.`
-    )
+  // Soft warnings only fire when the cap is actually enforced. With
+  // CAP_GATE_DISABLED=true the messages would be misleading ("falling
+  // back to Ollama" while in reality calls keep going to Claude), so
+  // we suppress them entirely in that mode and let the per-100-call
+  // telemetry below do the talking.
+  if (!CAP_GATE_DISABLED) {
+    // Soft warning at 50% of cap so the user has a chance to throttle
+    // their own usage before the hard ceiling kicks in.
+    if (
+      Number.isFinite(DAILY_CLAUDE_CAP) &&
+      counter.count === Math.floor(DAILY_CLAUDE_CAP / 2)
+    ) {
+      console.warn(
+        `[aiClient] Claude usage at ${counter.count}/${DAILY_CLAUDE_CAP} for ${counter.date} — about halfway to today's safety cap.`
+      )
+    }
+    if (
+      Number.isFinite(DAILY_CLAUDE_CAP) &&
+      counter.count === DAILY_CLAUDE_CAP
+    ) {
+      console.warn(
+        `[aiClient] Claude daily cap (${DAILY_CLAUDE_CAP}) reached for ${counter.date}. Subsequent routed calls fall back to Ollama until UTC midnight.`
+      )
+    }
   }
   // Periodic telemetry every 100 calls (only fires when the cap is
   // disabled for testing). Helps spot runaway spend during heavy

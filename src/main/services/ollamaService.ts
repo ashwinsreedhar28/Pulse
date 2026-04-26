@@ -2185,9 +2185,20 @@ export async function classifyTickerSectors(input: {
     const body = (await res.json()) as { message?: { content?: string } }
     const content = body.message?.content
     if (!content) return null
-    const parsed = JSON.parse(content) as {
-      primary?: unknown
-      secondary?: unknown
+    // Local-model JSON output is occasionally truncated mid-string when
+    // the model hits its num_predict limit on an unusually wordy reason.
+    // Catch parse failures specifically so the log line distinguishes
+    // "model returned malformed JSON" (expected, recoverable) from
+    // "Ollama is unreachable" (also handled, but at the outer catch).
+    let parsed: { primary?: unknown; secondary?: unknown }
+    try {
+      parsed = JSON.parse(content) as typeof parsed
+    } catch (err) {
+      console.warn(
+        '[ollama] classifier returned malformed JSON, dropping classification:',
+        err instanceof Error ? err.message : err
+      )
+      return null
     }
     emitHealth(true)
 

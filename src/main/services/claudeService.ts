@@ -20,6 +20,15 @@ const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
 const REQUEST_TIMEOUT_MS = 90_000
 const HEALTH_CHECK_TIMEOUT_MS = 5_000
+// Asymmetric TTLs for the cached health-check result. Positive results
+// stay cached for a minute (we trust "Anthropic is up" for that long
+// without re-pinging). Negative results expire fast — a single transient
+// 5s abort during a regen-all run was previously poisoning ~60s worth
+// of subsequent calls, silently routing them to Ollama. 5s is enough to
+// avoid hammering Anthropic during a real outage but short enough that
+// transient flakiness doesn't cascade.
+const HEALTH_POSITIVE_TTL_MS = 60_000
+const HEALTH_NEGATIVE_TTL_MS = 5_000
 
 // Model selection. Haiku 4.5 is cheap enough for classification (~$0.01/call);
 // Sonnet 4.6 is worth the step up for chain generation where judgment and
@@ -44,14 +53,14 @@ export function isClaudeConfigured(): boolean {
 // doesn't hit the network.
 let lastHealthAt = 0
 let lastHealthResult = false
-const HEALTH_CACHE_MS = 60_000
 
 export async function checkClaudeHealth(force = false): Promise<boolean> {
   if (!isClaudeConfigured()) {
     lastHealthResult = false
     return false
   }
-  if (!force && Date.now() - lastHealthAt < HEALTH_CACHE_MS) return lastHealthResult
+  const ttl = lastHealthResult ? HEALTH_POSITIVE_TTL_MS : HEALTH_NEGATIVE_TTL_MS
+  if (!force && Date.now() - lastHealthAt < ttl) return lastHealthResult
 
   const apiKey = getPreferences().anthropicApiKey
   const controller = new AbortController()
