@@ -48,6 +48,7 @@ import type {
   GameTeam,
   HistoryPoint,
   HistoryRange,
+  NcaaConference,
   ReaderResult,
   SmartLookup,
   SportsLeague,
@@ -4421,6 +4422,12 @@ function SportsPage({
   const [scope, setScope] = useState<'recent' | 'season'>('recent')
   const [seasonLabel, setSeasonLabel] = useState<string | null>(null)
   const [favoriteAthletes, setFavoriteAthletes] = useState<FavoriteAthlete[]>([])
+  // NCAA conference filter — only used when active league is ncaaf or
+  // ncaam. null = "All conferences"; otherwise a specific group id
+  // that gets passed to ESPN's scoreboard via &groups=.
+  const [ncaaConferences, setNcaaConferences] = useState<NcaaConference[]>([])
+  const [activeConferenceId, setActiveConferenceId] = useState<string | null>(null)
+  const isNcaaLeague = activeLeagueId === 'ncaaf' || activeLeagueId === 'ncaam'
 
   useEffect(() => {
     void window.api.favoriteAthletes.list().then(setFavoriteAthletes)
@@ -4540,7 +4547,25 @@ function SportsPage({
     setGames([])
     setSeasonLabel(null)
     setLoading(true)
-  }, [activeLeagueId, scope])
+    // Reset the conference filter when leaving an NCAA league or
+    // switching between ncaaf/ncaam (their conference IDs are
+    // different namespaces, so a stale id would 0-match).
+    if (!isNcaaLeague) setActiveConferenceId(null)
+  }, [activeLeagueId, scope, isNcaaLeague])
+  // Fetch NCAA conferences when an NCAA league becomes active.
+  useEffect(() => {
+    if (!isNcaaLeague || !activeLeagueId) {
+      setNcaaConferences([])
+      return
+    }
+    let cancelled = false
+    void window.api.sports.listNcaaConferences(activeLeagueId).then((cs) => {
+      if (!cancelled) setNcaaConferences(cs)
+    })
+    return (): void => {
+      cancelled = true
+    }
+  }, [activeLeagueId, isNcaaLeague])
   useEffect(() => {
     if (!activeLeagueId) return
     let cancelled = false
@@ -4551,7 +4576,7 @@ function SportsPage({
         setGames(res.games)
         setSeasonLabel(res.range?.label ?? null)
       } else {
-        const g = await window.api.sports.listGames(activeLeagueId)
+        const g = await window.api.sports.listGames(activeLeagueId, activeConferenceId)
         if (cancelled) return
         setGames(g)
       }
@@ -4568,7 +4593,7 @@ function SportsPage({
       cancelled = true
       clearInterval(t)
     }
-  }, [activeLeagueId, scope, recentInterval])
+  }, [activeLeagueId, scope, recentInterval, activeConferenceId])
 
   const dateGroups = useMemo(() => groupGamesByDate(games), [games])
 
@@ -4608,7 +4633,7 @@ function SportsPage({
         setGames(res.games)
         setSeasonLabel(res.range?.label ?? null)
       } else {
-        const g = await window.api.sports.listGames(activeLeagueId)
+        const g = await window.api.sports.listGames(activeLeagueId, activeConferenceId)
         setGames(g)
       }
     } finally {
@@ -4699,6 +4724,41 @@ function SportsPage({
           )
         })}
       </div>
+      {/* NCAA conference filter — only visible for college leagues, and
+          only when the conference list has loaded. "All" is the default
+          and clears the filter. Hidden in season scope because ESPN's
+          season endpoint already returns the full league. */}
+      {isNcaaLeague && scope === 'recent' && ncaaConferences.length > 0 && (
+        <div className="px-6 py-2 flex items-center gap-1 overflow-x-auto scrollbar-none border-b border-edge bg-surface-1/40">
+          <button
+            onClick={() => setActiveConferenceId(null)}
+            className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors ${
+              activeConferenceId === null
+                ? 'bg-orange-500/20 text-orange-200'
+                : 'text-zinc-500 hover:text-zinc-100 hover:bg-surface-2'
+            }`}
+          >
+            All
+          </button>
+          {ncaaConferences.map((c) => {
+            const active = c.id === activeConferenceId
+            return (
+              <button
+                key={c.id}
+                onClick={() => setActiveConferenceId(c.id)}
+                title={c.name}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors ${
+                  active
+                    ? 'bg-orange-500/20 text-orange-200'
+                    : 'text-zinc-500 hover:text-zinc-100 hover:bg-surface-2'
+                }`}
+              >
+                {c.shortName}
+              </button>
+            )
+          })}
+        </div>
+      )}
       {dateGroups.length > 0 && (
         <DateRail
           groups={dateGroups}

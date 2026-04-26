@@ -31,6 +31,20 @@ export const LEAGUES: SportsLeague[] = [
   { id: 'mlb', name: 'MLB', shortName: 'MLB', sport: 'Baseball', paths: ['baseball/mlb'] },
   { id: 'nhl', name: 'NHL', shortName: 'NHL', sport: 'Hockey', paths: ['hockey/nhl'] },
   {
+    id: 'ncaaf',
+    name: 'College Football',
+    shortName: 'CFB',
+    sport: 'American Football',
+    paths: ['football/college-football']
+  },
+  {
+    id: 'ncaam',
+    name: "Men's College Basketball",
+    shortName: 'CBB',
+    sport: 'Basketball',
+    paths: ['basketball/mens-college-basketball']
+  },
+  {
     id: 'ucl',
     name: 'UEFA Champions League',
     shortName: 'UCL',
@@ -42,6 +56,153 @@ export const LEAGUES: SportsLeague[] = [
   { id: 'seriea', name: 'Serie A', shortName: 'Serie A', sport: 'Soccer', paths: ['soccer/ita.1'] },
   { id: 'mls', name: 'MLS', shortName: 'MLS', sport: 'Soccer', paths: ['soccer/usa.1'] }
 ]
+
+// Conference filter for NCAA leagues. ESPN's scoreboard accepts a
+// `groups` query param that narrows results to a specific conference.
+// Conferences are fetched dynamically from ESPN's /groups endpoint
+// because conference IDs differ across sports (basketball SEC ≠
+// football SEC) and conferences reshuffle every few years (Pac-12
+// collapse, Texas/OU to SEC, etc.). One-time fetch per league per
+// session, cached in memory.
+export interface NcaaConference {
+  id: string
+  name: string
+  shortName: string
+}
+
+const CONFERENCE_TTL_MS = 24 * 60 * 60 * 1000
+interface ConferenceCacheEntry {
+  value: NcaaConference[]
+  fetchedAt: number
+}
+const conferenceCache = new Map<string, ConferenceCacheEntry>()
+
+// Conferences ESPN returns include FCS / D-II / club tiers we don't
+// want to surface. The allowlist names below are the canonical short
+// names of the conferences worth showing — kept tight so a user
+// scanning the bar doesn't wade through 40 entries.
+const NCAA_CONFERENCE_PRIORITY: Record<string, string[]> = {
+  ncaaf: [
+    'SEC',
+    'Big Ten',
+    'ACC',
+    'Big 12',
+    'Pac-12',
+    'AAC',
+    'American',
+    'MWC',
+    'Mountain West',
+    'MAC',
+    'Mid-American',
+    'Sun Belt',
+    'C-USA',
+    'Conference USA',
+    'Indep',
+    'FBS Independents'
+  ],
+  ncaam: [
+    'ACC',
+    'Big Ten',
+    'Big East',
+    'Big 12',
+    'SEC',
+    'Pac-12',
+    'AAC',
+    'American',
+    'A-10',
+    'Atlantic 10',
+    'MWC',
+    'Mountain West',
+    'WCC',
+    'West Coast',
+    'C-USA',
+    'Conference USA',
+    'MAC',
+    'Mid-American',
+    'Ivy',
+    'Ivy League'
+  ]
+}
+
+interface EspnGroupsResponse {
+  groups?: Array<{
+    groupId?: string | number
+    id?: string | number
+    name?: string
+    shortName?: string
+    abbreviation?: string
+    isConference?: boolean
+  }>
+}
+
+export async function listNcaaConferences(leagueId: string): Promise<NcaaConference[]> {
+  const lid = leagueId.toLowerCase()
+  if (lid !== 'ncaaf' && lid !== 'ncaam') return []
+  const cached = conferenceCache.get(lid)
+  if (cached && Date.now() - cached.fetchedAt < CONFERENCE_TTL_MS) {
+    return cached.value
+  }
+  const league = LEAGUES.find((l) => l.id === lid)
+  if (!league) return []
+  const path = league.paths[0]
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${path}/groups`
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 8_000)
+    let res: Response
+    try {
+      res = await fetch(url, {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!res.ok) return cached?.value ?? []
+    const data = (await res.json()) as EspnGroupsResponse
+    const all = (data.groups ?? [])
+      .map((g) => {
+        const id = g.groupId !== undefined ? String(g.groupId) : g.id !== undefined ? String(g.id) : ''
+        const name = g.name?.trim() ?? ''
+        const shortName = g.shortName?.trim() || g.abbreviation?.trim() || name
+        return id && name ? { id, name, shortName } : null
+      })
+      .filter((g): g is NcaaConference => g !== null)
+    // Filter + order by the priority list. Conferences not in the
+    // priority list are dropped to keep the strip readable.
+    const priority = NCAA_CONFERENCE_PRIORITY[lid] ?? []
+    const priorityIdx = (c: NcaaConference): number => {
+      const idx = priority.findIndex(
+        (p) =>
+          c.shortName === p ||
+          c.name === p ||
+          c.shortName.toLowerCase() === p.toLowerCase() ||
+          c.name.toLowerCase() === p.toLowerCase()
+      )
+      return idx === -1 ? 999 : idx
+    }
+    const filtered = all
+      .filter((c) => priorityIdx(c) < 999)
+      .sort((a, b) => priorityIdx(a) - priorityIdx(b))
+    // Dedupe by id (ESPN occasionally returns duplicates with same id
+    // but slightly different names).
+    const seen = new Set<string>()
+    const unique: NcaaConference[] = []
+    for (const c of filtered) {
+      if (seen.has(c.id)) continue
+      seen.add(c.id)
+      unique.push(c)
+    }
+    conferenceCache.set(lid, { value: unique, fetchedAt: Date.now() })
+    return unique
+  } catch (err) {
+    console.warn(
+      `[sports] listNcaaConferences ${lid} failed:`,
+      err instanceof Error ? err.message : err
+    )
+    return cached?.value ?? []
+  }
+}
 
 // Hard-coded season windows per league. Month/day is zero-indexed for month.
 // When the current date sits outside the window, we report the most recent
@@ -58,6 +219,8 @@ const SEASON_WINDOWS: Record<string, SeasonWindow> = {
   nba: { startMonth: 9, startDay: 15, endMonth: 5, endDay: 30 }, // Oct 15 → Jun 30
   mlb: { startMonth: 2, startDay: 20, endMonth: 10, endDay: 5 }, // Mar 20 → Nov 5
   nhl: { startMonth: 9, startDay: 1, endMonth: 5, endDay: 30 }, // Oct 1 → Jun 30
+  ncaaf: { startMonth: 7, startDay: 20, endMonth: 0, endDay: 15 }, // Aug 20 → Jan 15
+  ncaam: { startMonth: 9, startDay: 25, endMonth: 3, endDay: 15 }, // Oct 25 → Apr 15
   ucl: { startMonth: 8, startDay: 1, endMonth: 4, endDay: 31 }, // Sep 1 → May 31
   epl: { startMonth: 7, startDay: 10, endMonth: 4, endDay: 31 }, // Aug 10 → May 31
   laliga: { startMonth: 7, startDay: 15, endMonth: 4, endDay: 31 },
@@ -294,10 +457,16 @@ export async function listTeams(leagueId: string): Promise<SportsTeam[]> {
   return collected
 }
 
-export async function listGames(leagueId: string, windowDays = 21): Promise<Game[]> {
+export async function listGames(
+  leagueId: string,
+  windowDays = 21,
+  groupId?: string | null
+): Promise<Game[]> {
   const league = LEAGUES.find((l) => l.id === leagueId)
   if (!league) return []
-  const cacheKey = `${leagueId}:${windowDays}`
+  // Cache key includes groupId so a conference filter doesn't share
+  // cache with the All-conferences view.
+  const cacheKey = `${leagueId}:${windowDays}:${groupId ?? 'all'}`
   const cached = scoreboardCache.get(cacheKey)
   if (cached && Date.now() - cached.fetchedAt < SCOREBOARD_TTL_MS) {
     return cached.value
@@ -306,8 +475,11 @@ export async function listGames(leagueId: string, windowDays = 21): Promise<Game
   // ESPN's scoreboard endpoint caps responses at ~100 events per request, which
   // truncates long windows for high-volume leagues like NBA/MLB. Split the
   // window into 7-day chunks and fire all requests in parallel.
+  // For NCAA we use shorter chunks (3 days) since a single Saturday
+  // can carry 60+ games across all FBS — a 7-day window risks the
+  // 100-event cap.
   const now = Date.now()
-  const chunkDays = 7
+  const chunkDays = leagueId === 'ncaaf' || leagueId === 'ncaam' ? 3 : 7
   const ranges: Array<{ from: Date; to: Date }> = []
   for (let offset = -windowDays; offset < windowDays; offset += chunkDays) {
     const end = Math.min(offset + chunkDays - 1, windowDays - 1)
@@ -317,13 +489,14 @@ export async function listGames(leagueId: string, windowDays = 21): Promise<Game
     })
   }
 
+  const groupParam = groupId ? `&groups=${encodeURIComponent(groupId)}` : ''
   const collected: Game[] = []
   const seen = new Set<string>()
   const tasks: Array<Promise<void>> = []
   for (const path of league.paths) {
     for (const range of ranges) {
       const datesParam = `${fmtEspnDate(range.from)}-${fmtEspnDate(range.to)}`
-      const url = `${ESPN_BASE}/${path}/scoreboard?dates=${datesParam}`
+      const url = `${ESPN_BASE}/${path}/scoreboard?dates=${datesParam}${groupParam}`
       tasks.push(
         fetchJson(url)
           .then((res) => {

@@ -84,7 +84,8 @@ import {
   getGameDetail,
   listTeams,
   listLeagueLeaders,
-  listTeamLeaders
+  listTeamLeaders,
+  listNcaaConferences
 } from '../services/sportsService'
 import {
   getLastReelGroups,
@@ -767,8 +768,15 @@ export function registerDbIpc(): void {
 
   // sports
   ipcMain.handle('sports:listLeagues', () => listLeagues())
-  ipcMain.handle('sports:listGames', (_e, leagueId: string) => listGames(leagueId))
+  ipcMain.handle(
+    'sports:listGames',
+    (_e, leagueId: string, groupId?: string | null) =>
+      listGames(leagueId, undefined, groupId ?? null)
+  )
   ipcMain.handle('sports:listSeasonGames', (_e, leagueId: string) => listSeasonGames(leagueId))
+  ipcMain.handle('sports:listNcaaConferences', (_e, leagueId: string) =>
+    listNcaaConferences(leagueId)
+  )
   ipcMain.handle('sports:listTeams', (_e, leagueId: string) => listTeams(leagueId))
   ipcMain.handle(
     'sports:getGameDetail',

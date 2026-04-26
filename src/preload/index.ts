@@ -699,6 +699,15 @@ export interface SportsLeague {
   paths: string[]
 }
 
+// NCAA conferences (returned by sports.listNcaaConferences). Used to
+// filter the scoreboard via ESPN's `groups` query parameter — only
+// applies to leagueId === 'ncaaf' or 'ncaam'.
+export interface NcaaConference {
+  id: string
+  name: string
+  shortName: string
+}
+
 export type GameStatus = 'scheduled' | 'in_progress' | 'final' | 'postponed' | 'canceled'
 
 export interface GameTeam {
@@ -1656,8 +1665,11 @@ const api = {
   },
   sports: {
     listLeagues: () => invoke<SportsLeague[]>('sports:listLeagues'),
-    listGames: (leagueId: string) => invoke<Game[]>('sports:listGames', leagueId),
+    listGames: (leagueId: string, groupId?: string | null) =>
+      invoke<Game[]>('sports:listGames', leagueId, groupId ?? null),
     listSeasonGames: (leagueId: string) => invoke<SeasonGames>('sports:listSeasonGames', leagueId),
+    listNcaaConferences: (leagueId: string) =>
+      invoke<NcaaConference[]>('sports:listNcaaConferences', leagueId),
     listTeams: (leagueId: string) => invoke<SportsTeam[]>('sports:listTeams', leagueId),
     getGameDetail: (leagueId: string, leaguePath: string, eventId: string) =>
       invoke<GameDetail | null>('sports:getGameDetail', leagueId, leaguePath, eventId),
