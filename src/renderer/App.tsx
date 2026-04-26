@@ -4517,7 +4517,34 @@ function SportsPage({
     void window.api.sports.listLeagues().then((ls) => {
       setLeagues(ls)
       if (ls.length > 0) {
-        setActiveLeagueId(initialGame?.leagueId ?? ls[0].id)
+        // If the user clicked into a specific game, that league wins.
+        if (initialGame?.leagueId) {
+          setActiveLeagueId(initialGame.leagueId)
+          return
+        }
+        // Otherwise pick the highest-priority league that's currently
+        // in season. Priority order requested by user:
+        //   NFL > NBA > CFB > MLB > UCL > EPL > SerieA > La Liga > CBB > MLS
+        // NHL isn't in the user's list — fall back to it before the
+        // first-list-entry catchall so an October NHL fan doesn't
+        // land on a league not in session.
+        const PRIORITY = [
+          'nfl',
+          'nba',
+          'ncaaf',
+          'mlb',
+          'ucl',
+          'epl',
+          'seriea',
+          'laliga',
+          'ncaam',
+          'mls',
+          'nhl'
+        ]
+        const firstActive = PRIORITY.map((id) => ls.find((l) => l.id === id)).find(
+          (l) => l && l.inSeason
+        )
+        setActiveLeagueId(firstActive?.id ?? ls[0].id)
       }
     })
   }, [initialGame])

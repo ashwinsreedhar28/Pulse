@@ -697,6 +697,10 @@ export interface SportsLeague {
   sport: string
   shortName: string
   paths: string[]
+  // True when "today" falls inside this league's hard-coded season
+  // window. Renderer uses this to default the active tab to a league
+  // that's actually in session — avoids landing on NFL in July.
+  inSeason: boolean
 }
 
 // NCAA conferences (returned by sports.listNcaaConferences). Used to

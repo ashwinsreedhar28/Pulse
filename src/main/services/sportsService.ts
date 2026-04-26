@@ -23,9 +23,17 @@ export interface SportsLeague {
   shortName: string
   // ESPN path segments. Some leagues (cricket) need to try multiple sub-paths.
   paths: string[]
+  // True when the current date sits inside this league's season
+  // window. Computed at listLeagues() time from SEASON_WINDOWS so
+  // the renderer can default to a league that's actually in
+  // session (e.g. avoid landing on NFL in July).
+  inSeason: boolean
 }
 
-export const LEAGUES: SportsLeague[] = [
+// Internal catalog. inSeason is computed per-call in listLeagues since
+// it changes with the date.
+type LeagueCatalogEntry = Omit<SportsLeague, 'inSeason'>
+const LEAGUE_CATALOG: LeagueCatalogEntry[] = [
   { id: 'nfl', name: 'NFL', shortName: 'NFL', sport: 'American Football', paths: ['football/nfl'] },
   { id: 'nba', name: 'NBA', shortName: 'NBA', sport: 'Basketball', paths: ['basketball/nba'] },
   { id: 'mlb', name: 'MLB', shortName: 'MLB', sport: 'Baseball', paths: ['baseball/mlb'] },
@@ -56,6 +64,10 @@ export const LEAGUES: SportsLeague[] = [
   { id: 'seriea', name: 'Serie A', shortName: 'Serie A', sport: 'Soccer', paths: ['soccer/ita.1'] },
   { id: 'mls', name: 'MLS', shortName: 'MLS', sport: 'Soccer', paths: ['soccer/usa.1'] }
 ]
+
+// Backwards-compat export used by other services that look up paths
+// by id. Returns the catalog without the (computed) inSeason field.
+export const LEAGUES: LeagueCatalogEntry[] = LEAGUE_CATALOG
 
 // Conference filter for NCAA leagues. ESPN's scoreboard accepts a
 // `groups` query param that narrows results to a specific conference.
@@ -399,8 +411,32 @@ const teamsCache = new Map<string, ScoreboardCacheEntry<SportsTeam[]>>()
 const TEAMS_TTL_MS = 24 * 60 * 60 * 1000
 const SEASON_TTL_MS = 5 * 60 * 1000
 
+// True when the current date sits inside the league's season window.
+// Season windows are hardcoded in SEASON_WINDOWS above. Leagues we
+// haven't tagged with a window default to true (we don't want to
+// hide e.g. cricket just because we don't track its calendar).
+export function isLeagueInSeason(leagueId: string): boolean {
+  const window = SEASON_WINDOWS[leagueId]
+  if (!window) return true
+  const now = new Date()
+  // Encode month-day as a numeric MMDD so we can compare without
+  // worrying about year boundaries directly. February 15 → 0215,
+  // September 1 → 0901, etc. Months are 0-indexed in Date so we
+  // shift by 1 to land on calendar months in MMDD.
+  const nowKey = (now.getMonth() + 1) * 100 + now.getDate()
+  const startKey = (window.startMonth + 1) * 100 + window.startDay
+  const endKey = (window.endMonth + 1) * 100 + window.endDay
+  // Cross-year window (e.g. NFL Sep 1 → Feb 15): in season if we're
+  // past the start in the calendar year OR before the end. Same-year
+  // windows just need both bounds inclusive.
+  if (window.startMonth > window.endMonth) {
+    return nowKey >= startKey || nowKey <= endKey
+  }
+  return nowKey >= startKey && nowKey <= endKey
+}
+
 export function listLeagues(): SportsLeague[] {
-  return LEAGUES
+  return LEAGUE_CATALOG.map((l) => ({ ...l, inSeason: isLeagueInSeason(l.id) }))
 }
 
 export async function listTeams(leagueId: string): Promise<SportsTeam[]> {
