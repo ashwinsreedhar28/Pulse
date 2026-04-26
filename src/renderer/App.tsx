@@ -5768,12 +5768,12 @@ function LeaderHeadshot({
         alt={athlete}
         loading="lazy"
         onError={() => setFailed(true)}
-        className="w-9 h-9 rounded-full object-cover bg-surface-2 ring-1 ring-edge shrink-0"
+        className="w-16 h-16 rounded-full object-cover bg-surface-2 ring-1 ring-edge shrink-0"
       />
     )
   }
   return (
-    <span className="w-9 h-9 rounded-full bg-surface-2 ring-1 ring-edge text-[11px] font-semibold tracking-wide text-zinc-300 flex items-center justify-center shrink-0">
+    <span className="w-16 h-16 rounded-full bg-surface-2 ring-1 ring-edge text-[16px] font-semibold tracking-wide text-zinc-300 flex items-center justify-center shrink-0">
       {leaderInitials(athlete)}
     </span>
   )
@@ -5786,35 +5786,33 @@ function LeaderColumn({
   label: string
   leaders: GameDetail['leaders']
 }): JSX.Element {
-  // One row per leader. Layout columns:
-  //   [headshot] [category over athlete name] [value]
-  // The headshot occupies the previously-empty space and gives each
-  // row visual weight; category sits stacked above the athlete name
-  // so the row reads "POINTS / Nikola Jokic" cleanly while still
-  // staying single-row-per-leader (the headshot's vertical room
-  // accommodates both lines without growing the row taller).
+  // 64px headshot per leader — fills the previously-empty bottom of
+  // the panel and gives each row strong visual identity. Category
+  // stacks above the athlete name so the text block reads as a
+  // mini player card. Value sits right-aligned at a larger size
+  // since it's the headline number for that category.
   return (
     <div>
-      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500 mb-2">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500 mb-3">
         {label}
       </div>
-      <ul className="space-y-2">
+      <ul className="space-y-3">
         {leaders.length === 0 && <li className="text-[11px] text-zinc-500">—</li>}
         {leaders.map((l, i) => (
           <li
             key={i}
-            className="grid grid-cols-[36px_1fr_auto] items-center gap-3 py-0.5"
+            className="grid grid-cols-[64px_1fr_auto] items-center gap-3"
           >
             <LeaderHeadshot url={l.headshotURL} athlete={l.athlete} />
             <div className="min-w-0">
-              <div className="text-[9.5px] uppercase tracking-[0.18em] text-zinc-500 leading-tight">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 leading-tight mb-1">
                 {l.category}
               </div>
-              <div className="text-[12.5px] text-zinc-100 leading-tight truncate">
+              <div className="text-[13.5px] text-zinc-100 leading-tight truncate">
                 {l.athlete || '—'}
               </div>
             </div>
-            <span className="text-[14px] font-semibold tabular-nums text-zinc-100">
+            <span className="text-[20px] font-semibold tabular-nums text-zinc-100">
               {l.value}
             </span>
           </li>
