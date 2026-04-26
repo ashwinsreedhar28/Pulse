@@ -449,10 +449,23 @@ function prepareFromGenerated(
     string,
     { stage: string; name: string | null; blurb: string | null }
   >()
-  // Focus-chain nodes win when the same symbol exists in both — they
-  // carry the model's intended stage assignment for that chain's
-  // perspective (and graph-wide overrides may have been inherited from
-  // a different focus's classification).
+  // Three sources, layered with focus chain winning over overrides
+  // winning over static. Static is the lowest tier because the absorber
+  // intentionally skips writing graph_node_overrides rows for symbols
+  // already in the static graph (chainAbsorberService.ts:182) — so
+  // static nodes are the ONLY source of stage for symbols like UMC,
+  // INTC, GFS, SMIC etc. when they appear as cross-chain counterparties.
+  // Without this layer, those competitors render with empty stage and
+  // useStageGroups filters them out, producing the "count > 0 but list
+  // empty" symptom the unified Value Chain page already fixed via its
+  // mergedNodes derivation.
+  for (const sn of CHAIN.nodes) {
+    nodeBySymbol.set(sn.symbol.toUpperCase(), {
+      stage: sn.stage,
+      name: sn.name ?? null,
+      blurb: sn.blurb ?? null
+    })
+  }
   for (const o of nodeOverrides) {
     nodeBySymbol.set(o.symbol.toUpperCase(), {
       stage: o.stage,
