@@ -836,6 +836,10 @@ interface FilingCitationData {
 interface ArticleCitationData {
   articleId: number
   title: string
+  // Summary kept around so the auto-augment cue check can scan body
+  // text (some publishers put the relationship verb in the summary
+  // while the title is just "Ford, Tesla").
+  summary: string | null
   url: string | null
   publishedAt: number | null
   feedTitle: string | null
@@ -1048,6 +1052,15 @@ function autoAugmentArticleCitations(
   // article cite than a sports article attached because of a one-letter
   // ticker substring collision.
   if (!fromMatcher || !toMatcher) return []
+  // Relationship-cue requirement: an article that mentions both
+  // endpoints as standalone words STILL needs to be ABOUT the
+  // relationship to count as evidence. Without this, a Bleacher Report
+  // sports article mentioning "Ford executive" + "Tesla event" gets
+  // attached to a Ford↔Tesla competitor edge even though it's not
+  // documenting their rivalry. The cue regex captures the vocabulary
+  // companies + trade press actually use to describe relationships.
+  const relCueRe =
+    /\b(supplier|customer|partner(ship)?|compet|rival|deal|contract|agreement|acquir|merger|order|shipment|licens|royalty|suppl(y|ies|ied)|invest(ed|ment)?|launch(es)?|announc|provid|select(ed)?|award|expand|collaborat|join(t|s)?\s+venture|jv\b|MOU\b)\b/i
   const extras: import('../database/companyValueChains').CompanyValueChainEdgeCitation[] = []
   for (const [refId, a] of articlesByRef) {
     if (extras.length >= 2) break
@@ -1055,18 +1068,23 @@ function autoAugmentArticleCitations(
     const articleIdKey = `__articleId:${a.articleId}`
     if (alreadyCited.has(articleIdKey)) continue
     const haystack = `${a.title} ${a.feedTitle ?? ''}`.toUpperCase()
-    if (fromMatcher(haystack) && toMatcher(haystack)) {
-      extras.push({
-        kind: 'article',
-        articleId: a.articleId,
-        title: a.title,
-        url: a.url,
-        publishedAt: a.publishedAt,
-        feedTitle: a.feedTitle
-      })
-      alreadyCited.add(refId)
-      alreadyCited.add(articleIdKey)
-    }
+    if (!fromMatcher(haystack) || !toMatcher(haystack)) continue
+    // Both endpoints land — now require relationship language. Title
+    // and summary both checked since some publishers put the verb in
+    // the summary while keeping the title terse ("Ford, Tesla" vs
+    // "Ford signs supply deal with Tesla").
+    const cueText = `${a.title} ${a.summary ?? ''}`
+    if (!relCueRe.test(cueText)) continue
+    extras.push({
+      kind: 'article',
+      articleId: a.articleId,
+      title: a.title,
+      url: a.url,
+      publishedAt: a.publishedAt,
+      feedTitle: a.feedTitle
+    })
+    alreadyCited.add(refId)
+    alreadyCited.add(articleIdKey)
   }
   return extras
 }

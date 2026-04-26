@@ -3061,7 +3061,12 @@ function StocksPage({
               setTickers(updated)
             }}
             externalFocus={chainFocus}
-            onExternalFocusHandled={() => setChainFocus(null)}
+            // Don't clear chainFocus once accepted — keeping it set
+            // means a tab switch (chain → holdings → chain) re-locks
+            // the same ticker on remount, and closing a detail page
+            // returns the user to the chain view with that ticker
+            // already focused (instead of forcing a re-search).
+            onExternalFocusHandled={() => {}}
             onOpenURL={onOpenURL}
           />
         ) : tickers.filter((t) => t.isActive).length === 0 ? (
@@ -3102,7 +3107,15 @@ function StocksPage({
             ticker={t}
             tickers={tickers}
             quote={bySymbol.get(t.symbol.toUpperCase())}
-            onClose={() => setSelectedTickerId(null)}
+            onClose={() => {
+              // Remember the ticker the user was just looking at so
+              // the value chain page lands on it (no re-search) when
+              // they navigate back. Works whether they were already on
+              // chain view (re-locks the same tile) or switch to it
+              // afterwards (externalFocus fires on remount).
+              setChainFocus(t.symbol)
+              setSelectedTickerId(null)
+            }}
             onOpenArticle={onOpenArticle}
             onOpenURL={onOpenURL}
             onActivate={async () => {
