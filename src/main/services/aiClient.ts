@@ -44,16 +44,19 @@ export type AiProviderResolved = 'claude' | 'ollama'
 // crash loop that restarts the app cannot bypass the ceiling by zeroing
 // the counter. Rolls over at UTC midnight.
 //
-// Daily cap is currently DISABLED for testing — the user is iterating
-// on the citation pipeline and explicitly opted into uncapped spend
-// while we tune. We still INCREMENT the counter so the running tally
-// surfaces in the UI and logs (useful telemetry to know what a regen-
-// all actually cost), but `canCallClaude` no longer gates on it.
+// Daily Claude call cap, sized to fit a ~$15/month app budget. At
+// the typical mix of Sonnet (~$0.04/call) and Haiku (~$0.006/call)
+// usage, 50 calls/day averages $0.30-0.45/day = $9-13/month. Leaves
+// room for the daily Morning Brief (1 Sonnet) + 3-4 chain regens
+// (each = 1 Sonnet chain-gen + ~4 Haiku web searches) + 3-4 research
+// searches.
 //
-// Re-enable when shipping by setting DAILY_CLAUDE_CAP back to 100 (or
-// whatever ceiling matches the productized spend tier).
-const DAILY_CLAUDE_CAP = Number.POSITIVE_INFINITY
-const CAP_GATE_DISABLED = true
+// For one-off heavy work (regenerate-all on the watchlist =
+// ~250 calls), flip CAP_GATE_DISABLED to true temporarily, run, flip
+// back. The persisted counter resets at UTC midnight, so the cap
+// auto-recovers without manual intervention.
+const DAILY_CLAUDE_CAP = 50
+const CAP_GATE_DISABLED = false
 
 // Lazy-loaded from DB on first access. Module-level `getDb()` cannot run at
 // import time because the database connection isn't open yet when services
@@ -113,12 +116,30 @@ export function recordClaudeCall(): void {
   } catch (err) {
     console.warn('[aiClient] Failed to persist Claude usage increment:', err)
   }
-  // Periodic telemetry every 100 calls so the user sees running usage
-  // even while the cap gate is disabled. (Once the cap is re-enabled,
-  // restore the 50%-of-cap and at-cap warnings.)
-  if (counter.count % 100 === 0) {
+  // Soft warning at 50% of cap so the user has a chance to throttle
+  // their own usage before the hard ceiling kicks in.
+  if (
+    Number.isFinite(DAILY_CLAUDE_CAP) &&
+    counter.count === Math.floor(DAILY_CLAUDE_CAP / 2)
+  ) {
+    console.warn(
+      `[aiClient] Claude usage at ${counter.count}/${DAILY_CLAUDE_CAP} for ${counter.date} — about halfway to today's safety cap.`
+    )
+  }
+  if (
+    Number.isFinite(DAILY_CLAUDE_CAP) &&
+    counter.count === DAILY_CLAUDE_CAP
+  ) {
+    console.warn(
+      `[aiClient] Claude daily cap (${DAILY_CLAUDE_CAP}) reached for ${counter.date}. Subsequent routed calls fall back to Ollama until UTC midnight.`
+    )
+  }
+  // Periodic telemetry every 100 calls (only fires when the cap is
+  // disabled for testing). Helps spot runaway spend during heavy
+  // sessions like regenerate-all.
+  if (CAP_GATE_DISABLED && counter.count % 100 === 0) {
     console.log(
-      `[aiClient] Claude usage at ${counter.count} call(s) today (${counter.date}) — cap gate ${CAP_GATE_DISABLED ? 'DISABLED for testing' : `active (${DAILY_CLAUDE_CAP})`}.`
+      `[aiClient] Claude usage at ${counter.count} call(s) today (${counter.date}) — cap gate DISABLED for testing.`
     )
   }
 }

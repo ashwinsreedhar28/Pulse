@@ -1944,7 +1944,13 @@ async function webSearchAugmentCitations(
   edges: import('../database/companyValueChains').CompanyValueChainEdge[],
   focusSymbol: string,
   focusCompanyName: string,
-  maxSearches = 12
+  // Bounded to 4 cite-less edges per regen to fit the app's
+  // $15/month spend budget. Anthropic web search bills per call;
+  // 8 was the citation-quality sweet spot but doubled the per-
+  // regen cost. The first 4 cite-less edges are the model's
+  // highest-priority claims (they emit edges in priority order),
+  // so capping here doesn't drop the most material relationships.
+  maxSearches = 4
 ): Promise<import('../database/companyValueChains').CompanyValueChainEdge[]> {
   const focus = focusSymbol.toUpperCase()
   // Find edges still missing a primary cite. Order by edge index so the

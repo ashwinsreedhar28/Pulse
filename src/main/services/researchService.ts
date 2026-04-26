@@ -94,7 +94,27 @@ function fromS2Paper(p: S2Paper): ResearchPaper | null {
   }
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+// Semantic Scholar's unauthenticated tier is throttled to roughly
+// 1 request/second shared across all anonymous traffic — even one
+// user clicking through papers will 429 if we let request cluster.
+// We serialize all S2 calls behind a single-slot queue with a 1.1s
+// minimum gap, plus per-call retry-once on 429 with a 5s backoff.
+// 1.1s > 1s adds enough margin that simultaneous Pulse + other-app
+// traffic doesn't tip us over.
+const S2_MIN_GAP_MS = 1_100
+let s2NextSlot = 0
+let s2Queue: Promise<unknown> = Promise.resolve()
+
+async function s2Throttle(): Promise<void> {
+  const now = Date.now()
+  if (now < s2NextSlot) {
+    const wait = s2NextSlot - now
+    await new Promise((resolve) => setTimeout(resolve, wait))
+  }
+  s2NextSlot = Date.now() + S2_MIN_GAP_MS
+}
+
+async function fetchJsonRaw<T>(url: string): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
@@ -107,6 +127,33 @@ async function fetchJson<T>(url: string): Promise<T> {
   } finally {
     clearTimeout(timer)
   }
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  // Chain into the queue so concurrent callers are serialized.
+  // Each task awaits its slot, runs, and returns its result; the
+  // queue advances regardless of success/failure.
+  const task = s2Queue.then(async () => {
+    await s2Throttle()
+    try {
+      return await fetchJsonRaw<T>(url)
+    } catch (err) {
+      // Single retry on 429 — wait the documented 5s window then
+      // retry once. Anything else (404, 500, network) propagates.
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('HTTP 429')) {
+        await new Promise((resolve) => setTimeout(resolve, 5_000))
+        await s2Throttle()
+        return await fetchJsonRaw<T>(url)
+      }
+      throw err
+    }
+  })
+  // Replace the queue head so the next caller chains off this task.
+  // Catch the rejection on the queue side so a single failure doesn't
+  // poison every subsequent S2 call.
+  s2Queue = task.catch(() => undefined)
+  return task as Promise<T>
 }
 
 // ---------- Search + filter -------------------------------------------------
