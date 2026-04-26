@@ -773,7 +773,15 @@ export interface StatCategory {
 export interface GameDetail extends Game {
   stats: GameDetailStat[]
   headlines: Array<{ title: string; link: string | null; description: string | null }>
-  leaders: Array<{ team: 'home' | 'away'; category: string; athlete: string; value: string }>
+  leaders: Array<{
+    team: 'home' | 'away'
+    category: string
+    athlete: string
+    value: string
+    // ESPN headshot URL when available; null when missing (renderer
+    // falls back to initials).
+    headshotURL: string | null
+  }>
   highlightSearchQuery: string
   linescore?: Linescore
   playerStats?: TeamPlayerStats[]

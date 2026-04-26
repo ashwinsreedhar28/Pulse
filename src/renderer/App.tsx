@@ -5738,6 +5738,47 @@ function FragmentRow({ stat }: { stat: { label: string; home: string; away: stri
   )
 }
 
+// Initials fallback for leaders missing an ESPN headshot. "Bones Hyland"
+// → "BH", single-token names → first letter only, empty / "—" → "?".
+function leaderInitials(athlete: string): string {
+  const tokens = athlete.trim().split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return '?'
+  if (tokens.length === 1) return tokens[0].charAt(0).toUpperCase()
+  return (tokens[0].charAt(0) + tokens[tokens.length - 1].charAt(0)).toUpperCase()
+}
+
+function LeaderHeadshot({
+  url,
+  athlete
+}: {
+  url: string | null
+  athlete: string
+}): JSX.Element {
+  // Track failed image loads so the initials fallback kicks in
+  // gracefully when ESPN's CDN 404s a headshot (occasional rookies,
+  // recent transfers, soccer reserves). Resets when url changes.
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    setFailed(false)
+  }, [url])
+  if (url && !failed) {
+    return (
+      <img
+        src={url}
+        alt={athlete}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="w-9 h-9 rounded-full object-cover bg-surface-2 ring-1 ring-edge shrink-0"
+      />
+    )
+  }
+  return (
+    <span className="w-9 h-9 rounded-full bg-surface-2 ring-1 ring-edge text-[11px] font-semibold tracking-wide text-zinc-300 flex items-center justify-center shrink-0">
+      {leaderInitials(athlete)}
+    </span>
+  )
+}
+
 function LeaderColumn({
   label,
   leaders
@@ -5745,29 +5786,37 @@ function LeaderColumn({
   label: string
   leaders: GameDetail['leaders']
 }): JSX.Element {
-  // One row per leader: [CATEGORY] [Athlete name].................. [Value]
-  // Tightens 3 stacked lines per leader → 1 line, freeing the right
-  // half of the panel that was previously empty space below the
-  // sparse leader list.
+  // One row per leader. Layout columns:
+  //   [headshot] [category over athlete name] [value]
+  // The headshot occupies the previously-empty space and gives each
+  // row visual weight; category sits stacked above the athlete name
+  // so the row reads "POINTS / Nikola Jokic" cleanly while still
+  // staying single-row-per-leader (the headshot's vertical room
+  // accommodates both lines without growing the row taller).
   return (
     <div>
       <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500 mb-2">
         {label}
       </div>
-      <ul className="space-y-1">
+      <ul className="space-y-2">
         {leaders.length === 0 && <li className="text-[11px] text-zinc-500">—</li>}
         {leaders.map((l, i) => (
           <li
             key={i}
-            className="grid grid-cols-[68px_1fr_auto] items-baseline gap-2 py-0.5"
+            className="grid grid-cols-[36px_1fr_auto] items-center gap-3 py-0.5"
           >
-            <span className="text-[9.5px] uppercase tracking-[0.18em] text-zinc-500">
-              {l.category}
+            <LeaderHeadshot url={l.headshotURL} athlete={l.athlete} />
+            <div className="min-w-0">
+              <div className="text-[9.5px] uppercase tracking-[0.18em] text-zinc-500 leading-tight">
+                {l.category}
+              </div>
+              <div className="text-[12.5px] text-zinc-100 leading-tight truncate">
+                {l.athlete || '—'}
+              </div>
+            </div>
+            <span className="text-[14px] font-semibold tabular-nums text-zinc-100">
+              {l.value}
             </span>
-            <span className="text-[12px] text-zinc-200 truncate">
-              {l.athlete || '—'}
-            </span>
-            <span className="text-[12px] tabular-nums text-zinc-100">{l.value}</span>
           </li>
         ))}
       </ul>

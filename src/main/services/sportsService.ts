@@ -207,6 +207,11 @@ export interface GameDetail extends Game {
     category: string
     athlete: string
     value: string
+    // ESPN headshot URL when available — typically a circular CDN
+    // image at /i/headshots/.../full.png. Null when ESPN didn't ship
+    // one for this athlete (occasional rookies or back-of-bench
+    // players in non-major leagues). Renderer falls back to initials.
+    headshotURL: string | null
   }>
   highlightSearchQuery: string
   linescore?: Linescore
@@ -833,6 +838,11 @@ interface EspnSummaryJson {
           displayName?: string
           shortName?: string
           team?: { id?: string | number }
+          // ESPN's gamecast response includes a headshot href on the
+          // athlete entry. Sometimes nested as { headshot: { href } },
+          // occasionally as a bare string. We accept either to be
+          // robust across leagues.
+          headshot?: string | { href?: string }
         }
       }>
     }>
@@ -899,11 +909,18 @@ function extractGameDetail(
     for (const cat of block.leaders ?? []) {
       const top = cat.leaders?.[0]
       if (!top) continue
+      // Headshot href can come back as a string OR { href }. Normalize.
+      const rawHeadshot = top.athlete?.headshot
+      const headshotURL =
+        typeof rawHeadshot === 'string'
+          ? rawHeadshot
+          : rawHeadshot?.href ?? null
       leaders.push({
         team: side,
         category: cat.displayName ?? cat.name ?? '',
         athlete: top.athlete?.displayName ?? top.athlete?.shortName ?? '',
-        value: top.displayValue ?? ''
+        value: top.displayValue ?? '',
+        headshotURL: headshotURL && headshotURL.startsWith('http') ? headshotURL : null
       })
     }
   })
