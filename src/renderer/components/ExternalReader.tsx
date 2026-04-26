@@ -13,6 +13,26 @@ import type { ReaderResult } from '../../preload'
 
 type ViewMode = 'reader' | 'web'
 
+// Detect URLs that resolve to PDF documents. Reader extraction would
+// pull binary bytes through Readability and produce gibberish; the
+// embedded webview's built-in Chromium PDF viewer handles them
+// natively. We default the mode to 'web' for these and hide the
+// toggle since 'reader' isn't useful here.
+function isPdfUrl(url: string | null): boolean {
+  if (!url) return false
+  try {
+    const u = new URL(url)
+    if (/\.pdf$/i.test(u.pathname)) return true
+    // Common SEC / IR pattern: /Archives/edgar/data/.../primary-doc.pdf
+    // also captured by the suffix check above. /pdf/ in path catches
+    // some publishers' viewer routes (e.g. example.com/pdf/abc).
+    if (/(^|\/)pdf\//i.test(u.pathname)) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
 interface Props {
   url: string | null
   title: string
@@ -50,12 +70,15 @@ export function ExternalReader({
   // Reset everything when the URL changes so a sequence of opens (e.g., user
   // clicks several launch pills) doesn't leak state between them. When the
   // initialReader changes (different IPO brief) we also reset the view.
+  // PDFs default straight to 'web' since the reader path would render
+  // binary bytes as gibberish.
+  const isPdf = isPdfUrl(url)
   useEffect(() => {
-    setMode('reader')
+    setMode(isPdf ? 'web' : 'reader')
     setReader(initialReader ?? null)
     setReaderLoading(false)
     autoFellBackRef.current = false
-  }, [url, initialReader])
+  }, [url, initialReader, isPdf])
 
   useEffect(() => {
     if (!hasURL) return
@@ -151,17 +174,26 @@ export function ExternalReader({
         <div className="ml-auto flex items-center gap-1">
           {hasURL && (
             <>
-              <button
-                onClick={toggleMode}
-                title="Toggle reader mode"
-                className={`no-drag h-7 px-2 flex items-center justify-center rounded text-[10px] uppercase tracking-[0.18em] transition-colors ${
-                  mode === 'reader'
-                    ? 'bg-surface-2 text-zinc-100'
-                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-surface-2'
-                }`}
-              >
-                {mode === 'reader' ? 'Web' : 'Reader'}
-              </button>
+              {isPdf ? (
+                <span
+                  className="h-7 px-2 flex items-center rounded text-[10px] uppercase tracking-[0.18em] bg-surface-2 text-zinc-300"
+                  title="PDF document — rendered via the embedded viewer"
+                >
+                  PDF
+                </span>
+              ) : (
+                <button
+                  onClick={toggleMode}
+                  title="Toggle reader mode"
+                  className={`no-drag h-7 px-2 flex items-center justify-center rounded text-[10px] uppercase tracking-[0.18em] transition-colors ${
+                    mode === 'reader'
+                      ? 'bg-surface-2 text-zinc-100'
+                      : 'text-zinc-400 hover:text-zinc-100 hover:bg-surface-2'
+                  }`}
+                >
+                  {mode === 'reader' ? 'Web' : 'Reader'}
+                </button>
+              )}
               <button
                 onClick={reload}
                 title="Reload"
