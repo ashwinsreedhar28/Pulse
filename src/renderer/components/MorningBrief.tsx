@@ -4,13 +4,15 @@
 // state (within ~4h of generation) renders pre-expanded so morning users
 // see it immediately.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
+  Article,
   BriefBullet,
   BriefCitation,
   BriefSection,
-  MorningBriefRow
+  MorningBriefRow,
+  StockQuote
 } from '../../preload'
 import { CollapseChevron, useCollapsedSection } from './collapseUI'
 
@@ -49,12 +51,28 @@ function relativeAge(generatedAt: number): string {
   return `${days}d ago`
 }
 
+// YYYY-MM-DD formatter to match the value-chain SourceBadge style.
+function formatCiteDate(ms: number | null | undefined): string {
+  if (!ms || !Number.isFinite(ms)) return ''
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
 function CitationChip({
   citation,
+  article,
+  quote,
   onOpenArticle,
   onOpenSymbol
 }: {
   citation: BriefCitation
+  // Article metadata for article-typed citations. Provided by parent
+  // when available so the chip can render "Feed · YYYY-MM-DD" instead
+  // of the generic "article" fallback.
+  article: Article | null
+  // Quote for symbol-typed citations, used to color the chip green
+  // (up) / red (down) / neutral. Null when the symbol isn't in the
+  // current quotes snapshot.
+  quote: StockQuote | null
   onOpenArticle: (id: number) => void
   onOpenSymbol: (symbol: string) => void
 }): JSX.Element {
@@ -65,52 +83,102 @@ function CitationChip({
     } else if (citation.type === 'symbol') {
       onOpenSymbol(citation.ref)
     } else if (citation.type === 'filing' && citation.url) {
-      // Filing URLs are SEC archive links — route via shell.openExternal
-      // through the standard external-URL bridge that FeedView's onOpenURL
-      // helper uses elsewhere. We don't have that handler in this scope,
-      // so fall back to window.open which Electron routes through the
-      // setWindowOpenHandler that already exists for external links.
       window.open(citation.url, '_blank', 'noopener')
     }
   }
-  const label =
-    citation.label ??
-    (citation.type === 'article'
-      ? 'article'
-      : citation.type === 'filing'
-        ? 'filing'
-        : citation.ref)
-  const isClickable =
-    citation.type !== 'filing' || !!citation.url
+
+  // Symbol citations: color by quote direction. Up = emerald, down =
+  // rose, flat / no quote = zinc. Same palette as the stock cards.
+  if (citation.type === 'symbol') {
+    const change = quote?.change ?? null
+    const tone =
+      change === null || change === 0
+        ? 'border-zinc-600/60 bg-zinc-800/60 text-zinc-300 hover:border-zinc-400'
+        : change > 0
+          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:brightness-125'
+          : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:brightness-125'
+    const pctStr =
+      quote?.changePct !== null && quote?.changePct !== undefined
+        ? ` ${quote.changePct >= 0 ? '+' : ''}${quote.changePct.toFixed(2)}%`
+        : ''
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        title={`Open ${citation.ref} detail${pctStr ? ` ·${pctStr}` : ''}`}
+        className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-[1px] rounded-md border text-[9.5px] font-semibold uppercase tracking-[0.16em] transition cursor-pointer ${tone}`}
+      >
+        <span>{citation.label ?? citation.ref}</span>
+        {pctStr && <span className="font-bold">{pctStr.trim()}</span>}
+      </button>
+    )
+  }
+
+  // Article + filing chips use the same visual language as
+  // StockValueChainCard's SourceBadge: rounded-md, kind-toned border
+  // + bg + text, ↗ arrow to signal clickability.
+  if (citation.type === 'article') {
+    const dateStr = article ? formatCiteDate(article.publishedAt) : ''
+    const sourceStr = article?.feedTitle ?? citation.label ?? 'News'
+    const label = dateStr ? `${sourceStr} · ${dateStr}` : sourceStr
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        title={
+          article
+            ? `${article.title}${dateStr ? ` (${dateStr})` : ''} — click to open`
+            : `Open article #${citation.ref}`
+        }
+        className="shrink-0 inline-flex items-start gap-1 px-2 py-[3px] rounded-md border text-[10.5px] font-semibold uppercase tracking-[0.12em] max-w-full whitespace-normal break-words leading-[1.35] border-sky-500/40 bg-sky-500/10 text-sky-200 cursor-pointer hover:brightness-125 hover:underline underline-offset-2 text-left transition"
+      >
+        <span className="flex-1 min-w-0">{label}</span>
+        <span aria-hidden="true" className="shrink-0 text-[9px] opacity-80 mt-[1px]">
+          ↗
+        </span>
+      </button>
+    )
+  }
+
+  // Filing — emerald tone matching the value-chain "10-K" pill. Only
+  // clickable when we have a URL.
+  const filingHasUrl = !!citation.url
+  const filingLabel = citation.label ?? '10-K'
+  if (filingHasUrl) {
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        title={citation.url ?? `Filing ${citation.ref}`}
+        className="shrink-0 inline-flex items-start gap-1 px-2 py-[3px] rounded-md border text-[10.5px] font-semibold uppercase tracking-[0.12em] max-w-full whitespace-normal break-words leading-[1.35] border-emerald-500/40 bg-emerald-500/10 text-emerald-200 cursor-pointer hover:brightness-125 hover:underline underline-offset-2 text-left transition"
+      >
+        <span className="flex-1 min-w-0">{filingLabel}</span>
+        <span aria-hidden="true" className="shrink-0 text-[9px] opacity-80 mt-[1px]">
+          ↗
+        </span>
+      </button>
+    )
+  }
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={!isClickable}
-      className={`shrink-0 inline-flex items-center px-1.5 py-[1px] rounded-full text-[9.5px] font-semibold uppercase tracking-[0.16em] border transition-colors ${
-        isClickable
-          ? 'border-zinc-600 bg-zinc-800/60 text-zinc-300 hover:border-emerald-400/60 hover:text-emerald-300 cursor-pointer'
-          : 'border-zinc-700 bg-zinc-900/40 text-zinc-500 cursor-default'
-      }`}
-      title={
-        citation.type === 'article'
-          ? `Open article #${citation.ref}`
-          : citation.type === 'symbol'
-            ? `Open ${citation.ref} detail`
-            : citation.url ?? `Filing ${citation.ref}`
-      }
+    <span
+      title={`Filing ${citation.ref}`}
+      className="shrink-0 inline-flex items-center px-2 py-[3px] rounded-md border text-[10.5px] font-semibold uppercase tracking-[0.12em] border-emerald-500/40 bg-emerald-500/10 text-emerald-200/70"
     >
-      {label}
-    </button>
+      {filingLabel}
+    </span>
   )
 }
 
 function Bullet({
   bullet,
+  articleByRef,
+  quoteBySymbol,
   onOpenArticle,
   onOpenSymbol
 }: {
   bullet: BriefBullet
+  articleByRef: Map<number, Article>
+  quoteBySymbol: Map<string, StockQuote>
   onOpenArticle: (id: number) => void
   onOpenSymbol: (symbol: string) => void
 }): JSX.Element {
@@ -121,14 +189,26 @@ function Bullet({
         <div className="text-[13px] text-zinc-200">{bullet.text}</div>
         {bullet.citations && bullet.citations.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
-            {bullet.citations.map((c, i) => (
-              <CitationChip
-                key={`${c.type}-${c.ref}-${i}`}
-                citation={c}
-                onOpenArticle={onOpenArticle}
-                onOpenSymbol={onOpenSymbol}
-              />
-            ))}
+            {bullet.citations.map((c, i) => {
+              const article =
+                c.type === 'article'
+                  ? (articleByRef.get(Number(c.ref)) ?? null)
+                  : null
+              const quote =
+                c.type === 'symbol'
+                  ? (quoteBySymbol.get(c.ref.toUpperCase()) ?? null)
+                  : null
+              return (
+                <CitationChip
+                  key={`${c.type}-${c.ref}-${i}`}
+                  citation={c}
+                  article={article}
+                  quote={quote}
+                  onOpenArticle={onOpenArticle}
+                  onOpenSymbol={onOpenSymbol}
+                />
+              )
+            })}
           </div>
         )}
       </div>
@@ -138,10 +218,14 @@ function Bullet({
 
 function Section({
   section,
+  articleByRef,
+  quoteBySymbol,
   onOpenArticle,
   onOpenSymbol
 }: {
   section: BriefSection
+  articleByRef: Map<number, Article>
+  quoteBySymbol: Map<string, StockQuote>
   onOpenArticle: (id: number) => void
   onOpenSymbol: (symbol: string) => void
 }): JSX.Element {
@@ -159,6 +243,8 @@ function Section({
           <Bullet
             key={i}
             bullet={b}
+            articleByRef={articleByRef}
+            quoteBySymbol={quoteBySymbol}
             onOpenArticle={onOpenArticle}
             onOpenSymbol={onOpenSymbol}
           />
@@ -172,6 +258,30 @@ export function MorningBrief({ onOpenArticle, onOpenSymbol }: Props): JSX.Elemen
   const [row, setRow] = useState<MorningBriefRow | null | undefined>(undefined)
   const [refreshing, setRefreshing] = useState(false)
   const [collapsed, setCollapsed] = useCollapsedSection('morningBrief', false)
+  const [quotes, setQuotes] = useState<StockQuote[]>([])
+  // Per-citation article cache so chips render "Reuters · 2026-04-25"
+  // instead of the generic "article" fallback. Fetched lazily after the
+  // brief lands; updates are merged so re-fetches don't blow away
+  // previously-resolved articles.
+  const [articleCache, setArticleCache] = useState<Map<number, Article>>(() => new Map())
+
+  // Quotes drive the ticker chip color (green/red/zinc). Stocks
+  // scheduler already broadcasts updates; we just subscribe so a
+  // refresh after the bar mounts repaints the chips without
+  // remounting the whole brief.
+  useEffect(() => {
+    let cancelled = false
+    void window.api.stocks.getQuotes().then((q) => {
+      if (!cancelled) setQuotes(q)
+    })
+    const unsub = window.api.stocks.onUpdated((q) => {
+      if (!cancelled) setQuotes(q)
+    })
+    return (): void => {
+      cancelled = true
+      unsub()
+    }
+  }, [])
 
   // Auto-collapse if the brief is more than 6h old — by then the morning
   // frame has passed, so it's clutter rather than headline space.
@@ -215,6 +325,54 @@ export function MorningBrief({ onOpenArticle, onOpenSymbol }: Props): JSX.Elemen
       unsub()
     }
   }, [])
+
+  // Pull metadata for every article-typed citation when a brief loads
+  // so chips can show "Feed · YYYY-MM-DD". One-shot per ID; cache
+  // dedups across re-renders + brief refreshes.
+  useEffect(() => {
+    if (!row) return
+    const ids = new Set<number>()
+    for (const section of row.payload.sections) {
+      for (const bullet of section.bullets) {
+        for (const c of bullet.citations ?? []) {
+          if (c.type !== 'article') continue
+          const id = Number(c.ref)
+          if (!Number.isFinite(id)) continue
+          if (articleCache.has(id)) continue
+          ids.add(id)
+        }
+      }
+    }
+    if (ids.size === 0) return
+    let cancelled = false
+    void Promise.all(
+      [...ids].map((id) =>
+        window.api.articles.getById(id).then((row) => ({ id, row }))
+      )
+    ).then((results) => {
+      if (cancelled) return
+      setArticleCache((prev) => {
+        const next = new Map(prev)
+        for (const { id, row } of results) {
+          if (row) next.set(id, row)
+        }
+        return next
+      })
+    })
+    return (): void => {
+      cancelled = true
+    }
+    // articleCache intentionally omitted — only refetch when the brief
+    // changes; otherwise updating the cache would re-trigger this
+    // effect on every fetch settle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row])
+
+  const quoteBySymbol = useMemo<Map<string, StockQuote>>(() => {
+    const m = new Map<string, StockQuote>()
+    for (const q of quotes) m.set(q.symbol.toUpperCase(), q)
+    return m
+  }, [quotes])
 
   const handleRefresh = async (): Promise<void> => {
     setRefreshing(true)
@@ -301,6 +459,8 @@ export function MorningBrief({ onOpenArticle, onOpenSymbol }: Props): JSX.Elemen
             <Section
               key={`${s.kind}-${i}`}
               section={s}
+              articleByRef={articleCache}
+              quoteBySymbol={quoteBySymbol}
               onOpenArticle={onOpenArticle}
               onOpenSymbol={onOpenSymbol}
             />
