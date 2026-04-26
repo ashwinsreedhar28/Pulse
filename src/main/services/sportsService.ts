@@ -545,6 +545,20 @@ export async function listGames(
 ): Promise<Game[]> {
   const league = LEAGUES.find((l) => l.id === leagueId)
   if (!league) return []
+  // Skip the network round-trip entirely when the league is in its
+  // off-season AND not in a postseason window. ESPN's scoreboard
+  // endpoint returns 404 for date ranges outside the active season
+  // (especially CBB in late April / NCAAF in spring), and three
+  // background consumers (calendarService, sportsAlertsService,
+  // sportsReelScheduler) all poll listGames for every league —
+  // without this gate the off-season leagues spam ~14 404s per
+  // poll cycle. Cache the empty array so re-calls within the TTL
+  // window also short-circuit.
+  if (!isLeagueInSeason(leagueId) && !isLeagueInPlayoffs(leagueId)) {
+    const cacheKey = `${leagueId}:${windowDays}:${groupId ?? 'all'}`
+    scoreboardCache.set(cacheKey, { value: [], fetchedAt: Date.now() })
+    return []
+  }
   // Cache key includes groupId so a conference filter doesn't share
   // cache with the All-conferences view.
   const cacheKey = `${leagueId}:${windowDays}:${groupId ?? 'all'}`
@@ -588,10 +602,12 @@ export async function listGames(
             }
           })
           .catch((err) => {
-            console.warn(
-              `[sports] scoreboard ${path} ${datesParam} failed:`,
-              err instanceof Error ? err.message : err
-            )
+            // 404 is expected when ESPN has no events scheduled for
+            // the date range — quiet log to keep terminal readable
+            // (CBB / NCAAF off-week chunks routinely 404).
+            const msg = err instanceof Error ? err.message : String(err)
+            if (msg.includes('HTTP 404')) return
+            console.warn(`[sports] scoreboard ${path} ${datesParam} failed:`, msg)
           })
       )
     }
@@ -643,10 +659,9 @@ export async function listSeasonGames(leagueId: string): Promise<SeasonGames> {
             }
           })
           .catch((err) => {
-            console.warn(
-              `[sports] season ${path} ${datesParam} failed:`,
-              err instanceof Error ? err.message : err
-            )
+            const msg = err instanceof Error ? err.message : String(err)
+            if (msg.includes('HTTP 404')) return
+            console.warn(`[sports] season ${path} ${datesParam} failed:`, msg)
           })
       )
     }
@@ -832,6 +847,18 @@ export async function listLeagueLeaders(
   // ESPN's public API has no /leaders endpoint for soccer leagues — the call
   // always 404s. Short-circuit to avoid log spam and wasted round-trips.
   if (league.sport === 'Soccer') return []
+  // Off-season + non-playoff: ESPN's leaders endpoint returns
+  // 500/404 for dormant leagues. Short-circuit before the call.
+  // Postseason leaders specifically are still fetched even outside
+  // the regular-season window, since playoff stats persist for
+  // some weeks after the championship.
+  if (
+    !isLeagueInSeason(leagueId) &&
+    !isLeagueInPlayoffs(leagueId) &&
+    seasonType === 'regular'
+  ) {
+    return []
+  }
   const cacheKey = `l:${leagueId}:${seasonType}`
   const cached = leadersCache.get(cacheKey)
   if (cached && Date.now() - cached.fetchedAt < LEADERS_TTL_MS) return cached.value
@@ -850,9 +877,15 @@ export async function listLeagueLeaders(
           return cats
         }
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        // 404 is the v2-fallback "endpoint doesn't exist for this
+        // sub-path" case — already handled by the bases loop.
+        // 500 fires for off-season leagues (e.g. NFL leaders during
+        // March). Both are recoverable noise; only surface other.
+        if (msg.includes('HTTP 404') || msg.includes('HTTP 500')) continue
         console.warn(
           `[sports] leaders ${path} (${base.includes('v3') ? 'v3' : 'v2'}, ${seasonType}) failed:`,
-          err instanceof Error ? err.message : err
+          msg
         )
       }
     }
