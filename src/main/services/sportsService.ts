@@ -210,8 +210,14 @@ export interface GameDetail extends Game {
     // ESPN headshot URL when available — typically a circular CDN
     // image at /i/headshots/.../full.png. Null when ESPN didn't ship
     // one for this athlete (occasional rookies or back-of-bench
-    // players in non-major leagues). Renderer falls back to initials.
+    // players in non-major leagues). Renderer falls back to team
+    // logo, then to initials.
     headshotURL: string | null
+    // Team crest URL — the leader's team logo, used as a graceful
+    // visual fallback when the player headshot 404s. Soccer leagues
+    // in particular often lack player headshots on ESPN's CDN, so
+    // every soccer leader would otherwise render as bare initials.
+    teamLogoURL: string | null
   }>
   highlightSearchQuery: string
   linescore?: Linescore
@@ -800,6 +806,7 @@ interface EspnBoxscorePlayerStatGroup {
     position?: { abbreviation?: string; displayName?: string }
     stats?: string[]
     athlete?: {
+      id?: string | number
       displayName?: string
       shortName?: string
       position?: { abbreviation?: string; displayName?: string }
@@ -918,6 +925,7 @@ function extractGameDetail(
       //      deterministic and serves the same image you see on
       //      espn.com/{sport}/player/_/id/{id}. The leader payload
       //      often omits the headshot field but always has the id.
+      //   3. Team logo (renderer-side fallback when image load fails).
       const rawHeadshot = top.athlete?.headshot
       let headshotURL =
         typeof rawHeadshot === 'string'
@@ -926,12 +934,14 @@ function extractGameDetail(
       if (!headshotURL && top.athlete?.id !== undefined) {
         headshotURL = buildEspnHeadshotUrl(leagueId, String(top.athlete.id))
       }
+      const teamLogoURL = side === 'home' ? base.home.logoURL : base.away.logoURL
       leaders.push({
         team: side,
         category: cat.displayName ?? cat.name ?? '',
         athlete: top.athlete?.displayName ?? top.athlete?.shortName ?? '',
         value: top.displayValue ?? '',
-        headshotURL: headshotURL && headshotURL.startsWith('http') ? headshotURL : null
+        headshotURL: headshotURL && headshotURL.startsWith('http') ? headshotURL : null,
+        teamLogoURL: teamLogoURL ?? null
       })
     }
   })
@@ -953,7 +963,102 @@ function extractGameDetail(
       ? extractPlayerStats(summary, base)
       : undefined
 
+  // ESPN's standard NBA leaders block ships Points, Assists, Rebounds —
+  // and skips 3-pointers even though the boxscore carries the data.
+  // Compute a 3PM leader per side from the player stats so the panel
+  // gets a fourth row for NBA games.
+  if (leagueId === 'nba' && playerStats) {
+    for (const side of ['home', 'away'] as const) {
+      const teamPlayers = playerStats.find((t) => t.team === side)
+      if (!teamPlayers) continue
+      const top = pickTop3PMLeader(teamPlayers, summary, side)
+      if (!top) continue
+      // Skip if a 3-pointer leader is already present (defensive — in
+      // case ESPN starts shipping it natively for some games).
+      if (
+        leaders.some(
+          (l) =>
+            l.team === side &&
+            /^3[-\s]?(point|pt)|three[-\s]?point/i.test(l.category)
+        )
+      ) {
+        continue
+      }
+      const teamLogoURL = side === 'home' ? base.home.logoURL : base.away.logoURL
+      leaders.push({
+        team: side,
+        category: '3-pointers',
+        athlete: top.athlete,
+        value: top.value,
+        headshotURL: top.headshotURL,
+        teamLogoURL: teamLogoURL ?? null
+      })
+    }
+  }
+
   return { ...base, stats, leaders, headlines, highlightSearchQuery, linescore, playerStats }
+}
+
+// Walk a team's NBA player-stats groups to find the player with the
+// most made 3-pointers. ESPN's 3PT stat is formatted "made-attempted"
+// (e.g., "5-12"); we parse the made portion. Ties broken by attempts
+// — fewer attempts wins (better efficiency).
+function pickTop3PMLeader(
+  teamPlayers: TeamPlayerStats,
+  summary: EspnSummaryJson,
+  side: 'home' | 'away'
+): { athlete: string; value: string; headshotURL: string | null } | null {
+  for (const group of teamPlayers.groups) {
+    const idx = group.labels.findIndex((l) => /^3pt$|^3-?pt$|^3p$/i.test(l.trim()))
+    if (idx < 0) continue
+    let bestMade = -1
+    let bestAttempts = Number.POSITIVE_INFINITY
+    let bestPlayer: PlayerStatLine | null = null
+    for (const p of group.players) {
+      const raw = p.stats[idx] ?? ''
+      const m = raw.match(/^(\d+)\s*[-/]\s*(\d+)/)
+      if (!m) continue
+      const made = Number(m[1])
+      const attempts = Number(m[2])
+      if (!Number.isFinite(made)) continue
+      if (
+        made > bestMade ||
+        (made === bestMade && attempts < bestAttempts)
+      ) {
+        bestMade = made
+        bestAttempts = Number.isFinite(attempts) ? attempts : Number.POSITIVE_INFINITY
+        bestPlayer = p
+      }
+    }
+    if (!bestPlayer || bestMade <= 0) continue
+    // Match the leader to an athlete in summary.boxscore.players for
+    // the headshot ID. Match by displayName which is what
+    // extractPlayerStats already populates as `athlete`.
+    let headshotURL: string | null = null
+    const block = (summary.boxscore?.players ?? []).find((p) => {
+      const ha = p.homeAway ?? p.team?.homeAway
+      return ha === side
+    })
+    if (block) {
+      for (const g of block.statistics ?? []) {
+        for (const a of g.athletes ?? []) {
+          const name = a.athlete?.displayName ?? a.athlete?.shortName ?? ''
+          if (name === bestPlayer.athlete) {
+            const id = a.athlete?.id !== undefined ? String(a.athlete.id) : null
+            if (id) headshotURL = buildEspnHeadshotUrl('nba', id)
+            break
+          }
+        }
+        if (headshotURL) break
+      }
+    }
+    return {
+      athlete: bestPlayer.athlete,
+      value: `${bestMade}-${bestAttempts === Number.POSITIVE_INFINITY ? '?' : bestAttempts}`,
+      headshotURL
+    }
+  }
+  return null
 }
 
 function extractLinescore(summary: EspnSummaryJson, base: Game): Linescore | undefined {

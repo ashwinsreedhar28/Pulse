@@ -5749,26 +5749,46 @@ function leaderInitials(athlete: string): string {
 
 function LeaderHeadshot({
   url,
+  teamLogoURL,
   athlete
 }: {
   url: string | null
+  teamLogoURL: string | null
   athlete: string
 }): JSX.Element {
-  // Track failed image loads so the initials fallback kicks in
-  // gracefully when ESPN's CDN 404s a headshot (occasional rookies,
-  // recent transfers, soccer reserves). Resets when url changes.
-  const [failed, setFailed] = useState(false)
+  // Resolution order: player headshot → team crest → initials.
+  // Soccer leagues rarely ship player headshots, so the team crest
+  // fallback is what gives those panels visual identity.
+  // 'player' state is "primary URL succeeds"; 'team' is "primary
+  // failed, try team logo"; 'initials' is "both failed or missing".
+  type Stage = 'player' | 'team' | 'initials'
+  const initialStage: Stage = url ? 'player' : teamLogoURL ? 'team' : 'initials'
+  const [stage, setStage] = useState<Stage>(initialStage)
   useEffect(() => {
-    setFailed(false)
-  }, [url])
-  if (url && !failed) {
+    setStage(url ? 'player' : teamLogoURL ? 'team' : 'initials')
+  }, [url, teamLogoURL])
+
+  if (stage === 'player' && url) {
     return (
       <img
         src={url}
         alt={athlete}
         loading="lazy"
-        onError={() => setFailed(true)}
+        onError={() => setStage(teamLogoURL ? 'team' : 'initials')}
         className="w-16 h-16 rounded-full object-cover bg-surface-2 ring-1 ring-edge shrink-0"
+      />
+    )
+  }
+  if (stage === 'team' && teamLogoURL) {
+    return (
+      <img
+        src={teamLogoURL}
+        alt={`${athlete} (team crest)`}
+        loading="lazy"
+        onError={() => setStage('initials')}
+        // contain — team crests aren't square headshots; cover would
+        // crop the wordmark on horizontal logos.
+        className="w-16 h-16 rounded-full object-contain bg-surface-2 ring-1 ring-edge shrink-0 p-1.5"
       />
     )
   }
@@ -5803,7 +5823,11 @@ function LeaderColumn({
             key={i}
             className="grid grid-cols-[64px_1fr_auto] items-center gap-3"
           >
-            <LeaderHeadshot url={l.headshotURL} athlete={l.athlete} />
+            <LeaderHeadshot
+              url={l.headshotURL}
+              teamLogoURL={l.teamLogoURL}
+              athlete={l.athlete}
+            />
             <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 leading-tight mb-1">
                 {l.category}

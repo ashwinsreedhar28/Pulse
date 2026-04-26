@@ -778,9 +778,12 @@ export interface GameDetail extends Game {
     category: string
     athlete: string
     value: string
-    // ESPN headshot URL when available; null when missing (renderer
-    // falls back to initials).
+    // ESPN headshot URL when available; null when missing.
     headshotURL: string | null
+    // Team crest URL — used as a graceful fallback when the player
+    // headshot 404s (common for soccer leagues; ESPN's CDN doesn't
+    // ship player photos for many MLS / La Liga / EPL athletes).
+    teamLogoURL: string | null
   }>
   highlightSearchQuery: string
   linescore?: Linescore
