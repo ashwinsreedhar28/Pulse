@@ -835,13 +835,15 @@ interface EspnSummaryJson {
       leaders?: Array<{
         displayValue?: string
         athlete?: {
+          id?: string | number
           displayName?: string
           shortName?: string
           team?: { id?: string | number }
           // ESPN's gamecast response includes a headshot href on the
           // athlete entry. Sometimes nested as { headshot: { href } },
-          // occasionally as a bare string. We accept either to be
-          // robust across leagues.
+          // occasionally as a bare string, occasionally absent
+          // entirely. When absent we construct from the athlete id
+          // using ESPN's deterministic CDN URL pattern.
           headshot?: string | { href?: string }
         }
       }>
@@ -909,12 +911,21 @@ function extractGameDetail(
     for (const cat of block.leaders ?? []) {
       const top = cat.leaders?.[0]
       if (!top) continue
-      // Headshot href can come back as a string OR { href }. Normalize.
+      // Headshot resolution order:
+      //   1. Direct field on athlete (string OR { href })
+      //   2. Constructed from athlete id via ESPN's CDN pattern —
+      //      ESPN's `/i/headshots/{sport}/players/full/{id}.png` is
+      //      deterministic and serves the same image you see on
+      //      espn.com/{sport}/player/_/id/{id}. The leader payload
+      //      often omits the headshot field but always has the id.
       const rawHeadshot = top.athlete?.headshot
-      const headshotURL =
+      let headshotURL =
         typeof rawHeadshot === 'string'
           ? rawHeadshot
           : rawHeadshot?.href ?? null
+      if (!headshotURL && top.athlete?.id !== undefined) {
+        headshotURL = buildEspnHeadshotUrl(leagueId, String(top.athlete.id))
+      }
       leaders.push({
         team: side,
         category: cat.displayName ?? cat.name ?? '',
@@ -1051,6 +1062,39 @@ function extractPlayerStats(
     if (groups.length > 0) out.push({ team: side, groups })
   }
   return out.length > 0 ? out : undefined
+}
+
+// ESPN serves player headshots from a deterministic CDN URL keyed by
+// league + athlete id. When the leader payload omits the inline
+// headshot field, the constructed URL is the same image — and works
+// even for players ESPN didn't bother enriching the leader entry for.
+//
+// Sport segment in the URL matches the major league name: "nba",
+// "nfl", "mlb", "nhl", "soccer", "wnba", etc. League-id mapping
+// kept tight here so a future league addition needs an explicit
+// entry — silently constructing a wrong-sport URL would 404 every
+// headshot for that league.
+const ESPN_HEADSHOT_SPORT_BY_LEAGUE: Record<string, string> = {
+  nba: 'nba',
+  nfl: 'nfl',
+  mlb: 'mlb',
+  nhl: 'nhl',
+  // ESPN groups all club-soccer leagues under /i/headshots/soccer/.
+  ucl: 'soccer',
+  uel: 'soccer',
+  epl: 'soccer',
+  laliga: 'soccer',
+  seriea: 'soccer',
+  mls: 'soccer',
+  bundesliga: 'soccer',
+  ligue1: 'soccer'
+}
+
+function buildEspnHeadshotUrl(leagueId: string, athleteId: string): string | null {
+  const sport = ESPN_HEADSHOT_SPORT_BY_LEAGUE[leagueId.toLowerCase()]
+  if (!sport) return null
+  if (!athleteId || !/^\d+$/.test(athleteId)) return null
+  return `https://a.espncdn.com/i/headshots/${sport}/players/full/${athleteId}.png`
 }
 
 function buildHighlightQuery(game: Game): string {
