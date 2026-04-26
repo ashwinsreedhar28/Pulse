@@ -14,6 +14,7 @@ import type {
   CompanyValueChainEdgeSource,
   CompanyValueChainRow,
   GraphEdgeOverride,
+  GraphNodeOverride,
   Ticker
 } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
@@ -87,6 +88,7 @@ export function UnifiedValueChainCard({
   const upper = symbol.toUpperCase()
   const [row, setRow] = useState<CompanyValueChainRow | null | undefined>(undefined)
   const [overrides, setOverrides] = useState<GraphEdgeOverride[]>([])
+  const [nodeOverrides, setNodeOverrides] = useState<GraphNodeOverride[]>([])
   const [working, setWorking] = useState(false)
 
   const reload = useCallback((): Promise<void> => {
@@ -113,11 +115,25 @@ export function UnifiedValueChainCard({
       .catch(() => setOverrides([]))
   }, [upper])
 
+  // Node overrides feed counterparty stage/name lookups for cross-chain
+  // edges. Without these, an absorbed counterparty (a ticker whose chain
+  // hasn't been generated yet but appears in another chain's edges) hits
+  // `undefined` in the node map, the stage drops to '', and useStageGroups
+  // filters it out — producing the "count=N but list is empty" symptom
+  // ValueChain.tsx already documented and fixed for the focus panel.
+  const reloadNodeOverrides = useCallback((): Promise<void> => {
+    return window.api.graph
+      .listNodeOverrides()
+      .then(setNodeOverrides)
+      .catch(() => setNodeOverrides([]))
+  }, [])
+
   useEffect(() => {
     setRow(undefined)
     void reload()
     void reloadOverrides()
-  }, [reload, reloadOverrides])
+    void reloadNodeOverrides()
+  }, [reload, reloadOverrides, reloadNodeOverrides])
 
   useEffect(() => {
     return window.api.stocks.onCompanyChainUpdated((updated) => {
@@ -126,12 +142,16 @@ export function UnifiedValueChainCard({
     })
   }, [reload, upper])
   // graph:updated fires whenever the override table changes (any chain
-  // regen anywhere absorbs into it). Refresh cross-chain mentions then.
+  // regen anywhere absorbs into it). Refresh cross-chain edges AND node
+  // overrides — the latter is needed so newly-absorbed counterparties
+  // get a stage assigned (otherwise useStageGroups filters them out and
+  // the cluster shows count > 0 but renders no chips).
   useEffect(() => {
     return window.api.graph.onUpdated(() => {
       void reloadOverrides()
+      void reloadNodeOverrides()
     })
-  }, [reloadOverrides])
+  }, [reloadOverrides, reloadNodeOverrides])
 
   const onGenerate = async (force = false): Promise<void> => {
     setWorking(true)
@@ -152,11 +172,11 @@ export function UnifiedValueChainCard({
     // back." Once the regen finishes, status flips to 'ready' and the
     // saved graph swaps in cleanly.
     if (row?.graph && row.graph.edges.length > 0) {
-      return prepareFromGenerated(row, tickers, overrides, upper)
+      return prepareFromGenerated(row, tickers, overrides, nodeOverrides, upper)
     }
     // Fallback: curated supplyChainGraph.json entry, if any.
     return prepareFromCurated(upper, tickers)
-  }, [row, tickers, upper, overrides])
+  }, [row, tickers, upper, overrides, nodeOverrides])
 
   // Still waiting on the first getCompanyChain() response — render a
   // silent placeholder to avoid flashing the cold state then immediately
@@ -402,6 +422,14 @@ function prepareFromGenerated(
   // are deduped — focus's own edge wins because it has the model's
   // intended note + citation set.
   crossChainOverrides: GraphEdgeOverride[],
+  // Node overrides from the unified graph. Without these, cross-chain
+  // counterparty symbols (a competitor or supplier whose own chain
+  // hasn't been generated yet but who appears in another chain's edges)
+  // hit `undefined` in nodeBySymbol, the toCounterparty stage falls to
+  // '', and useStageGroups filters them out — producing the "count=N
+  // but list is empty" symptom. ValueChain.tsx fixed this for the focus
+  // panel via mergedNodes; we mirror that here.
+  nodeOverrides: GraphNodeOverride[],
   upper: string
 ): PreparedChain | null {
   const graph = row.graph
@@ -417,7 +445,28 @@ function prepareFromGenerated(
   for (const s of CHAIN.stages) {
     if (!stageLabelById.has(s.id)) stageLabelById.set(s.id, s.label)
   }
-  const nodeBySymbol = new Map(graph.nodes.map((n) => [n.symbol.toUpperCase(), n]))
+  const nodeBySymbol = new Map<
+    string,
+    { stage: string; name: string | null; blurb: string | null }
+  >()
+  // Focus-chain nodes win when the same symbol exists in both — they
+  // carry the model's intended stage assignment for that chain's
+  // perspective (and graph-wide overrides may have been inherited from
+  // a different focus's classification).
+  for (const o of nodeOverrides) {
+    nodeBySymbol.set(o.symbol.toUpperCase(), {
+      stage: o.stage,
+      name: o.name,
+      blurb: o.blurb
+    })
+  }
+  for (const n of graph.nodes) {
+    nodeBySymbol.set(n.symbol.toUpperCase(), {
+      stage: n.stage,
+      name: n.name,
+      blurb: n.blurb ?? null
+    })
+  }
   const nameBySymbol = new Map<string, string>()
   for (const t of tickers) nameBySymbol.set(t.symbol.toUpperCase(), t.companyName)
 
