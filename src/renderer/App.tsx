@@ -701,6 +701,7 @@ export default function App(): JSX.Element {
             articles={articles}
             loading={loading}
             onSelect={handleSelect}
+            onOpenAnyArticle={handleTickerOpenArticle}
             onRefresh={handleRefresh}
             calendarFilter={calendarFilter}
             onOpenStock={handleTickerOpenStock}
@@ -1643,6 +1644,7 @@ function FeedView({
   articles,
   loading,
   onSelect,
+  onOpenAnyArticle,
   onRefresh,
   calendarFilter,
   onOpenStock,
@@ -1655,6 +1657,13 @@ function FeedView({
   articles: Article[]
   loading: boolean
   onSelect: (id: number) => void
+  // Open an article that may not be in the currently-rendered articles
+  // array (e.g. a MorningBrief citation referencing a different category).
+  // The App handler resets filters + refreshes the article list so the
+  // selected article actually shows up in ArticleReader. Without this,
+  // setSelectedId on an out-of-view article finds no match in `articles`
+  // and silently no-ops.
+  onOpenAnyArticle: (id: number) => void
   onRefresh: () => Promise<void>
   calendarFilter: 'all' | 'finance' | 'news'
   onOpenStock: (symbol: string) => void
@@ -1696,7 +1705,7 @@ function FeedView({
     <div className="h-full overflow-y-auto" data-lookup-context={lookupContext}>
       <FeedHeader heading={heading} totalCount={articles.length} urgentCount={urgentCount} unreadCount={unreadCount} />
       <MacroPanel />
-      <MorningBrief onOpenArticle={onSelect} onOpenSymbol={onOpenStock} />
+      <MorningBrief onOpenArticle={onOpenAnyArticle} onOpenSymbol={onOpenStock} />
       <CalendarStrip
         filter={calendarFilter}
         onOpenStock={onOpenStock}
