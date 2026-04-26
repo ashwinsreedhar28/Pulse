@@ -821,11 +821,39 @@ function TitleBar({
 }): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [aiStatus, setAiStatus] = useState<'online' | 'offline'>('offline')
+  // Presentation mode pauses the perpetual marquee animations + the
+  // accent-dot ping. Avoids visible flicker when Pulse is being screen-
+  // shared on macOS (Zoom/Meet/etc.) — the OS capture cadence doesn't
+  // line up with the GPU compositor's animation refresh. State is
+  // mirrored to body.pulse-presenting (CSS picks it up) and persisted
+  // to localStorage so it survives reloads.
+  const [presenting, setPresenting] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem('pulse:presenting') === '1'
+  })
 
   useEffect(() => {
     void window.api.app.getOllamaStatus().then(setAiStatus)
     const unsub = window.api.app.onOllamaStatusChange(setAiStatus)
     return unsub
+  }, [])
+
+  useEffect(() => {
+    document.body.classList.toggle('pulse-presenting', presenting)
+    window.localStorage.setItem('pulse:presenting', presenting ? '1' : '0')
+  }, [presenting])
+
+  // Cmd+Shift+P toggles presentation mode globally. Use Shift+P to keep
+  // the gesture distinct from Chromium's default Cmd+P (print).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        setPresenting((p) => !p)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   const click = async (): Promise<void> => {
@@ -867,6 +895,23 @@ function TitleBar({
           />
           AI
         </span>
+        <button
+          onClick={() => setPresenting((p) => !p)}
+          className={`no-drag w-6 h-6 flex items-center justify-center rounded hover:bg-surface-2 ${
+            presenting
+              ? 'text-sky-300 bg-sky-500/10 ring-1 ring-inset ring-sky-500/40'
+              : 'text-zinc-400 hover:text-zinc-100'
+          }`}
+          title={
+            presenting
+              ? 'Presentation mode ON — marquee paused for screen-share. Cmd+Shift+P'
+              : 'Pause marquee for screen-share (Cmd+Shift+P)'
+          }
+          aria-label="Toggle presentation mode"
+          aria-pressed={presenting}
+        >
+          {presenting ? '⏸' : '⏵'}
+        </button>
         <button
           onClick={click}
           disabled={busy}

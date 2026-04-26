@@ -379,6 +379,20 @@ body.pulse-hidden *::after {
   animation-play-state: paused !important;
 }
 
+/* Presentation mode — pauses the perpetual marquee animations + the
+   accent-dot pulse-ping. The marquee in particular shows up as visible
+   flicker/jitter when Pulse is being captured by macOS screen-share
+   (Zoom / Meet / etc.) because the OS capture sampling cadence doesn't
+   line up with the GPU compositor's animation refresh. Pausing the
+   animations is the cleanest fix for screen-shares; user toggles it
+   via a button in the title bar or Cmd+Shift+P. State is persisted to
+   localStorage by App.tsx. */
+body.pulse-presenting .animate-ticker,
+body.pulse-presenting .animate-ping,
+body.pulse-presenting .animate-pulse {
+  animation-play-state: paused !important;
+}
+
 /* Score flourish — fired when a team's score increases during a live game.
    Pops in with a small overshoot, floats upward, then fades. Auto-removed by
    the hook after ~2.5s so no JS cleanup needed per animation. */
