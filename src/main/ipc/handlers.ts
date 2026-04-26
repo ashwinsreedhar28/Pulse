@@ -783,8 +783,10 @@ export function registerDbIpc(): void {
     (_e, leagueId: string, leaguePath: string, eventId: string) =>
       getGameDetail(leagueId, leaguePath, eventId)
   )
-  ipcMain.handle('sports:listLeagueLeaders', (_e, leagueId: string) =>
-    listLeagueLeaders(leagueId)
+  ipcMain.handle(
+    'sports:listLeagueLeaders',
+    (_e, leagueId: string, seasonType?: 'regular' | 'postseason') =>
+      listLeagueLeaders(leagueId, seasonType ?? 'regular')
   )
   ipcMain.handle('sports:listTeamLeaders', (_e, leagueId: string, teamId: string) =>
     listTeamLeaders(leagueId, teamId)

@@ -28,11 +28,16 @@ export interface SportsLeague {
   // the renderer can default to a league that's actually in
   // session (e.g. avoid landing on NFL in July).
   inSeason: boolean
+  // True when the league is currently in its postseason window
+  // (NBA / NFL / MLB / NHL / CFP). Drives the orange "Playoffs"
+  // pill on the league tab and splits the league-leaders panel
+  // into Playoffs / Regular Season boxes.
+  inPlayoffs: boolean
 }
 
-// Internal catalog. inSeason is computed per-call in listLeagues since
-// it changes with the date.
-type LeagueCatalogEntry = Omit<SportsLeague, 'inSeason'>
+// Internal catalog. inSeason / inPlayoffs are computed per-call in
+// listLeagues since they change with the date.
+type LeagueCatalogEntry = Omit<SportsLeague, 'inSeason' | 'inPlayoffs'>
 const LEAGUE_CATALOG: LeagueCatalogEntry[] = [
   { id: 'nfl', name: 'NFL', shortName: 'NFL', sport: 'American Football', paths: ['football/nfl'] },
   { id: 'nba', name: 'NBA', shortName: 'NBA', sport: 'Basketball', paths: ['basketball/nba'] },
@@ -322,6 +327,19 @@ export interface Game {
   venue: string | null
   broadcasts: string[]
   note: string | null
+  // Playoff series summary, populated when ESPN's competition payload
+  // includes a multi-game series (NBA / NHL playoff rounds, MLB
+  // postseason rounds, NBA Finals, World Series, Stanley Cup Final).
+  // Shape: each side's win count + a short title like "Western
+  // Conference Finals" or "World Series". Null for regular-season
+  // games and for one-off knockout fixtures (CFP semifinals, Super
+  // Bowl) where there's no series record to track.
+  series: {
+    title: string | null
+    homeWins: number
+    awayWins: number
+    summary: string | null
+  } | null
 }
 
 export interface GameDetailStat {
@@ -411,32 +429,59 @@ const teamsCache = new Map<string, ScoreboardCacheEntry<SportsTeam[]>>()
 const TEAMS_TTL_MS = 24 * 60 * 60 * 1000
 const SEASON_TTL_MS = 5 * 60 * 1000
 
-// True when the current date sits inside the league's season window.
-// Season windows are hardcoded in SEASON_WINDOWS above. Leagues we
-// haven't tagged with a window default to true (we don't want to
-// hide e.g. cricket just because we don't track its calendar).
-export function isLeagueInSeason(leagueId: string): boolean {
-  const window = SEASON_WINDOWS[leagueId]
-  if (!window) return true
+// Hardcoded playoff windows for US sports leagues. Used to surface
+// a "Playoffs" pill in the league tab strip and to split the league-
+// leaders panel into Playoffs / Regular Season collapsible boxes
+// when postseason play is active. Soccer leagues don't use a
+// playoffs format that fits this model (knockouts vary by league)
+// so they're omitted; CFB has the College Football Playoff window.
+const PLAYOFF_WINDOWS: Record<string, SeasonWindow> = {
+  nba: { startMonth: 3, startDay: 15, endMonth: 5, endDay: 25 }, // mid-Apr → late Jun (Finals end)
+  nfl: { startMonth: 0, startDay: 5, endMonth: 1, endDay: 15 }, // early Jan → mid Feb (Super Bowl)
+  mlb: { startMonth: 9, startDay: 1, endMonth: 10, endDay: 5 }, // Oct → early Nov (World Series)
+  nhl: { startMonth: 3, startDay: 10, endMonth: 5, endDay: 25 }, // mid-Apr → late Jun (Stanley Cup)
+  ncaaf: { startMonth: 11, startDay: 18, endMonth: 0, endDay: 15 } // mid-Dec → mid-Jan (CFP)
+}
+
+// Generic month-day-window membership check shared by season and
+// playoff detection. Cross-year windows (e.g. NFL Sep 1 → Feb 15)
+// resolve via OR'd bounds; same-year windows by AND'd bounds.
+function isInsideWindow(window: SeasonWindow): boolean {
   const now = new Date()
-  // Encode month-day as a numeric MMDD so we can compare without
-  // worrying about year boundaries directly. February 15 → 0215,
-  // September 1 → 0901, etc. Months are 0-indexed in Date so we
-  // shift by 1 to land on calendar months in MMDD.
   const nowKey = (now.getMonth() + 1) * 100 + now.getDate()
   const startKey = (window.startMonth + 1) * 100 + window.startDay
   const endKey = (window.endMonth + 1) * 100 + window.endDay
-  // Cross-year window (e.g. NFL Sep 1 → Feb 15): in season if we're
-  // past the start in the calendar year OR before the end. Same-year
-  // windows just need both bounds inclusive.
   if (window.startMonth > window.endMonth) {
     return nowKey >= startKey || nowKey <= endKey
   }
   return nowKey >= startKey && nowKey <= endKey
 }
 
+// True when the current date sits inside the league's season window.
+// Leagues we haven't tagged default to true (we don't want to hide
+// e.g. cricket just because we don't track its calendar).
+export function isLeagueInSeason(leagueId: string): boolean {
+  const window = SEASON_WINDOWS[leagueId]
+  if (!window) return true
+  return isInsideWindow(window)
+}
+
+// True when the current date sits inside the league's playoff window.
+// Soccer leagues + leagues without a fixed postseason window return
+// false — surfacing a "Playoffs" pill on continuous-format leagues
+// would be misleading.
+export function isLeagueInPlayoffs(leagueId: string): boolean {
+  const window = PLAYOFF_WINDOWS[leagueId]
+  if (!window) return false
+  return isInsideWindow(window)
+}
+
 export function listLeagues(): SportsLeague[] {
-  return LEAGUE_CATALOG.map((l) => ({ ...l, inSeason: isLeagueInSeason(l.id) }))
+  return LEAGUE_CATALOG.map((l) => ({
+    ...l,
+    inSeason: isLeagueInSeason(l.id),
+    inPlayoffs: isLeagueInPlayoffs(l.id)
+  }))
 }
 
 export async function listTeams(leagueId: string): Promise<SportsTeam[]> {
@@ -769,36 +814,50 @@ function parseLeaderCategories(payload: EspnLeadersPayload): StatCategory[] {
   return out
 }
 
-export async function listLeagueLeaders(leagueId: string): Promise<StatCategory[]> {
+// ESPN's leaders endpoint accepts a seasontype query parameter:
+//   1 = pre-season, 2 = regular season, 3 = postseason, 4 = off-season
+// We only ask for 2 (default) or 3 — pre-season + off-season aren't
+// useful for league-page leaderboards. When seasontype is omitted
+// ESPN returns the most recent in-progress season segment, which
+// usually aligns with regular season but can flip to postseason
+// during playoff months.
+export type SeasonType = 'regular' | 'postseason'
+
+export async function listLeagueLeaders(
+  leagueId: string,
+  seasonType: SeasonType = 'regular'
+): Promise<StatCategory[]> {
   const league = LEAGUES.find((l) => l.id === leagueId)
   if (!league) return []
   // ESPN's public API has no /leaders endpoint for soccer leagues — the call
   // always 404s. Short-circuit to avoid log spam and wasted round-trips.
   if (league.sport === 'Soccer') return []
-  const cached = leadersCache.get(`l:${leagueId}`)
+  const cacheKey = `l:${leagueId}:${seasonType}`
+  const cached = leadersCache.get(cacheKey)
   if (cached && Date.now() - cached.fetchedAt < LEADERS_TTL_MS) return cached.value
+  const seasonTypeNum = seasonType === 'postseason' ? 3 : 2
   // v3 is the current leaders endpoint; v2 is kept as a fallback for leagues
   // (or future API changes) where v3 doesn't exist.
   const bases = [ESPN_BASE_V3, ESPN_BASE]
   for (const path of league.paths) {
     for (const base of bases) {
       try {
-        const url = `${base}/${path}/leaders`
+        const url = `${base}/${path}/leaders?seasontype=${seasonTypeNum}`
         const payload = (await fetchJson(url)) as EspnLeadersPayload
         const cats = parseLeaderCategories(payload)
         if (cats.length > 0) {
-          leadersCache.set(`l:${leagueId}`, { value: cats, fetchedAt: Date.now() })
+          leadersCache.set(cacheKey, { value: cats, fetchedAt: Date.now() })
           return cats
         }
       } catch (err) {
         console.warn(
-          `[sports] leaders ${path} (${base.includes('v3') ? 'v3' : 'v2'}) failed:`,
+          `[sports] leaders ${path} (${base.includes('v3') ? 'v3' : 'v2'}, ${seasonType}) failed:`,
           err instanceof Error ? err.message : err
         )
       }
     }
   }
-  leadersCache.set(`l:${leagueId}`, { value: [], fetchedAt: Date.now() })
+  leadersCache.set(cacheKey, { value: [], fetchedAt: Date.now() })
   return []
 }
 
@@ -879,6 +938,17 @@ interface EspnCompetition {
   competitors?: EspnCompetitor[]
   status?: EspnStatus
   note?: string
+  // Multi-game playoff series metadata. Present when the league
+  // groups games into a Best-of-N series (NBA/NHL playoff rounds,
+  // MLB postseason rounds, NBA Finals, World Series, Stanley Cup).
+  // ESPN's shape varies — sometimes the wins live on `competitors`,
+  // sometimes on a top-level `series` object — we accept both.
+  series?: {
+    title?: string
+    summary?: string
+    competitors?: Array<{ id?: string | number; wins?: number }>
+  }
+  notes?: Array<{ headline?: string; type?: string }>
 }
 
 interface EspnStatus {
@@ -942,6 +1012,15 @@ function buildGameFromEvent(
     else if (b.media?.shortName) broadcasts.push(b.media.shortName)
   }
 
+  // Series metadata — extract wins from competitor records or from
+  // the top-level series object, whichever ESPN populated. The
+  // competitor records for NBA / NHL / MLB postseason often have a
+  // record entry whose type === 'playoff' or 'postseason' summarizing
+  // the series score (e.g. "2-1"). When that's missing we look for
+  // `comp.series.competitors[].wins`. When neither exists we may
+  // still have a notes string ("DEN leads series 3-2") to surface.
+  const series = extractSeriesSummary(comp, homeRaw, awayRaw)
+
   return {
     id: event.id ?? comp.id ?? `${leagueId}-${event.date}`,
     leagueId,
@@ -956,8 +1035,80 @@ function buildGameFromEvent(
     away: toTeam(awayRaw, false),
     venue: venueName,
     broadcasts: Array.from(new Set(broadcasts)),
-    note: comp.note ?? null
+    note: comp.note ?? null,
+    series
   }
+}
+
+function extractSeriesSummary(
+  comp: EspnCompetition,
+  homeRaw: EspnCompetitor,
+  awayRaw: EspnCompetitor
+): Game['series'] {
+  // Path 1: competitor.records includes a "playoff" or "postseason"
+  // entry summarizing the series. Format is usually "W-L" — we parse
+  // both sides.
+  const seriesType = /playoff|postseason/i
+  const homeRec = (homeRaw.records ?? []).find((r) => seriesType.test(r.type ?? ''))
+  const awayRec = (awayRaw.records ?? []).find((r) => seriesType.test(r.type ?? ''))
+  let homeWins: number | null = null
+  let awayWins: number | null = null
+  if (homeRec?.summary) {
+    const m = homeRec.summary.match(/^(\d+)\s*-\s*(\d+)/)
+    if (m) homeWins = Number(m[1])
+  }
+  if (awayRec?.summary) {
+    const m = awayRec.summary.match(/^(\d+)\s*-\s*(\d+)/)
+    if (m) awayWins = Number(m[1])
+  }
+  // Path 2: top-level series object.
+  if (homeWins === null || awayWins === null) {
+    const ss = comp.series
+    if (ss?.competitors) {
+      for (const c of ss.competitors) {
+        if (typeof c.wins !== 'number') continue
+        const cid = c.id !== undefined ? String(c.id) : ''
+        if (homeWins === null && cid === String(homeRaw.id ?? homeRaw.team?.id ?? '')) {
+          homeWins = c.wins
+        } else if (awayWins === null && cid === String(awayRaw.id ?? awayRaw.team?.id ?? '')) {
+          awayWins = c.wins
+        }
+      }
+    }
+  }
+  // Title resolution: prefer the explicit series.title, then a
+  // notes headline starting with the series name. Falls back to null.
+  let title: string | null = comp.series?.title ?? comp.series?.summary ?? null
+  if (!title && Array.isArray(comp.notes)) {
+    const seriesNote = comp.notes.find((n) =>
+      /series|finals|championship|conference/i.test(n.headline ?? '')
+    )
+    if (seriesNote?.headline) title = seriesNote.headline
+  }
+  // Summary text — use notes when available since it's already
+  // human-readable ("Heat lead series 3-2"). Otherwise derive from
+  // the wins themselves.
+  let summary: string | null = null
+  if (Array.isArray(comp.notes)) {
+    const seriesNote = comp.notes.find((n) =>
+      /series|leads|tied|wins/i.test(n.headline ?? '')
+    )
+    if (seriesNote?.headline) summary = seriesNote.headline
+  }
+  if (homeWins !== null && awayWins !== null) {
+    return {
+      title,
+      homeWins,
+      awayWins,
+      summary
+    }
+  }
+  // Series info present (title/summary) but no parsed wins — still
+  // worth surfacing the headline.
+  if (title || summary) {
+    return { title, homeWins: 0, awayWins: 0, summary }
+  }
+  return null
 }
 
 function toTeam(raw: EspnCompetitor, isHome: boolean): GameTeam {

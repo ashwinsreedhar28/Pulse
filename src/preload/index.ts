@@ -701,6 +701,11 @@ export interface SportsLeague {
   // window. Renderer uses this to default the active tab to a league
   // that's actually in session — avoids landing on NFL in July.
   inSeason: boolean
+  // True when the league is currently in its postseason window
+  // (NBA / NFL / MLB / NHL / CFP). Drives the orange Playoffs pill
+  // on the league tab and the Playoffs/Regular-Season split on the
+  // league-leaders panel.
+  inPlayoffs: boolean
 }
 
 // NCAA conferences (returned by sports.listNcaaConferences). Used to
@@ -743,6 +748,17 @@ export interface Game {
   venue: string | null
   broadcasts: string[]
   note: string | null
+  // Playoff series record. Populated for multi-game series (NBA/NHL
+  // playoff rounds, MLB postseason rounds, NBA Finals, World Series,
+  // Stanley Cup Final). Renderer surfaces "homeWins-awayWins" + the
+  // series title in the game card during playoff windows. Null for
+  // regular-season + one-off knockouts (Super Bowl, CFP semifinals).
+  series: {
+    title: string | null
+    homeWins: number
+    awayWins: number
+    summary: string | null
+  } | null
 }
 
 export interface GameDetailStat {
@@ -1677,8 +1693,8 @@ const api = {
     listTeams: (leagueId: string) => invoke<SportsTeam[]>('sports:listTeams', leagueId),
     getGameDetail: (leagueId: string, leaguePath: string, eventId: string) =>
       invoke<GameDetail | null>('sports:getGameDetail', leagueId, leaguePath, eventId),
-    listLeagueLeaders: (leagueId: string) =>
-      invoke<StatCategory[]>('sports:listLeagueLeaders', leagueId),
+    listLeagueLeaders: (leagueId: string, seasonType: 'regular' | 'postseason' = 'regular') =>
+      invoke<StatCategory[]>('sports:listLeagueLeaders', leagueId, seasonType),
     listTeamLeaders: (leagueId: string, teamId: string) =>
       invoke<StatCategory[]>('sports:listTeamLeaders', leagueId, teamId),
     getReelGroups: () => invoke<SportsReelSnapshot>('sports:getReelGroups'),

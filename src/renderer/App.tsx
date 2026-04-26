@@ -8,6 +8,7 @@ import { Reels } from './components/Reels'
 import { CalendarStrip } from './components/CalendarStrip'
 import { ExternalReader } from './components/ExternalReader'
 import { FindBar } from './components/FindBar'
+import { CollapseChevron, useCollapsedSection } from './components/collapseUI'
 import { ValueChain } from './components/ValueChain'
 import { UnifiedValueChainCard } from './components/UnifiedValueChainCard'
 import { ValueChainDiagram } from './components/ValueChainDiagram'
@@ -4416,6 +4417,7 @@ function SportsPage({
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null)
   const [favoriteTeams, setFavoriteTeams] = useState<FavoriteTeam[]>([])
   const [leagueLeaders, setLeagueLeaders] = useState<StatCategory[]>([])
+  const [playoffLeaders, setPlayoffLeaders] = useState<StatCategory[]>([])
   const [teamLeaders, setTeamLeaders] = useState<StatCategory[]>([])
   const [leadersLoading, setLeadersLoading] = useState(false)
   const [teamLeadersLoading, setTeamLeadersLoading] = useState(false)
@@ -4468,26 +4470,47 @@ function SportsPage({
     [favoriteTeams, activeLeagueId]
   )
 
+  const activeLeagueObj = leagues.find((l) => l.id === activeLeagueId) ?? null
+  const isPlayoffs = activeLeagueObj?.inPlayoffs ?? false
+
   useEffect(() => {
     if (!activeLeagueId) return
     let cancelled = false
     setLeagueLeaders([])
+    setPlayoffLeaders([])
     setLeadersLoading(true)
-    void window.api.sports
-      .listLeagueLeaders(activeLeagueId)
-      .then((data) => {
-        if (!cancelled) setLeagueLeaders(data)
-      })
-      .catch(() => {
-        if (!cancelled) setLeagueLeaders([])
-      })
-      .finally(() => {
-        if (!cancelled) setLeadersLoading(false)
-      })
+    // Always pull regular-season leaders. When the league is in
+    // playoff window, fetch postseason leaders in parallel so the
+    // Playoffs box can show alongside Regular Season.
+    const tasks: Promise<unknown>[] = [
+      window.api.sports
+        .listLeagueLeaders(activeLeagueId, 'regular')
+        .then((data) => {
+          if (!cancelled) setLeagueLeaders(data)
+        })
+        .catch(() => {
+          if (!cancelled) setLeagueLeaders([])
+        })
+    ]
+    if (isPlayoffs) {
+      tasks.push(
+        window.api.sports
+          .listLeagueLeaders(activeLeagueId, 'postseason')
+          .then((data) => {
+            if (!cancelled) setPlayoffLeaders(data)
+          })
+          .catch(() => {
+            if (!cancelled) setPlayoffLeaders([])
+          })
+      )
+    }
+    void Promise.all(tasks).finally(() => {
+      if (!cancelled) setLeadersLoading(false)
+    })
     return () => {
       cancelled = true
     }
-  }, [activeLeagueId])
+  }, [activeLeagueId, isPlayoffs])
 
   useEffect(() => {
     if (!activeLeagueId || !favoriteForLeague) {
@@ -4739,11 +4762,23 @@ function SportsPage({
             <button
               key={l.id}
               onClick={() => setActiveLeagueId(l.id)}
-              className={`shrink-0 px-3 py-2 text-[12px] font-semibold tracking-[0.02em] transition-colors relative ${
+              className={`shrink-0 px-3 py-2 text-[12px] font-semibold tracking-[0.02em] transition-colors relative inline-flex items-center gap-1.5 ${
                 active ? 'text-zinc-50' : 'text-zinc-500 hover:text-zinc-200'
               }`}
             >
-              {l.shortName}
+              <span>{l.shortName}</span>
+              {l.inPlayoffs && (
+                // Compact orange dot + pill so the indicator scales
+                // with the tab strip; full "Playoffs" word would
+                // crowd the row at small widths.
+                <span
+                  title="Playoffs in progress"
+                  className="inline-flex items-center gap-1 px-1.5 py-[1px] rounded-full bg-orange-500/15 ring-1 ring-inset ring-orange-500/40 text-[8.5px] font-semibold uppercase tracking-[0.16em] text-orange-300"
+                >
+                  <span className="w-1 h-1 rounded-full bg-orange-400 animate-pulse" />
+                  Playoffs
+                </span>
+              )}
               {active && (
                 <span className="absolute left-2 right-2 -bottom-px h-[2px] bg-orange-400 rounded-full" />
               )}
@@ -4825,18 +4860,51 @@ function SportsPage({
                 />
               ))}
             </div>
-            <LeagueLeadersSection
-              leagueShort={
-                leagues.find((l) => l.id === activeLeagueId)?.shortName ?? ''
-              }
-              categories={leagueLeaders}
-              loading={leadersLoading}
-              leagueId={activeLeagueId}
-              isFavorite={(id) => favoriteAthleteByKey.has(`${activeLeagueId}:${id}`)}
-              onToggleFavorite={(leader) =>
-                activeLeagueId && void toggleFavoriteAthlete(activeLeagueId, leader)
-              }
-            />
+            {isPlayoffs ? (
+              <>
+                <LeagueLeadersSection
+                  leagueShort={activeLeagueObj?.shortName ?? ''}
+                  categories={playoffLeaders}
+                  loading={leadersLoading}
+                  leagueId={activeLeagueId}
+                  segment="playoffs"
+                  segmentTone="orange"
+                  isFavorite={(id) =>
+                    favoriteAthleteByKey.has(`${activeLeagueId}:${id}`)
+                  }
+                  onToggleFavorite={(leader) =>
+                    activeLeagueId && void toggleFavoriteAthlete(activeLeagueId, leader)
+                  }
+                />
+                <LeagueLeadersSection
+                  leagueShort={activeLeagueObj?.shortName ?? ''}
+                  categories={leagueLeaders}
+                  loading={leadersLoading}
+                  leagueId={activeLeagueId}
+                  segment="regular"
+                  segmentTone="sky"
+                  isFavorite={(id) =>
+                    favoriteAthleteByKey.has(`${activeLeagueId}:${id}`)
+                  }
+                  onToggleFavorite={(leader) =>
+                    activeLeagueId && void toggleFavoriteAthlete(activeLeagueId, leader)
+                  }
+                />
+              </>
+            ) : (
+              <LeagueLeadersSection
+                leagueShort={activeLeagueObj?.shortName ?? ''}
+                categories={leagueLeaders}
+                loading={leadersLoading}
+                leagueId={activeLeagueId}
+                isFavorite={(id) =>
+                  favoriteAthleteByKey.has(`${activeLeagueId}:${id}`)
+                }
+                onToggleFavorite={(leader) =>
+                  activeLeagueId && void toggleFavoriteAthlete(activeLeagueId, leader)
+                }
+              />
+            )}
             <TeamLeadersSection
               favorite={favoriteForLeague}
               categories={teamLeaders}
@@ -4872,10 +4940,16 @@ function SportsPage({
 
 function LeagueLeadersSection({
   leagueShort,
+  leagueId,
   categories,
   loading,
   isFavorite,
-  onToggleFavorite
+  onToggleFavorite,
+  // When non-null, prepends a label tag (e.g. "Playoffs",
+  // "Regular Season") to the heading and uses a separate
+  // collapse-state key so each segment remembers its own toggle.
+  segment,
+  segmentTone
 }: {
   leagueShort: string
   categories: StatCategory[]
@@ -4883,32 +4957,65 @@ function LeagueLeadersSection({
   leagueId: string | null
   isFavorite: (athleteId: string) => boolean
   onToggleFavorite: (leader: StatLeader) => void
+  segment?: 'playoffs' | 'regular' | null
+  segmentTone?: 'orange' | 'sky'
 }): JSX.Element | null {
+  // Collapse key is per-league + per-segment so a user's choice on
+  // (NBA Playoffs, collapsed) doesn't bleed into (NBA Regular,
+  // expanded). When no segment is passed we still collapse-key per
+  // league so the choice persists across visits.
+  const collapseKey = `leagueLeaders:${leagueId ?? 'unknown'}:${segment ?? 'all'}`
+  // Default open for playoffs (that's the new/notable view), closed
+  // for regular when segmented (avoids two long lists pre-expanded).
+  const defaultCollapsed = segment === 'regular'
+  const [collapsed, setCollapsed] = useCollapsedSection(collapseKey, defaultCollapsed)
   if (!loading && categories.length === 0) return null
+  const tint = segmentTone ?? 'orange'
+  const baseTitle = leagueShort
+    ? `${leagueShort} Statistical Leaders`
+    : 'Statistical Leaders'
+  const title =
+    segment === 'playoffs'
+      ? `${baseTitle} — Playoffs`
+      : segment === 'regular'
+        ? `${baseTitle} — Regular Season`
+        : baseTitle
   return (
     <section className="mt-10">
-      <div className="flex items-center gap-3 mb-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
-          {leagueShort ? `${leagueShort} Statistical Leaders` : 'Statistical Leaders'}
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center gap-3 mb-3 group"
+      >
+        {segment === 'playoffs' && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-500/10 ring-1 ring-inset ring-orange-500/30 text-[9px] font-semibold uppercase tracking-[0.18em] text-orange-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+            Playoffs
+          </span>
+        )}
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400 group-hover:text-zinc-200 transition-colors">
+          {title}
         </h2>
         <span className="h-px flex-1 bg-edge/80" />
         <span className="text-[10px] tabular-nums text-zinc-500">{categories.length}</span>
-      </div>
-      {loading ? (
-        <div className="py-8 text-center text-[12px] text-zinc-500">Loading leaders…</div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {categories.map((cat) => (
-            <LeaderCategoryCard
-              key={cat.key}
-              category={cat}
-              tint="orange"
-              isFavorite={isFavorite}
-              onToggleFavorite={onToggleFavorite}
-            />
-          ))}
-        </div>
-      )}
+        <CollapseChevron open={!collapsed} />
+      </button>
+      {!collapsed &&
+        (loading ? (
+          <div className="py-8 text-center text-[12px] text-zinc-500">Loading leaders…</div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {categories.map((cat) => (
+              <LeaderCategoryCard
+                key={cat.key}
+                category={cat}
+                tint={tint}
+                isFavorite={isFavorite}
+                onToggleFavorite={onToggleFavorite}
+              />
+            ))}
+          </div>
+        ))}
     </section>
   )
 }
@@ -5287,6 +5394,24 @@ function GameCard({
           {formatGameTime(game)}
         </span>
       </div>
+      {game.series && (
+        // Playoff series header. Shows the round title (e.g. "Western
+        // Conference Finals" or "World Series") plus a compact win
+        // count if ESPN populated the per-team series wins. Tied at
+        // 0-0 means the series just started; we still want the title
+        // visible so the context is clear.
+        <div className="mb-3 px-2 py-1.5 rounded-md bg-orange-500/8 ring-1 ring-inset ring-orange-500/25 flex items-center justify-between gap-2">
+          <span className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-orange-300 truncate">
+            {game.series.title ?? game.series.summary ?? 'Playoff Series'}
+          </span>
+          {(game.series.homeWins > 0 || game.series.awayWins > 0) && (
+            <span className="text-[10.5px] font-semibold tabular-nums text-orange-200 shrink-0">
+              {game.away.abbreviation} {game.series.awayWins} ·{' '}
+              {game.series.homeWins} {game.home.abbreviation}
+            </span>
+          )}
+        </div>
+      )}
       <GameTeamRow
         team={game.away}
         winner={game.away.winner === true}
