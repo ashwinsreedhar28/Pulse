@@ -5668,6 +5668,32 @@ function GameDetailOverlay({
             {displayGame.venue && <span> · {displayGame.venue}</span>}
             {displayGame.broadcasts.length > 0 && <span> · {displayGame.broadcasts.join(', ')}</span>}
           </div>
+          {displayGame.series && (
+            // Mirror the game-card series header on the detail page so
+            // the round + series score stays visible while the user
+            // scrolls through stats. Larger and slightly more prominent
+            // here since the detail page has the room.
+            <div className="mt-3 inline-flex items-center gap-3 px-3 py-1.5 rounded-md bg-orange-500/10 ring-1 ring-inset ring-orange-500/30">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+                {displayGame.series.title ??
+                  displayGame.series.summary ??
+                  'Playoff Series'}
+              </span>
+              {(displayGame.series.homeWins > 0 || displayGame.series.awayWins > 0) && (
+                <span className="text-[12px] font-semibold tabular-nums text-orange-100">
+                  {displayGame.away.abbreviation} {displayGame.series.awayWins} ·{' '}
+                  {displayGame.series.homeWins} {displayGame.home.abbreviation}
+                </span>
+              )}
+              {displayGame.series.summary &&
+                displayGame.series.summary !== displayGame.series.title && (
+                  <span className="text-[10.5px] text-orange-200/80 normal-case tracking-normal">
+                    {displayGame.series.summary}
+                  </span>
+                )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {isPast && (
