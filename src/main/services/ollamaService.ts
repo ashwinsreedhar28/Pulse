@@ -184,9 +184,11 @@ export async function describeCompany(
 
   const system =
     `You write concise investor-facing company descriptions. Given a ticker and company name, ` +
-    `describe in ONE sentence (max 35 words) what the company does: its core business model, ` +
-    `primary products or services, and where it sits in its value chain. No filler, no hype, ` +
-    `no "is a company that". Respond in JSON only: {"description": "..."}`
+    `describe in ONE sentence (max 45 words) what the company does: its core business model, ` +
+    `primary products or services, where it sits in its value chain, and the country (or HQ ` +
+    `city + country) where it is headquartered. The headquarters location is REQUIRED — ` +
+    `include it even if you have to phrase it as "based in [country]" at the end. No filler, ` +
+    `no hype, no "is a company that". Respond in JSON only: {"description": "..."}`
 
   try {
     const controller = new AbortController()

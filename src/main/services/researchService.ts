@@ -44,6 +44,24 @@ const PAPER_FIELDS = [
 // pattern looks abusive.
 const UA = 'Pulse/0.1 (research; ashwin.sreedhar2003@gmail.com)'
 
+// Optional API key — S2 hands out free keys at
+// https://www.semanticscholar.org/product/api#api-key-form which give
+// a dedicated 1 RPS lane outside the anonymous pool. Without a key,
+// we share an aggressively-throttled pool with everyone else and 429s
+// are common during peak hours. Read at module load to avoid the
+// per-call lookup cost.
+const S2_API_KEY = process.env.SEMANTIC_SCHOLAR_API_KEY?.trim() || null
+
+// Tagged error so callers can distinguish "rate limited, retry later"
+// from "search returned nothing". The renderer uses this to show a
+// useful message instead of the misleading "No papers found".
+class S2RateLimitError extends Error {
+  readonly code = 'rate_limited' as const
+  constructor() {
+    super('Semantic Scholar rate limited')
+  }
+}
+
 // ---------- Semantic Scholar shape -----------------------------------------
 
 interface S2Paper {
@@ -118,10 +136,12 @@ async function fetchJsonRaw<T>(url: string): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': UA, Accept: 'application/json' },
-      signal: controller.signal
-    })
+    const headers: Record<string, string> = {
+      'User-Agent': UA,
+      Accept: 'application/json'
+    }
+    if (S2_API_KEY) headers['x-api-key'] = S2_API_KEY
+    const res = await fetch(url, { headers, signal: controller.signal })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return (await res.json()) as T
   } finally {
@@ -129,25 +149,43 @@ async function fetchJsonRaw<T>(url: string): Promise<T> {
   }
 }
 
+// Backoff schedule for 429s. Two retries past the initial attempt —
+// first a short 5s nap to ride out a momentary spike, then a 15s nap
+// for sustained anonymous-pool congestion. If both retries still 429,
+// throw S2RateLimitError so the caller can show a useful message.
+const S2_RETRY_DELAYS_MS = [5_000, 15_000]
+
 async function fetchJson<T>(url: string): Promise<T> {
   // Chain into the queue so concurrent callers are serialized.
   // Each task awaits its slot, runs, and returns its result; the
   // queue advances regardless of success/failure.
   const task = s2Queue.then(async () => {
     await s2Throttle()
-    try {
-      return await fetchJsonRaw<T>(url)
-    } catch (err) {
-      // Single retry on 429 — wait the documented 5s window then
-      // retry once. Anything else (404, 500, network) propagates.
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.includes('HTTP 429')) {
-        await new Promise((resolve) => setTimeout(resolve, 5_000))
+    let lastErr: unknown = null
+    for (let attempt = 0; attempt <= S2_RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        if (attempt === 0) {
+          return await fetchJsonRaw<T>(url)
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, S2_RETRY_DELAYS_MS[attempt - 1])
+        )
         await s2Throttle()
         return await fetchJsonRaw<T>(url)
+      } catch (err) {
+        lastErr = err
+        const msg = err instanceof Error ? err.message : String(err)
+        // Only retry on 429. 404/500/network errors propagate immediately.
+        if (!msg.includes('HTTP 429')) throw err
       }
-      throw err
     }
+    // Exhausted retries — convert to tagged error so the caller can
+    // distinguish from empty-result.
+    console.warn(
+      '[research] Semantic Scholar still rate-limited after retries; surfacing rate_limited to caller',
+      lastErr instanceof Error ? lastErr.message : ''
+    )
+    throw new S2RateLimitError()
   })
   // Replace the queue head so the next caller chains off this task.
   // Catch the rejection on the queue side so a single failure doesn't
@@ -183,6 +221,10 @@ export async function searchPapers(query: string): Promise<ResearchPaper[]> {
   try {
     response = await fetchJson<typeof response>(url)
   } catch (err) {
+    // Rate-limit errors propagate so the caller can render a useful
+    // message. Other errors (network, 5xx) are logged and swallowed
+    // so the UI just shows "no results" rather than crashing.
+    if (err instanceof S2RateLimitError) throw err
     console.warn(
       '[research] Semantic Scholar search failed:',
       err instanceof Error ? err.message : err
@@ -361,7 +403,26 @@ function filterToGroundbreaking(papers: ResearchPaper[]): ResearchPaper[] {
 // ---------- Entry point used by IPC + scheduler ----------------------------
 
 export async function searchAndSynthesize(query: string): Promise<ResearchSearchResult> {
-  const papers = await searchPapers(query)
+  let papers: ResearchPaper[]
+  try {
+    papers = await searchPapers(query)
+  } catch (err) {
+    if (err instanceof S2RateLimitError) {
+      const headline = S2_API_KEY
+        ? 'Semantic Scholar rate-limited — retry in ~30s'
+        : 'Semantic Scholar rate-limited — set SEMANTIC_SCHOLAR_API_KEY for a dedicated lane (free key)'
+      return {
+        brief: {
+          headline,
+          generatedAtIso: new Date().toISOString(),
+          sections: [],
+          inputs: { query, papersConsidered: 0, papersFiltered: 0 }
+        },
+        papers: []
+      }
+    }
+    throw err
+  }
   if (papers.length === 0) {
     return {
       brief: {

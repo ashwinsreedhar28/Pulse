@@ -281,6 +281,7 @@ export default function App(): JSX.Element {
     setDiscoveryOpen(false)
     setHyperOpen(false)
     setReelsOpen(false)
+    setResearchOpen(false)
     setSelectedId(null)
     setExternalView(null)
   }, [])
@@ -291,6 +292,7 @@ export default function App(): JSX.Element {
       setDiscoveryOpen(false)
       setHyperOpen(false)
       setReelsOpen(false)
+      setResearchOpen(false)
       setBookmarksOnly(false)
       setSelectedCategoryId(null)
       setFilter('all')
@@ -310,6 +312,7 @@ export default function App(): JSX.Element {
     setDiscoveryOpen(false)
     setHyperOpen(false)
     setReelsOpen(false)
+    setResearchOpen(false)
     setSelectedId(null)
     setExternalView(null)
   }, [])
@@ -429,6 +432,7 @@ export default function App(): JSX.Element {
       setDiscoveryOpen(false)
       setHyperOpen(false)
       setReelsOpen(false)
+      setResearchOpen(false)
       setSelectedId(articleId)
       void window.api.articles.markRead(articleId, true).then(() => {
         void refresh()
@@ -477,6 +481,7 @@ export default function App(): JSX.Element {
         setDiscoveryOpen(false)
         setHyperOpen(false)
         setReelsOpen(false)
+        setResearchOpen(false)
         setSelectedId(null)
         setExternalView(null)
       }
@@ -587,6 +592,7 @@ export default function App(): JSX.Element {
           setDiscoveryOpen(false)
           setHyperOpen(false)
           setReelsOpen(false)
+          setResearchOpen(false)
         }}
         categories={categories}
         recentCounts={recentCounts}
@@ -598,6 +604,7 @@ export default function App(): JSX.Element {
           setDiscoveryOpen(false)
           setHyperOpen(false)
           setReelsOpen(false)
+          setResearchOpen(false)
         }}
         bookmarksActive={bookmarksOnly}
         bookmarkCount={bookmarkCount}
@@ -608,6 +615,7 @@ export default function App(): JSX.Element {
           setDiscoveryOpen(false)
           setHyperOpen(false)
           setReelsOpen(false)
+          setResearchOpen(false)
         }}
         reelsCount={reelsCount}
         reelsActive={reelsOpen}
@@ -622,6 +630,7 @@ export default function App(): JSX.Element {
           setSportsOpen(false)
           setDiscoveryOpen(false)
           setHyperOpen(false)
+          setResearchOpen(false)
           setBookmarksOnly(false)
           setSelectedId(null)
         }}
@@ -633,6 +642,7 @@ export default function App(): JSX.Element {
           setStocksOpen(false)
           setSportsOpen(false)
           setReelsOpen(false)
+          setResearchOpen(false)
           setBookmarksOnly(false)
           setSelectedId(null)
         }}
@@ -643,6 +653,7 @@ export default function App(): JSX.Element {
           setStocksOpen(false)
           setSportsOpen(false)
           setReelsOpen(false)
+          setResearchOpen(false)
           setBookmarksOnly(false)
           setSelectedId(null)
         }}
@@ -653,6 +664,7 @@ export default function App(): JSX.Element {
           setDiscoveryOpen(false)
           setHyperOpen(false)
           setReelsOpen(false)
+          setResearchOpen(false)
           setBookmarksOnly(false)
           setSelectedId(null)
         }}
@@ -663,6 +675,7 @@ export default function App(): JSX.Element {
           setDiscoveryOpen(false)
           setHyperOpen(false)
           setReelsOpen(false)
+          setResearchOpen(false)
           setBookmarksOnly(false)
           setSelectedId(null)
         }}
@@ -3375,11 +3388,19 @@ function FinancialsDetailSection({
         : yoyRev < 0
           ? 'text-red-300'
           : 'text-zinc-300'
+  // Annual-cadence tickers (e.g. ATEYY) have no quarterly data — the
+  // sparkline shows fiscal years and the labels need to match so the
+  // user doesn't think Q4-2024 when they're looking at FY2024.
+  const isAnnual = financials?.cadence === 'annual'
+  const sectionMeta = isAnnual ? 'Last 4 years' : 'Last 8 quarters'
+  const sparklineLabel = isAnnual
+    ? 'Free cash flow · last 4 fiscal years'
+    : 'Free cash flow · last 8 quarters'
   return (
-    <CollapsibleSection title="Financial performance" meta="Last 8 quarters" defaultOpen>
+    <CollapsibleSection title="Financial performance" meta={sectionMeta} defaultOpen>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4 items-center">
         <FinancialsCell
-          label="Revenue TTM"
+          label={isAnnual ? 'Revenue (FY)' : 'Revenue TTM'}
           value={formatMoneyCompact(ttm?.revenue ?? null) ?? '—'}
           tone="text-zinc-100"
         />
@@ -3389,7 +3410,7 @@ function FinancialsDetailSection({
           tone={yoyTone}
         />
         <FinancialsCell
-          label="FCF TTM"
+          label={isAnnual ? 'FCF (FY)' : 'FCF TTM'}
           value={formatMoneyCompact(ttm?.freeCashFlow ?? null) ?? '—'}
           tone="text-zinc-100"
         />
@@ -3401,7 +3422,7 @@ function FinancialsDetailSection({
       </div>
       <div className="mt-5">
         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-2">
-          Free cash flow · last 8 quarters
+          {sparklineLabel}
         </div>
         <FcfSparkline financials={financials ?? undefined} variant="card" />
       </div>
