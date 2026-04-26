@@ -1250,6 +1250,7 @@ const api = {
       invoke<Record<number, number>>('db:articles:recentCountsByCategory', sinceMs),
     countBookmarked: () => invoke<number>('db:articles:countBookmarked'),
     markRead: (id: number, read: boolean) => invoke<void>('db:articles:markRead', id, read),
+    getById: (id: number) => invoke<Article | null>('db:articles:getById', id),
     setBookmarked: (id: number, bookmarked: boolean) =>
       invoke<void>('db:articles:setBookmarked', id, bookmarked),
     listForTicker: (tickerId: number) =>

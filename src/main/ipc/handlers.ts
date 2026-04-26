@@ -208,6 +208,7 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:articles:markRead', (_e, id: number, read: boolean) =>
     articlesDb.markRead(id, read)
   )
+  ipcMain.handle('db:articles:getById', (_e, id: number) => articlesDb.getArticleById(id))
   ipcMain.handle('db:articles:setBookmarked', (_e, id: number, bookmarked: boolean) =>
     articlesDb.setBookmarked(id, bookmarked)
   )

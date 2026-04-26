@@ -136,6 +136,22 @@ export function markRead(id: number, read: boolean): void {
   getDb().prepare(`UPDATE articles SET isRead = ? WHERE id = ?`).run(read ? 1 : 0, id)
 }
 
+// Look up a single article by id, regardless of whether the
+// `listArticles` filter would include it. Used by ArticleReader's
+// out-of-view fallback so a MorningBrief citation can open an article
+// from a category/timeframe that isn't in the current feed slice.
+export function getArticleById(id: number): Article | null {
+  const row = getDb()
+    .prepare<[number], ArticleRow>(
+      `SELECT a.*, f.title AS feedTitle, f.iconURL AS feedIconURL
+         FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE a.id = ?
+        LIMIT 1`
+    )
+    .get(id)
+  return row ? toArticle(row) : null
+}
+
 export function setBookmarked(id: number, bookmarked: boolean): void {
   getDb()
     .prepare(`UPDATE articles SET isBookmarked = ? WHERE id = ?`)

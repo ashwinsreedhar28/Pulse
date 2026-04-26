@@ -100,7 +100,33 @@ export default function App(): JSX.Element {
     setSelectedCategoryId(null)
   }, [])
   const { articles, loading, refresh, patchArticle } = useArticles(articlesOpts)
-  const selected = articles.find((a) => a.id === selectedId) ?? null
+  // Out-of-view fallback: when a citation chip (MorningBrief, etc.)
+  // points at an article that isn't in the currently-loaded slice,
+  // articles.find returns null and ArticleReader silently no-ops.
+  // Fetch the article directly by id so opening a citation always
+  // resolves regardless of which category/filter the user is on.
+  const [fallbackArticle, setFallbackArticle] = useState<Article | null>(null)
+  useEffect(() => {
+    if (selectedId === null) {
+      setFallbackArticle(null)
+      return
+    }
+    if (articles.find((a) => a.id === selectedId)) {
+      setFallbackArticle(null)
+      return
+    }
+    let cancelled = false
+    void window.api.articles.getById(selectedId).then((row) => {
+      if (cancelled) return
+      setFallbackArticle(row)
+    })
+    return (): void => {
+      cancelled = true
+    }
+  }, [selectedId, articles])
+  const selected =
+    articles.find((a) => a.id === selectedId) ??
+    (fallbackArticle && fallbackArticle.id === selectedId ? fallbackArticle : null)
 
   const handleSelect = useCallback(
     (id: number): void => {
@@ -369,6 +395,14 @@ export default function App(): JSX.Element {
     return unsub
   }, [])
 
+  // Media-pipeline gate (reels + TTS). Hidden Flash UI when disabled
+  // since Flash generation goes through the same pipeline. Polled on
+  // settings changes via the broadcast that Settings already fires.
+  const [mediaPipelineEnabled, setMediaPipelineEnabled] = useState(false)
+  useEffect(() => {
+    void window.api.prefs.get().then((p) => setMediaPipelineEnabled(p.mediaPipelineEnabled))
+  }, [])
+
   // Theme: pull the resolved theme on mount (handles 'system' → light/dark
   // mapping in the main process) and subscribe to future changes (pref flips
   // + OS appearance changes while 'system' is selected).
@@ -573,7 +607,11 @@ export default function App(): JSX.Element {
         }}
         reelsCount={reelsCount}
         reelsActive={reelsOpen}
-        reelsAvailable={videoReady || reelsCount > 0}
+        // When the media pipeline is off in preferences, the Reels/Flash
+        // surface is dead weight (no Python worker, no TTS, no video
+        // gen). Reporting reelsAvailable=false keeps the toolbar entry
+        // hidden so it doesn't clutter the bar.
+        reelsAvailable={mediaPipelineEnabled && (videoReady || reelsCount > 0)}
         onShowReels={() => {
           setReelsOpen(true)
           setStocksOpen(false)
@@ -624,7 +662,7 @@ export default function App(): JSX.Element {
           setBookmarksOnly(false)
           setSelectedId(null)
         }}
-        flashPending={flashPending}
+        flashPending={mediaPipelineEnabled ? flashPending : null}
       />
       <main className="flex-1 min-h-0 overflow-hidden relative">
         {externalView ? (
@@ -691,8 +729,13 @@ export default function App(): JSX.Element {
             article={selected}
             onBack={() => setSelectedId(null)}
             onToggleBookmark={handleToggleBookmark}
-            onMakeFlash={handleMakeFlash}
-            flashPendingForThis={flashPending?.articleId === selected.id}
+            // Suppress Flash button + pending state inside the article
+            // reader when the media pipeline preference is off — clicking
+            // it would just dead-end on a missing TTS/video worker.
+            onMakeFlash={mediaPipelineEnabled ? handleMakeFlash : undefined}
+            flashPendingForThis={
+              mediaPipelineEnabled ? flashPending?.articleId === selected.id : false
+            }
           />
         ) : (
           <FeedView
@@ -2316,7 +2359,9 @@ function ArticleReader({
   article: Article
   onBack: () => void
   onToggleBookmark: (a: Article) => void
-  onMakeFlash: (
+  // Optional: caller passes undefined when the media pipeline
+  // preference is off so the Flash button is hidden entirely.
+  onMakeFlash?: (
     articleId: number,
     title: string
   ) => Promise<{ ok: true; reelId: number } | { ok: false; reason: string }>
@@ -2341,6 +2386,7 @@ function ArticleReader({
   }, [article.id])
 
   const makeFlash = useCallback(async (): Promise<void> => {
+    if (!onMakeFlash) return
     if (flashState === 'pending' || flashState === 'added' || flashState === 'exists') return
     setFlashState('pending')
     const res = await onMakeFlash(article.id, article.title)
@@ -2465,23 +2511,25 @@ function ArticleReader({
           >
             {mode === 'reader' ? 'Web' : 'Reader'}
           </button>
-          <ToolbarButton
-            label={
-              flashState === 'added'
-                ? 'Added to Flash'
-                : flashState === 'exists'
-                  ? 'Already a Flash'
-                  : flashState === 'pending'
-                    ? 'Generating Flash…'
-                    : flashState === 'failed'
-                      ? 'Flash failed — click to retry'
-                      : 'Make Flash'
-            }
-            active={flashState === 'added' || flashState === 'exists'}
-            onClick={() => void makeFlash()}
-          >
-            <FlashToolbarIcon state={flashState} />
-          </ToolbarButton>
+          {onMakeFlash && (
+            <ToolbarButton
+              label={
+                flashState === 'added'
+                  ? 'Added to Flash'
+                  : flashState === 'exists'
+                    ? 'Already a Flash'
+                    : flashState === 'pending'
+                      ? 'Generating Flash…'
+                      : flashState === 'failed'
+                        ? 'Flash failed — click to retry'
+                        : 'Make Flash'
+              }
+              active={flashState === 'added' || flashState === 'exists'}
+              onClick={() => void makeFlash()}
+            >
+              <FlashToolbarIcon state={flashState} />
+            </ToolbarButton>
+          )}
           <ToolbarButton
             label={article.isBookmarked ? 'Bookmarked' : 'Bookmark'}
             active={article.isBookmarked}
