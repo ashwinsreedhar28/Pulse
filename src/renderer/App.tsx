@@ -3089,9 +3089,21 @@ function StocksPage({
   // view is active. Cleared by ValueChain once it accepts the request
   // (via onExternalFocusHandled) so subsequent searches fire cleanly.
   const [chainFocus, setChainFocus] = useState<string | null>(null)
+  // Last initialTickerSymbol value the resolver effect already acted on.
+  // The effect's deps include `tickers`, so without this ref it re-fires
+  // every time setTickers runs (e.g. after a ticker-search ensurePassive
+  // → setTickers chain) and re-overwrites selectedTickerId back to the
+  // PRIOR initialTickerSymbol — which produces the bug where opening
+  // detail on a freshly-looked-up ticker reverts to the previously-
+  // viewed one. Resolving once per initialTickerSymbol value keeps the
+  // intent of the effect (run on mount with a pending symbol) without
+  // the surprise re-resolution.
+  const lastResolvedInitialSymbol = useRef<string | null>(null)
 
   useEffect(() => {
     if (!initialTickerSymbol || tickers.length === 0) return
+    if (lastResolvedInitialSymbol.current === initialTickerSymbol) return
+    lastResolvedInitialSymbol.current = initialTickerSymbol
     const match = tickers.find(
       (t) => t.symbol.toUpperCase() === initialTickerSymbol.toUpperCase()
     )
