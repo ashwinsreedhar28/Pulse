@@ -44,19 +44,20 @@ export type AiProviderResolved = 'claude' | 'ollama'
 // crash loop that restarts the app cannot bypass the ceiling by zeroing
 // the counter. Rolls over at UTC midnight.
 //
-// Daily Claude call cap, sized to fit a ~$15/month app budget. At
-// the typical mix of Sonnet (~$0.04/call) and Haiku (~$0.006/call)
-// usage, 50 calls/day averages $0.30-0.45/day = $9-13/month. Leaves
-// room for the daily Morning Brief (1 Sonnet) + 3-4 chain regens
-// (each = 1 Sonnet chain-gen + ~4 Haiku web searches) + 3-4 research
-// searches.
+// CURRENT STATE: CAP_GATE_DISABLED=true. The user is collecting usage
+// data to set the right monthly budget. The DAILY_CLAUDE_CAP value
+// below is preserved for when the gate goes back on. While disabled,
+// recordClaudeCall does NOT persist increments (so flipping the gate
+// back on later doesn't immediately trip on a poisoned counter), and
+// the per-100-call telemetry log line stays on for visibility.
 //
-// For one-off heavy work (regenerate-all on the watchlist =
-// ~250 calls), flip CAP_GATE_DISABLED to true temporarily, run, flip
-// back. The persisted counter resets at UTC midnight, so the cap
-// auto-recovers without manual intervention.
+// Reference budget math (when re-enabling): at the typical mix of
+// Sonnet (~$0.04/call) and Haiku (~$0.006/call), 50 calls/day averages
+// $0.30-0.45/day = $9-13/month. Leaves room for the daily Morning
+// Brief (1 Sonnet) + 3-4 chain regens (each = 1 Sonnet chain-gen +
+// ~4 Haiku web searches) + 3-4 research searches.
 const DAILY_CLAUDE_CAP = 50
-const CAP_GATE_DISABLED = false
+const CAP_GATE_DISABLED = true
 
 // Lazy-loaded from DB on first access. Module-level `getDb()` cannot run at
 // import time because the database connection isn't open yet when services
