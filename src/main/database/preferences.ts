@@ -35,6 +35,12 @@ export interface Preferences {
   // string disables the macro panel (renders an "add key in Settings"
   // hint instead of empty data).
   fredApiKey: string
+  // Semantic Scholar API key. Free key (request via
+  // https://www.semanticscholar.org/product/api#api-key-form) gives a
+  // dedicated 1 RPS lane outside the shared anonymous pool. Empty
+  // string keeps Pulse on the anonymous tier with retry-on-429 — works
+  // but unreliable during peak hours. Used by the Research tab.
+  semanticScholarApiKey: string
   // Notification system (Phase 1+ — central dispatcher with dedup/cap).
   // Total daily cap across ALL categories. Default 5 keeps notifications
   // signal-only on first run; user can crank up in Settings.
@@ -72,6 +78,7 @@ const DEFAULTS: Preferences = {
   aiProvider: 'auto',
   anthropicApiKey: '',
   fredApiKey: '',
+  semanticScholarApiKey: '',
   notificationDailyCap: 5,
   notifyArticlesEnabled: true,
   notifyStocksEnabled: true,
@@ -110,6 +117,9 @@ export function getPreferences(): Preferences {
     aiProvider: normalizeAiProvider(map.get('aiProvider')),
     anthropicApiKey: (map.get('anthropicApiKey') ?? DEFAULTS.anthropicApiKey).trim(),
     fredApiKey: (map.get('fredApiKey') ?? DEFAULTS.fredApiKey).trim(),
+    semanticScholarApiKey: (
+      map.get('semanticScholarApiKey') ?? DEFAULTS.semanticScholarApiKey
+    ).trim(),
     // Notification preferences. Booleans default to true so existing users
     // don't silently lose notifications when these keys land. Cap clamps
     // 0..50 — 0 disables notifications entirely without needing a master

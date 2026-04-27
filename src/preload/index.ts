@@ -196,6 +196,10 @@ export interface Preferences {
   // Free, no charges. Empty string disables the panel with a "configure
   // in Settings" hint instead of empty data.
   fredApiKey: string
+  // Semantic Scholar API key. Free; gives a dedicated 1 RPS lane for the
+  // Research tab. Empty string falls back to the shared anonymous pool
+  // (functional but unreliable during peak hours).
+  semanticScholarApiKey: string
   // Notification dispatcher settings (Phase 1 of the central notification
   // overhaul). Daily cap is enforced across all categories; per-category
   // toggles disable specific sources independently.

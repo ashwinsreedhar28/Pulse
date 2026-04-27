@@ -48,9 +48,22 @@ const UA = 'Pulse/0.1 (research; ashwin.sreedhar2003@gmail.com)'
 // https://www.semanticscholar.org/product/api#api-key-form which give
 // a dedicated 1 RPS lane outside the anonymous pool. Without a key,
 // we share an aggressively-throttled pool with everyone else and 429s
-// are common during peak hours. Read at module load to avoid the
-// per-call lookup cost.
-const S2_API_KEY = process.env.SEMANTIC_SCHOLAR_API_KEY?.trim() || null
+// are common during peak hours.
+//
+// Stored in preferences (pulse.db) instead of env vars so the packaged
+// .app picks it up without terminal-side configuration. Re-read on
+// every fetch so a Settings change is picked up live without restart;
+// the cost is one DB read per S2 call (negligible vs the network).
+import { getPreferences } from '../database/preferences'
+
+function s2ApiKey(): string | null {
+  try {
+    const k = getPreferences().semanticScholarApiKey?.trim()
+    return k && k.length > 0 ? k : null
+  } catch {
+    return null
+  }
+}
 
 // Tagged error so callers can distinguish "rate limited, retry later"
 // from "search returned nothing". The renderer uses this to show a
@@ -140,7 +153,8 @@ async function fetchJsonRaw<T>(url: string): Promise<T> {
       'User-Agent': UA,
       Accept: 'application/json'
     }
-    if (S2_API_KEY) headers['x-api-key'] = S2_API_KEY
+    const key = s2ApiKey()
+    if (key) headers['x-api-key'] = key
     const res = await fetch(url, { headers, signal: controller.signal })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return (await res.json()) as T
@@ -408,9 +422,9 @@ export async function searchAndSynthesize(query: string): Promise<ResearchSearch
     papers = await searchPapers(query)
   } catch (err) {
     if (err instanceof S2RateLimitError) {
-      const headline = S2_API_KEY
+      const headline = s2ApiKey()
         ? 'Semantic Scholar rate-limited — retry in ~30s'
-        : 'Semantic Scholar rate-limited — set SEMANTIC_SCHOLAR_API_KEY for a dedicated lane (free key)'
+        : 'Semantic Scholar rate-limited — add a key in Settings → AI for a dedicated lane (free)'
       return {
         brief: {
           headline,

@@ -1123,7 +1123,12 @@ const REELS_PREF_KEYS: (keyof Preferences)[] = [
   'ttsVoice',
   'mediaPipelineEnabled'
 ]
-const AI_PREF_KEYS: (keyof Preferences)[] = ['aiProvider', 'anthropicApiKey', 'fredApiKey']
+const AI_PREF_KEYS: (keyof Preferences)[] = [
+  'aiProvider',
+  'anthropicApiKey',
+  'fredApiKey',
+  'semanticScholarApiKey'
+]
 
 function PreferencesTab(): JSX.Element {
   // `prefs` = last known committed state from the DB.
@@ -1413,6 +1418,31 @@ function PreferencesTab(): JSX.Element {
           fredaccount.stlouisfed.org → My Account → API Keys. No charges
           ever; ~120 requests/min limit, well under our 9-series daily
           refresh.
+        </div>
+        <PrefRow label="Semantic Scholar key">
+          <input
+            type="password"
+            value={draft.semanticScholarApiKey}
+            onChange={(e) => patch('semanticScholarApiKey', e.target.value)}
+            placeholder="s2k-..."
+            autoComplete="off"
+            spellCheck={false}
+            className="w-[320px] bg-surface-2 border border-edge rounded px-2 py-1 text-[12px] text-zinc-200 outline-none focus:border-accent font-mono"
+          />
+        </PrefRow>
+        <div className="text-[11px] text-zinc-500 leading-relaxed pl-1">
+          Free key powers the Research tab’s Semantic Scholar searches
+          with a dedicated 1 RPS lane. Without it, requests share an
+          anonymous pool that 429s during peak hours. Request one at
+          semanticscholar.org/product/api#api-key-form — usually approved
+          within a day. No charges.
+          {draft.semanticScholarApiKey &&
+            !draft.semanticScholarApiKey.startsWith('s2k-') && (
+              <span className="text-amber-300">
+                {' '}⚠ Semantic Scholar keys typically start with
+                &ldquo;s2k-&rdquo; — double-check what you pasted.
+              </span>
+            )}
         </div>
       </PrefSection>
 
