@@ -1634,6 +1634,13 @@ const api = {
         ipcRenderer.off('financials:updated', listener)
       }
     },
+    onEarningsUpdated: (cb: (symbol: string) => void): (() => void) => {
+      const listener = (_e: unknown, symbol: string): void => cb(symbol)
+      ipcRenderer.on('earnings:updated', listener)
+      return (): void => {
+        ipcRenderer.off('earnings:updated', listener)
+      }
+    },
     onEstimatesUpdated: (cb: (symbol: string) => void): (() => void) => {
       const listener = (_e: unknown, symbol: string): void => cb(symbol)
       ipcRenderer.on('estimates:updated', listener)

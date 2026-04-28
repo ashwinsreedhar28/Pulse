@@ -52,6 +52,10 @@ import {
   stopFinancialsScheduler
 } from './services/financialsService'
 import {
+  startEarningsScheduler,
+  stopEarningsScheduler
+} from './services/earningsScheduler'
+import {
   startEstimatesScheduler,
   stopEstimatesScheduler
 } from './services/analystEstimatesService'
@@ -632,6 +636,11 @@ app.whenReady().then(async () => {
   // minutes) because statements only change on earnings. See financialsService
   // for the staleness gate + per-tick batching.
   startFinancialsScheduler()
+  // Earnings calendar + EPS history refresher. Tighter cadence than
+  // financials (30 min vs 6 h) so the "Reports in N days" countdown
+  // and EPS-Δ 4Q dots on the Value Chain page never drift more than
+  // ~30 min stale during a long session.
+  startEarningsScheduler()
   // Analyst consensus (forward EPS, price targets, upgrade/downgrade tally)
   // on its own slow cadence — weekly per-symbol refresh; nothing user-visible
   // changes more often than that.
@@ -768,6 +777,7 @@ app.on('will-quit', () => {
   stopDiscoverySchedule()
   stopStocksScheduler()
   stopFinancialsScheduler()
+  stopEarningsScheduler()
   stopEstimatesScheduler()
   stopSecFilingsScheduler()
   stopEarningsReleasesScheduler()

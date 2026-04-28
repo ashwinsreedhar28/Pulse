@@ -289,6 +289,14 @@ export function registerDbIpc(): void {
     void forceRefreshFinancials(t.symbol).catch((err) =>
       console.warn(`[financials] post-create refresh failed for ${t.symbol}:`, err)
     )
+    // Earnings calendar warm-up — same rationale as financials: the
+    // Value Chain "Reports in N days" pill needs data immediately, not
+    // 30 min later when the next earnings sweep arrives.
+    void import('../services/earningsScheduler').then(({ forceRefreshEarnings }) =>
+      forceRefreshEarnings(t.symbol).catch((err) =>
+        console.warn(`[earnings] post-create refresh failed for ${t.symbol}:`, err)
+      )
+    )
     // Personal-relevance cache keys off the watchlist, so any mutation
     // there must blow it away — otherwise cached "Why this matters" rows
     // miss the newly added ticker.
@@ -321,6 +329,11 @@ export function registerDbIpc(): void {
     void forceRefreshEstimates(t.symbol)
     void forceRefreshFinancials(t.symbol).catch((err) =>
       console.warn(`[financials] post-activate refresh failed for ${t.symbol}:`, err)
+    )
+    void import('../services/earningsScheduler').then(({ forceRefreshEarnings }) =>
+      forceRefreshEarnings(t.symbol).catch((err) =>
+        console.warn(`[earnings] post-activate refresh failed for ${t.symbol}:`, err)
+      )
     )
     invalidateAllRelevance()
     return t

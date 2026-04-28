@@ -439,6 +439,25 @@ export function ValueChain({
         })
     })
   }, [])
+  // Earnings refresh broadcasts from the 30-min scheduler. Refetch the
+  // single-symbol badge and patch it into the map without a remount.
+  useEffect(() => {
+    return window.api.stocks.onEarningsUpdated((symbol) => {
+      const sym = symbol.toUpperCase()
+      window.api.stocks
+        .getEarnings(sym)
+        .then((badge) => {
+          setEarningsMap((prev) => {
+            const next = new Map(prev)
+            next.set(sym, badge)
+            return next
+          })
+        })
+        .catch(() => {
+          /* swallow — stale badge stays until the next refresh */
+        })
+    })
+  }, [])
   useEffect(() => {
     return window.api.stocks.onEstimatesUpdated((symbol) => {
       const sym = symbol.toUpperCase()

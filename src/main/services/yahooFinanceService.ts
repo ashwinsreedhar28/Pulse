@@ -13,7 +13,14 @@ const UA =
 const FETCH_TIMEOUT_MS = 10_000
 const CACHE_TTL_MS = 5 * 60_000
 const FUNDAMENTALS_TTL_MS = 30 * 60_000
-const EARNINGS_TTL_MS = 24 * 60 * 60_000
+// 1 h TTL on the in-memory Yahoo earnings cache. Was 24 h, dropped to
+// 1 h alongside the earningsScheduler add — between the scheduler
+// pre-warming the cache every ~30 min and this 1 h backstop, any
+// spontaneous getEarnings call sees data no more than an hour stale.
+// Earnings dates rarely move, so refetching every hour is fine cost-
+// wise; ~300 tickers × 2 calls × 1/hr ≈ 600/hr, well under Yahoo's
+// anonymous tolerance.
+const EARNINGS_TTL_MS = 60 * 60_000
 const OPTIONS_TTL_MS = 15 * 60_000 // intraday — refresh frequently enough to follow the day
 
 // Yahoo's v10 quoteSummary endpoint has required a crumb + cookie auth dance
