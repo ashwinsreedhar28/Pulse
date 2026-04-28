@@ -1,6 +1,10 @@
 import type { Domain } from '../database/categories'
 
-const OLLAMA_BASE = process.env['PULSE_OLLAMA_URL'] ?? 'http://localhost:11434'
+// Ollama endpoint + model are env-tunable via PULSE_OLLAMA_URL /
+// PULSE_OLLAMA_MODEL. Exported so other services that fan out their own
+// Ollama calls (discoveryService, reelService) read the same values
+// instead of redeclaring identical defaults.
+export const OLLAMA_BASE = process.env['PULSE_OLLAMA_URL'] ?? 'http://localhost:11434'
 const OLLAMA_MODEL = process.env['PULSE_OLLAMA_MODEL'] ?? 'mistral:7b'
 const REQUEST_TIMEOUT_MS = 60_000
 const HEALTH_CHECK_TIMEOUT_MS = 3_000

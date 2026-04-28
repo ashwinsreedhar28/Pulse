@@ -119,10 +119,15 @@ export default function App(): JSX.Element {
       return
     }
     let cancelled = false
-    void window.api.articles.getById(selectedId).then((row) => {
-      if (cancelled) return
-      setFallbackArticle(row)
-    })
+    void window.api.articles
+      .getById(selectedId)
+      .then((row) => {
+        if (cancelled) return
+        setFallbackArticle(row)
+      })
+      .catch((err) => {
+        console.warn('[ui] articles.getById failed:', err)
+      })
     return (): void => {
       cancelled = true
     }
@@ -1006,9 +1011,13 @@ function MarketsReel({ onOpenStock }: { onOpenStock: (symbol: string) => void })
   const [quotes, setQuotes] = useState<StockQuote[]>([])
   const [tickers, setTickers] = useState<Ticker[]>([])
   useEffect(() => {
-    void window.api.stocks.getQuotes().then(setQuotes)
+    void window.api.stocks.getQuotes().then(setQuotes).catch((err) => {
+      console.warn('[ui] stocks.getQuotes failed:', err)
+    })
     const unsub = window.api.stocks.onUpdated(setQuotes)
-    void window.api.tickers.list().then(setTickers)
+    void window.api.tickers.list().then(setTickers).catch((err) => {
+      console.warn('[ui] tickers.list failed:', err)
+    })
     return unsub
   }, [])
 
@@ -3111,11 +3120,17 @@ function StocksPage({
   }, [initialTickerSymbol, tickers])
 
   useEffect(() => {
-    void window.api.tickers.list().then(setTickers)
-    void window.api.stocks.getQuotes().then((q) => {
-      setQuotes(q)
-      if (q.length > 0) setLastUpdatedAt(Date.now())
-    })
+    void window.api.tickers
+      .list()
+      .then(setTickers)
+      .catch((err) => console.warn('[ui] tickers.list failed:', err))
+    void window.api.stocks
+      .getQuotes()
+      .then((q) => {
+        setQuotes(q)
+        if (q.length > 0) setLastUpdatedAt(Date.now())
+      })
+      .catch((err) => console.warn('[ui] stocks.getQuotes failed:', err))
     const unsub = window.api.stocks.onUpdated((q) => {
       setQuotes(q)
       setLastUpdatedAt(Date.now())
@@ -3646,9 +3661,12 @@ function StockDetail({
 
   useEffect(() => {
     let cancelled = false
-    void window.api.stocks.getFundamentals(ticker.symbol).then((f) => {
-      if (!cancelled) setFundamentals(f)
-    })
+    void window.api.stocks
+      .getFundamentals(ticker.symbol)
+      .then((f) => {
+        if (!cancelled) setFundamentals(f)
+      })
+      .catch((err) => console.warn('[ui] stocks.getFundamentals failed:', err))
     return () => {
       cancelled = true
     }
@@ -3709,11 +3727,17 @@ function StockDetail({
   useEffect(() => {
     let cancelled = false
     setLoadingHistory(true)
-    void window.api.stocks.getHistory(ticker.symbol, range).then((rows) => {
-      if (cancelled) return
-      setHistory(rows)
-      setLoadingHistory(false)
-    })
+    void window.api.stocks
+      .getHistory(ticker.symbol, range)
+      .then((rows) => {
+        if (cancelled) return
+        setHistory(rows)
+        setLoadingHistory(false)
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadingHistory(false)
+        console.warn('[ui] stocks.getHistory failed:', err)
+      })
     return () => {
       cancelled = true
     }

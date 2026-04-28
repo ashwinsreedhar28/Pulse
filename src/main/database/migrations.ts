@@ -1360,5 +1360,21 @@ export const migrations: Migration[] = [
     up: (db) => {
       db.exec(`DELETE FROM company_profiles;`)
     }
+  },
+  {
+    version: 46,
+    name: 'index discovery_suggestions.createdAt',
+    // Both `listSuggestions` (ORDER BY createdAt DESC) and `clearOlderThan`
+    // (WHERE createdAt < ?) on this table did full scans. The table is small
+    // today, but the three sweep paths (daily/weekly/portfolio-gaps) write
+    // rows continuously, and both queries fire on every Discovery focus +
+    // every maintenance pass. Same shape that `notification_log` and
+    // `reader_cache` already index.
+    up: (db) => {
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_discovery_suggestions_createdAt
+         ON discovery_suggestions(createdAt DESC);`
+      )
+    }
   }
 ]

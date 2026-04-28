@@ -231,7 +231,6 @@ function broadcast(articleId: number): void {
 // ---- matching ----
 
 function computeMatches(input: RelevanceRequestInput): PersonalMatch[] {
-  const haystackForTitleOnly = input.title
   const haystack = [input.title, input.summary ?? '', input.body ?? '']
     .filter(Boolean)
     .join('\n')
@@ -389,24 +388,6 @@ function computeMatches(input: RelevanceRequestInput): PersonalMatch[] {
     ...indirect,
     ...athleteMatches
   ].slice(0, MAX_MATCHES)
-
-  // Guard: a title-only symbol match with no corroborating signal should not
-  // be surfaced alone. The existing classifier's 'strong' tier already
-  // requires company name corroboration, so this is belt-and-braces for the
-  // rare case where the title alone drives the match.
-  if (
-    ordered.length === 1 &&
-    ordered[0].kind === 'ticker-direct' &&
-    !haystackForTitleOnly.toLowerCase().includes(
-      (allBySymbol.get(ordered[0].symbol!.toUpperCase())?.companyName ?? '').toLowerCase()
-    ) &&
-    !(input.body ?? input.summary ?? '').toLowerCase().includes(
-      (allBySymbol.get(ordered[0].symbol!.toUpperCase())?.companyName ?? '').toLowerCase()
-    )
-  ) {
-    // No corroboration at all — the classifier already handles this via the
-    // ambiguous-symbol list; keep the match, we're just noting the case.
-  }
 
   return ordered
 }

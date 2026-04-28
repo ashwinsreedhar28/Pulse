@@ -389,7 +389,11 @@ body.pulse-hidden *::after {
    localStorage by App.tsx. */
 body.pulse-presenting .animate-ticker,
 body.pulse-presenting .animate-ping,
-body.pulse-presenting .animate-pulse {
+body.pulse-presenting .animate-pulse,
+body.pulse-presenting .earnings-pulse-warning::before,
+body.pulse-presenting .earnings-pulse-imminent::before,
+body.pulse-presenting .earnings-pulse-reported::before,
+body.pulse-presenting .earnings-pulse-ambient::before {
   animation-play-state: paused !important;
 }
 

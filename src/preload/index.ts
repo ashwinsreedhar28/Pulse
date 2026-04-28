@@ -20,6 +20,12 @@ export interface Feed {
   isEnabled: boolean
   lastFetchedAt: number | null
   iconURL: string | null
+  // Owning ticker when this feed was provisioned for a specific symbol
+  // (Yahoo / Nasdaq RSS for a watchlist ticker). Null for general
+  // category-owned feeds. The IPC handler's return shape always
+  // includes this; mirroring it on the typed bridge prevents silent
+  // contract drift if a future renderer surface reads it.
+  tickerId: number | null
 }
 
 export interface Article {

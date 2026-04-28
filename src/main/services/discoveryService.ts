@@ -259,8 +259,11 @@ export function stopDiscoverySchedule(): void {
 
 // ---- Ollama helpers ----
 
-const OLLAMA_BASE = process.env['PULSE_OLLAMA_URL'] ?? 'http://localhost:11434'
-const OLLAMA_MODEL = process.env['PULSE_OLLAMA_MODEL'] ?? 'mistral:7b'
+// Single source of truth lives in ollamaService — re-import instead of
+// redeclaring so PULSE_OLLAMA_URL / PULSE_OLLAMA_MODEL overrides apply
+// uniformly across every service that calls Ollama.
+import { OLLAMA_BASE, getOllamaModel } from './ollamaService'
+const OLLAMA_MODEL = getOllamaModel()
 
 interface SuggestionJSON {
   ticker?: string

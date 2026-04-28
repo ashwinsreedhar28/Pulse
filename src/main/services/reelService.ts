@@ -29,9 +29,12 @@ import { generateKeyframe, isVideoGenReady } from './videoGenService'
 import { extractClipsForReel } from './videoClipService'
 import { isMediaToolsReady } from './mediaToolsService'
 import { getPreferences } from '../database/preferences'
+// Single source of truth lives in ollamaService — re-import instead of
+// redeclaring so PULSE_OLLAMA_URL / PULSE_OLLAMA_MODEL overrides apply
+// uniformly across every service that calls Ollama.
+import { OLLAMA_BASE, getOllamaModel } from './ollamaService'
 
-const OLLAMA_BASE = process.env['PULSE_OLLAMA_URL'] ?? 'http://localhost:11434'
-const OLLAMA_MODEL = process.env['PULSE_OLLAMA_MODEL'] ?? 'mistral:7b'
+const OLLAMA_MODEL = getOllamaModel()
 const SCRIPT_TIMEOUT_MS = 45_000
 // Ranked preference list. First entry that actually exists on the system wins.
 // Premium/Enhanced voices sound noticeably more human; users who download them
