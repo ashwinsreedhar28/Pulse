@@ -26,14 +26,24 @@ interface Props {
 interface ViewState {
   // 'idle' = initial blank state, 'loading' = mid-search,
   // 'results' = brief + papers loaded, 'topic' = viewing a saved
-  // topic's cached brief.
-  kind: 'idle' | 'loading' | 'results' | 'topic'
+  // topic's cached brief, 'bookmarks' = browsing saved papers.
+  kind: 'idle' | 'loading' | 'results' | 'topic' | 'bookmarks'
   query: string
   brief: ResearchBriefPayload | null
   papers: ResearchPaper[]
   // When kind='topic', the topicId being viewed (so refresh routes
   // to the right row).
   topicId: number | null
+}
+
+// In-window PDF reader state. When non-null, the right detail pane
+// shows the PDF (via <webview>) instead of the paper-detail card. Keeps
+// the user in the Research tab — no bounce to ExternalReader covering
+// the whole UI.
+interface PdfReaderState {
+  url: string
+  title: string
+  subtitle: string | null
 }
 
 export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
@@ -47,7 +57,74 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
   const [topics, setTopics] = useState<ResearchTopic[]>([])
   const [draft, setDraft] = useState('')
   const [selectedPaper, setSelectedPaper] = useState<ResearchPaper | null>(null)
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set())
+  const [pdfReader, setPdfReader] = useState<PdfReaderState | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Bookmarks: load once on mount; per-toggle handler patches the local
+  // Set so the ⭐ icon updates without a re-fetch.
+  useEffect(() => {
+    let cancelled = false
+    void window.api.research
+      .listBookmarks()
+      .then((rows) => {
+        if (cancelled) return
+        setBookmarkedIds(new Set(rows.map((r) => r.paperId)))
+      })
+      .catch(() => {
+        /* keep prior state */
+      })
+    return (): void => {
+      cancelled = true
+    }
+  }, [])
+
+  const toggleBookmark = useCallback(
+    async (paper: ResearchPaper): Promise<void> => {
+      const isBookmarked = bookmarkedIds.has(paper.paperId)
+      // Optimistic update so the ⭐ flips instantly; rollback on IPC fail.
+      setBookmarkedIds((prev) => {
+        const next = new Set(prev)
+        if (isBookmarked) next.delete(paper.paperId)
+        else next.add(paper.paperId)
+        return next
+      })
+      try {
+        if (isBookmarked) {
+          await window.api.research.unbookmark(paper.paperId)
+        } else {
+          await window.api.research.bookmark(paper)
+        }
+      } catch (err) {
+        console.warn('[research] bookmark toggle failed:', err)
+        setBookmarkedIds((prev) => {
+          const next = new Set(prev)
+          if (isBookmarked) next.add(paper.paperId)
+          else next.delete(paper.paperId)
+          return next
+        })
+      }
+    },
+    [bookmarkedIds]
+  )
+
+  const openBookmarks = useCallback(async (): Promise<void> => {
+    try {
+      const rows = await window.api.research.listBookmarks()
+      setView({
+        kind: 'bookmarks',
+        query: '',
+        brief: null,
+        papers: rows.map((r) => r.paper),
+        topicId: null
+      })
+      setBookmarkedIds(new Set(rows.map((r) => r.paperId)))
+      setSelectedPaper(null)
+      setDraft('')
+    } catch (err) {
+      console.warn('[research] listBookmarks failed:', err)
+    }
+  }, [])
 
   // ----- saved topics -----
   const reloadTopics = useCallback(async (): Promise<void> => {
@@ -215,12 +292,15 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
         <div className="flex-1 min-w-0 overflow-y-auto px-6 py-5">
-          {topics.length > 0 && (
+          {(topics.length > 0 || bookmarkedIds.size > 0) && (
             <SavedTopicsStrip
               topics={topics}
               activeId={view.topicId}
               onOpen={openTopic}
               onDelete={deleteTopic}
+              bookmarksCount={bookmarkedIds.size}
+              isBookmarksActive={view.kind === 'bookmarks'}
+              onOpenBookmarks={openBookmarks}
             />
           )}
 
@@ -254,26 +334,91 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
             />
           )}
 
+          {view.kind === 'bookmarks' && view.papers.length === 0 && (
+            <div className="mt-12 text-center text-[12px] text-zinc-500">
+              No bookmarked papers yet. Hit ☆ on a paper card to save it.
+            </div>
+          )}
+
           {view.papers.length > 0 && (
             <PaperList
               papers={view.papers}
               onSelect={(p) => setSelectedPaper(p)}
               selectedId={selectedPaper?.paperId ?? null}
               onOpenURL={onOpenURL}
+              onOpenPdfInline={(url, title, subtitle) =>
+                setPdfReader({ url, title, subtitle })
+              }
+              bookmarkedIds={bookmarkedIds}
+              onToggleBookmark={(p) => void toggleBookmark(p)}
+              title={view.kind === 'bookmarks' ? 'Bookmarks' : 'Papers'}
             />
           )}
         </div>
 
-        {selectedPaper && (
-          <PaperDetailPanel
-            paper={selectedPaper}
-            onClose={() => setSelectedPaper(null)}
-            onOpenURL={onOpenURL}
-            onSelectPaper={setSelectedPaper}
+        {pdfReader ? (
+          <PdfReaderPane
+            state={pdfReader}
+            onClose={() => setPdfReader(null)}
           />
+        ) : (
+          selectedPaper && (
+            <PaperDetailPanel
+              paper={selectedPaper}
+              onClose={() => setSelectedPaper(null)}
+              onOpenURL={onOpenURL}
+              onOpenPdfInline={(url, title, subtitle) =>
+                setPdfReader({ url, title, subtitle })
+              }
+              onSelectPaper={setSelectedPaper}
+              isBookmarked={bookmarkedIds.has(selectedPaper.paperId)}
+              onToggleBookmark={() => void toggleBookmark(selectedPaper)}
+            />
+          )
         )}
       </div>
     </section>
+  )
+}
+
+// ---------- In-window PDF reader -----------------------------------------
+
+function PdfReaderPane({
+  state,
+  onClose
+}: {
+  state: PdfReaderState
+  onClose: () => void
+}): JSX.Element {
+  return (
+    <aside className="w-[640px] xl:w-[760px] shrink-0 border-l border-edge bg-surface-1 flex flex-col min-h-0">
+      <header className="px-4 py-2.5 border-b border-edge flex items-center gap-3">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
+          PDF · in-window
+        </span>
+        <div className="min-w-0 flex-1 truncate text-[12px] text-zinc-300" title={state.title}>
+          {state.title}
+        </div>
+        <button
+          onClick={onClose}
+          className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500 hover:text-zinc-100 px-2 py-0.5 shrink-0"
+        >
+          Close ×
+        </button>
+      </header>
+      {/* Chromium's built-in PDF viewer is loaded automatically when the
+          response Content-Type is application/pdf, which is what
+          openAccessPdf URLs (arxiv.org/pdf/..., S2 mirrors) all return.
+          allowpopups omitted on purpose — links inside the PDF that
+          would open new windows route through setWindowOpenHandler →
+          shell.openExternal, matching the rest of the app. */}
+      <webview
+        src={state.url}
+        className="flex-1 min-h-0"
+        partition="persist:pdfreader"
+        style={{ width: '100%', height: '100%', display: 'flex' }}
+      />
+    </aside>
   )
 }
 
@@ -283,19 +428,40 @@ function SavedTopicsStrip({
   topics,
   activeId,
   onOpen,
-  onDelete
+  onDelete,
+  bookmarksCount,
+  isBookmarksActive,
+  onOpenBookmarks
 }: {
   topics: ResearchTopic[]
   activeId: number | null
   onOpen: (t: ResearchTopic) => void
   onDelete: (id: number) => void
+  bookmarksCount: number
+  isBookmarksActive: boolean
+  onOpenBookmarks: () => void
 }): JSX.Element {
   return (
     <div className="mb-5">
       <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-2">
-        Saved Topics
+        Saved
       </div>
       <div className="flex flex-wrap gap-1.5">
+        {/* Bookmarks chip — sky-toned to match the per-paper ⭐ color. */}
+        {bookmarksCount > 0 && (
+          <button
+            onClick={onOpenBookmarks}
+            title="Browse your bookmarked papers"
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
+              isBookmarksActive
+                ? 'border-sky-400/60 bg-sky-500/15 text-sky-200'
+                : 'border-edge bg-surface-1 text-zinc-300 hover:border-sky-500/40 hover:text-sky-300'
+            }`}
+          >
+            <span>★ Bookmarks</span>
+            <span className="text-[10px] tabular-nums opacity-70">{bookmarksCount}</span>
+          </button>
+        )}
         {topics.map((t) => {
           const active = t.id === activeId
           return (
@@ -471,12 +637,20 @@ function PaperList({
   papers,
   onSelect,
   selectedId,
-  onOpenURL
+  onOpenURL,
+  onOpenPdfInline,
+  bookmarkedIds,
+  onToggleBookmark,
+  title = 'Papers'
 }: {
   papers: ResearchPaper[]
   onSelect: (p: ResearchPaper) => void
   selectedId: string | null
   onOpenURL: (url: string, title: string, subtitle?: string | null) => void
+  onOpenPdfInline?: (url: string, title: string, subtitle: string | null) => void
+  bookmarkedIds: Set<string>
+  onToggleBookmark: (paper: ResearchPaper) => void
+  title?: string
 }): JSX.Element {
   const [collapsed, setCollapsed] = useCollapsedSection('researchPapers', false)
   return (
@@ -487,7 +661,7 @@ function PaperList({
         className="w-full flex items-center gap-3 mb-3 group"
       >
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400 group-hover:text-zinc-200">
-          Papers
+          {title}
         </h3>
         <span className="h-px flex-1 bg-edge/80" />
         <span className="text-[10px] tabular-nums text-zinc-500">{papers.length}</span>
@@ -502,6 +676,9 @@ function PaperList({
               selected={p.paperId === selectedId}
               onSelect={() => onSelect(p)}
               onOpenURL={onOpenURL}
+              onOpenPdfInline={onOpenPdfInline}
+              isBookmarked={bookmarkedIds.has(p.paperId)}
+              onToggleBookmark={() => onToggleBookmark(p)}
             />
           ))}
         </div>
@@ -514,12 +691,21 @@ function PaperCard({
   paper,
   selected,
   onSelect,
-  onOpenURL
+  onOpenURL,
+  onOpenPdfInline,
+  isBookmarked,
+  onToggleBookmark
 }: {
   paper: ResearchPaper
   selected: boolean
   onSelect: () => void
   onOpenURL: (url: string, title: string, subtitle?: string | null) => void
+  // Open the PDF in the in-window reader (right pane) instead of
+  // bouncing to the full-screen ExternalReader. Falls back to onOpenURL
+  // if the caller doesn't provide it.
+  onOpenPdfInline?: (url: string, title: string, subtitle: string | null) => void
+  isBookmarked: boolean
+  onToggleBookmark: () => void
 }): JSX.Element {
   const authorLine =
     paper.authors.length === 0
@@ -551,32 +737,49 @@ function PaperCard({
           )}
         </div>
       </button>
-      {(paper.url || paper.pdfUrl) && (
-        <div className="mt-2 flex items-center gap-2">
-          {paper.pdfUrl && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleBookmark()
+          }}
+          title={isBookmarked ? 'Remove bookmark' : 'Bookmark this paper'}
+          aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
+          className={`text-[11px] leading-none px-2 py-0.5 rounded-full transition-colors ${
+            isBookmarked
+              ? 'bg-sky-500/20 text-sky-200 ring-1 ring-inset ring-sky-500/40 hover:bg-sky-500/30'
+              : 'text-zinc-500 hover:text-sky-300 hover:bg-sky-500/10'
+          }`}
+        >
+          {isBookmarked ? '★' : '☆'}
+        </button>
+        {paper.pdfUrl && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              if (onOpenPdfInline) {
+                onOpenPdfInline(paper.pdfUrl!, paper.title, paper.venue)
+              } else {
                 onOpenURL(paper.pdfUrl!, paper.title, paper.venue)
-              }}
-              className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/30 hover:bg-emerald-500/25"
-            >
-              PDF ↗
-            </button>
-          )}
-          {paper.url && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenURL(paper.url!, paper.title, paper.venue)
-              }}
-              className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2"
-            >
-              Source ↗
-            </button>
-          )}
-        </div>
-      )}
+              }
+            }}
+            className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/30 hover:bg-emerald-500/25"
+          >
+            PDF
+          </button>
+        )}
+        {paper.url && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenURL(paper.url!, paper.title, paper.venue)
+            }}
+            className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2"
+          >
+            Source ↗
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -587,12 +790,18 @@ function PaperDetailPanel({
   paper,
   onClose,
   onOpenURL,
-  onSelectPaper
+  onOpenPdfInline,
+  onSelectPaper,
+  isBookmarked,
+  onToggleBookmark
 }: {
   paper: ResearchPaper
   onClose: () => void
   onOpenURL: (url: string, title: string, subtitle?: string | null) => void
+  onOpenPdfInline: (url: string, title: string, subtitle: string | null) => void
   onSelectPaper: (p: ResearchPaper) => void
+  isBookmarked: boolean
+  onToggleBookmark: () => void
 }): JSX.Element {
   const [citing, setCiting] = useState<ResearchPaper[] | null>(null)
   const [refs, setRefs] = useState<ResearchPaper[] | null>(null)
@@ -654,26 +863,43 @@ function PaperDetailPanel({
               {paper.abstract}
             </p>
           )}
-          {(paper.pdfUrl || paper.url) && (
-            <div className="mt-3 flex items-center gap-2">
-              {paper.pdfUrl && (
-                <button
-                  onClick={() => onOpenURL(paper.pdfUrl!, paper.title, paper.venue)}
-                  className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/30"
-                >
-                  Read PDF ↗
-                </button>
-              )}
-              {paper.url && (
-                <button
-                  onClick={() => onOpenURL(paper.url!, paper.title, paper.venue)}
-                  className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2"
-                >
-                  View source ↗
-                </button>
-              )}
-            </div>
-          )}
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <button
+              onClick={onToggleBookmark}
+              className={`text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full transition-colors ${
+                isBookmarked
+                  ? 'bg-sky-500/20 text-sky-200 ring-1 ring-inset ring-sky-500/40 hover:bg-sky-500/30'
+                  : 'text-zinc-400 ring-1 ring-inset ring-edge hover:text-sky-300 hover:ring-sky-500/40'
+              }`}
+            >
+              {isBookmarked ? '★ Bookmarked' : '☆ Bookmark'}
+            </button>
+            {paper.pdfUrl && (
+              <button
+                onClick={() => onOpenPdfInline(paper.pdfUrl!, paper.title, paper.venue)}
+                className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/30 hover:bg-emerald-500/25"
+              >
+                Read PDF here
+              </button>
+            )}
+            {paper.pdfUrl && (
+              <button
+                onClick={() => onOpenURL(paper.pdfUrl!, paper.title, paper.venue)}
+                className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2"
+                title="Open in the full-screen reader"
+              >
+                Open external ↗
+              </button>
+            )}
+            {paper.url && (
+              <button
+                onClick={() => onOpenURL(paper.url!, paper.title, paper.venue)}
+                className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2"
+              >
+                View source ↗
+              </button>
+            )}
+          </div>
         </div>
 
         <LineageList

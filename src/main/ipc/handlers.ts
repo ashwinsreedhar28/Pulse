@@ -731,6 +731,22 @@ export function registerDbIpc(): void {
     const { listReferencedPapers } = await import('../services/researchService')
     return listReferencedPapers(paperId)
   })
+  // Bookmarks — local-only, stored in research_bookmarks (v48). Renderer
+  // reads listBookmarks once on Research tab mount, then keeps a local
+  // Set in sync via the bookmark/unbookmark response payloads.
+  ipcMain.handle('research:listBookmarks', async () => {
+    const { listResearchBookmarks } = await import('../database/researchBookmarks')
+    return listResearchBookmarks()
+  })
+  ipcMain.handle('research:bookmark', async (_e, paper: import('../../preload').ResearchPaper) => {
+    const { bookmarkResearchPaper } = await import('../database/researchBookmarks')
+    return bookmarkResearchPaper(paper)
+  })
+  ipcMain.handle('research:unbookmark', async (_e, paperId: string) => {
+    const { unbookmarkResearchPaper } = await import('../database/researchBookmarks')
+    unbookmarkResearchPaper(paperId)
+    return { ok: true }
+  })
 
   // ---- FRED macro panel ----------------------------------------------------
   ipcMain.handle('fred:getSnapshot', async () => {

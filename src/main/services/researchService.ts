@@ -290,9 +290,8 @@ export async function synthesizeResearchBrief(
     `  "headline": "one sentence — what's the state of this field today?",\n` +
     `  "sections": [\n` +
     `    {\n` +
-    `      "kind": "findings" | "trends" | "methods" | "datasets" | ` +
-    `"open-questions" | "notable",\n` +
-    `      "title": "Display title",\n` +
+    `      "kind": "kebab-case section identifier (you choose)",\n` +
+    `      "title": "Display title shown to the user",\n` +
     `      "bullets": [\n` +
     `        {\n` +
     `          "text": "one sentence, <180 chars, factual, no marketing",\n` +
@@ -302,16 +301,25 @@ export async function synthesizeResearchBrief(
     `    }\n` +
     `  ]\n` +
     `}\n\n` +
-    `Sections to include (omit ones with no real content):\n` +
-    `- "findings": 3-5 most important results / discoveries\n` +
-    `- "trends": 2-3 directions the field is moving\n` +
-    `- "methods": 2-3 method/architecture innovations worth noting\n` +
-    `- "open-questions": 2-3 things still unresolved\n` +
-    `- "notable": 3-5 specific papers worth opening (one bullet per paper)\n\n` +
+    `**Pick 3-6 section names that best characterize what's interesting ` +
+    `about THIS specific query.** Don't reuse a fixed template. Different ` +
+    `topics deserve different framings:\n` +
+    `- An ML query might warrant: "architectures", "benchmarks", "scaling-laws", "limitations".\n` +
+    `- A networking query might warrant: "protocols", "measurements", "deployment-experience".\n` +
+    `- A biology query might warrant: "mechanisms", "techniques", "model-organisms", "open-questions".\n` +
+    `Recognized kinds for which the renderer has color coding: "findings", ` +
+    `"trends", "methods", "datasets", "open-questions", "notable". Use them ` +
+    `when they genuinely fit; otherwise pick a topic-specific kebab-case kind ` +
+    `— it'll render with neutral styling, that's fine.\n\n` +
+    `Always include a "notable" section listing 3-5 specific papers worth ` +
+    `opening (one bullet per paper) — that's the highest-leverage thing the ` +
+    `user can do with this brief.\n\n` +
     `Cite every claim with the [P#] tag from above (citations array). ` +
     `If you can't cite a claim, drop it. Headline must be punchy ` +
-    `(<140 chars). Skip filler like "the research community is ` +
-    `actively investigating" — just state the substance.`
+    `(<140 chars) and SPECIFIC to this query — name a paper, technique, or ` +
+    `result, not a vague "researchers are exploring" / "growing interest" / ` +
+    `"emerging area" cliché. Use vocabulary from the abstracts; don't ` +
+    `paraphrase into generic ML/science blog phrasing. State substance, not vibes.`
 
   const user =
     `Query: ${query}\n\n` +

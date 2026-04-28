@@ -1392,5 +1392,25 @@ export const migrations: Migration[] = [
          ON sec_cik_map(cik);`
       )
     }
+  },
+  {
+    version: 48,
+    name: 'research_bookmarks',
+    // Per-paper bookmarks for the Research tab. Stores the full
+    // ResearchPaper JSON so the Bookmarks view can render without
+    // re-hitting Semantic Scholar (wasted RPS budget + unreliable when
+    // we're rate-limited). paperId is S2's stable identifier — same
+    // key the citation-lineage panel uses.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS research_bookmarks (
+          paperId TEXT PRIMARY KEY,
+          savedAt INTEGER NOT NULL,
+          paperJson TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_research_bookmarks_savedAt
+          ON research_bookmarks(savedAt DESC);
+      `)
+    }
   }
 ]

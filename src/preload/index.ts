@@ -1265,6 +1265,14 @@ export interface ResearchSearchResult {
   papers: ResearchPaper[]
 }
 
+// Local bookmark row. Stores the full ResearchPaper inline so the
+// Bookmarks view renders without round-tripping to Semantic Scholar.
+export interface ResearchBookmarkRow {
+  paperId: string
+  savedAt: number // unix ms
+  paper: ResearchPaper
+}
+
 // FRED macro panel snapshot. Mirror of FredSeriesSnapshot from the main
 // process. `format` tells the renderer how to print latestValue:
 // 'percent' → '4.50%', 'percent-change-yoy' → '+3.1%', 'index' → '14.85',
@@ -1697,7 +1705,16 @@ const api = {
     listCiting: (paperId: string): Promise<ResearchPaper[]> =>
       invoke<ResearchPaper[]>('research:listCiting', paperId),
     listReferences: (paperId: string): Promise<ResearchPaper[]> =>
-      invoke<ResearchPaper[]>('research:listReferences', paperId)
+      invoke<ResearchPaper[]>('research:listReferences', paperId),
+    // Bookmarks — local-only, persisted in research_bookmarks. Returns
+    // the full hydrated paper alongside the savedAt so the Bookmarks
+    // view renders without re-hitting Semantic Scholar.
+    listBookmarks: (): Promise<ResearchBookmarkRow[]> =>
+      invoke<ResearchBookmarkRow[]>('research:listBookmarks'),
+    bookmark: (paper: ResearchPaper): Promise<ResearchBookmarkRow> =>
+      invoke<ResearchBookmarkRow>('research:bookmark', paper),
+    unbookmark: (paperId: string): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('research:unbookmark', paperId)
   },
   fred: {
     getSnapshot: (): Promise<FredSeriesSnapshot[]> =>
