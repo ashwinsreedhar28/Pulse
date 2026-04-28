@@ -25,12 +25,19 @@ const FETCH_TIMEOUT_MS = 20_000
 const SEARCH_LIMIT = 25
 // Pull these fields on every paper request — keeps response payload
 // tight while supplying everything the brief generator + UI need.
+//
+// Use `authors` (not `authors.name`) here. S2's citations + references
+// endpoints reject nested traversal — they accept `citingPaper.authors`
+// but not `citingPaper.authors.name`, returning HTTP 400 with
+// "Unrecognized or unsupported fields: [authors.name]". Asking for the
+// whole `authors` object works on both this and the search endpoint;
+// fromS2Paper below already extracts `.name` from the response.
 const PAPER_FIELDS = [
   'paperId',
   'title',
   'abstract',
   'year',
-  'authors.name',
+  'authors',
   'venue',
   'citationCount',
   'influentialCitationCount',
