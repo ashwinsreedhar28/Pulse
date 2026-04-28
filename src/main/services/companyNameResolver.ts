@@ -182,9 +182,24 @@ function tokenAcronym(normalized: string): string {
     .toUpperCase()
 }
 
-// Build the in-memory index once per call. Cheap — tickers table is <100
-// rows, sec_cik_map is ~10k but SELECT-all into memory is <50ms.
+// Module-level cache of the name index. The original "<50ms" comment
+// was written before sec_former_names got populated; once that join
+// fires (~10k rows) plus a regen-all hits this 1000+ times in one run,
+// the work compounds. Cache builds once, invalidates when tickers
+// mutate (db:tickers:create / delete / activate) or when SEC submissions
+// pick up new former-names. Callers do not need cache awareness — they
+// keep calling loadIndex().
+let cachedIndex: NameEntry[] | null = null
+
+// Public hook — call from tickers mutation paths and the SEC filings
+// refresher when either source might have changed. Cheap (one
+// reference reset); the next loadIndex() rebuilds.
+export function invalidateNameIndex(): void {
+  cachedIndex = null
+}
+
 function loadIndex(): NameEntry[] {
+  if (cachedIndex !== null) return cachedIndex
   const entries: NameEntry[] = []
   // Pulse's own ticker list wins on ties — company names here are curated.
   for (const t of listTickers()) {
@@ -226,6 +241,7 @@ function loadIndex(): NameEntry[] {
       source: 'sec_former'
     })
   }
+  cachedIndex = entries
   return entries
 }
 

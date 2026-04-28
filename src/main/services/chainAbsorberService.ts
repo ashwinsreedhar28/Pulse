@@ -123,132 +123,144 @@ export function absorbGeneratedChain(
   // contributing sources (consensus from news + 10-K + chain_gen), we
   // remove this focus's stake; if that leaves the edge source-less we
   // delete it, otherwise we update to the reduced source list.
+  //
+  // The whole sequence (delete-then-rewrite + node upserts + edge
+  // upserts) runs inside a single transaction so a mid-call throw
+  // (malformed Claude symbol failing ensurePassiveTicker, JSON.parse
+  // failing on a corrupt existing citationJson, etc.) rolls back the
+  // pre-cleanup deletes alongside the half-applied inserts. Otherwise
+  // the chain row in company_value_chains.graphJson stays saved while
+  // the override overlay is missing roughly half this focus's
+  // contributions — silent data divergence that the UI surfaces as a
+  // partial sector view.
   const db = getDb()
-  db
-    .prepare(`DELETE FROM graph_node_overrides WHERE source = ?`)
-    .run(source)
-  const edgeRowsOwned = db
-    .prepare<[string, string, string, string], {
-      fromSymbol: string
-      toSymbol: string
-      relationship: string
-      source: string
-    }>(
-      `SELECT fromSymbol, toSymbol, relationship, source FROM graph_edge_overrides
-        WHERE source = ? OR source LIKE ? OR source LIKE ? OR source LIKE ?`
-    )
-    .all(source, `${source},%`, `%,${source},%`, `%,${source}`)
-  const deleteEdge = db.prepare<[string, string, string]>(
-    `DELETE FROM graph_edge_overrides
-      WHERE fromSymbol = ? AND toSymbol = ? AND relationship = ?`
-  )
-  const updateEdgeSources = db.prepare<[string, string, string, string]>(
-    `UPDATE graph_edge_overrides SET source = ?
-      WHERE fromSymbol = ? AND toSymbol = ? AND relationship = ?`
-  )
-  for (const row of edgeRowsOwned) {
-    const sources = row.source.split(',').map((s) => s.trim()).filter((s) => s && s !== source)
-    if (sources.length === 0) {
-      deleteEdge.run(row.fromSymbol, row.toSymbol, row.relationship)
-    } else {
-      updateEdgeSources.run(sources.join(','), row.fromSymbol, row.toSymbol, row.relationship)
-    }
-  }
-
-  // Set of symbols whose nodes in THIS chain are real tickers — used to
-  // filter edges whose endpoints are unverified labels. Focus is
-  // implicitly a ticker.
-  const tickerSymbols = new Set<string>([focus])
-  for (const node of chain.nodes) {
-    if (node.kind === 'ticker') tickerSymbols.add(node.symbol.toUpperCase())
-  }
-
   let nodesAdded = 0
   let newPassiveTickers = 0
-  for (const node of chain.nodes) {
-    if (node.kind !== 'ticker') continue
-    const sym = node.symbol.toUpperCase()
-    // The focus ticker itself is absorbed too — otherwise a generated
-    // chain for COF (not in supplyChainGraph.json) leaves COF invisible
-    // from the unified view even though its sector tab just showed up.
-    // Passive-ticker upsert runs BEFORE the static-graph / existing-override
-    // short-circuits so every ticker-kind node (not just truly-new ones)
-    // gets a tickers-table row, which is what makes the stocks scheduler
-    // poll quotes for it. Without this, absorbed tiles render as "EXT" with
-    // no price because the scheduler doesn't know they exist.
-    const hadTicker = !!getTickerBySymbol(sym)
-    ensurePassiveTicker({ symbol: sym, companyName: node.name })
-    if (!hadTicker) newPassiveTickers += 1
-    if (STATIC_NODE_SYMBOLS.has(sym)) continue
-    if (hasNodeOverride(sym)) continue
-    // Every absorbed node inherits the chain's sectorId. For a high-quality
-    // chain generator (Claude), non-focus nodes are almost always real
-    // sector peers of the focus (banks that appear in COF's chain ARE
-    // financials; payments networks in MA's chain ARE fin-payments). The
-    // inheritance makes the unified Value Chain tabs + Diagram view feel
-    // like a dynamically growing graph — generate one focus and its whole
-    // ecosystem becomes navigable. If the node later gets its own chain
-    // generated, its own ticker_sectors classification takes precedence
-    // over this inherited tag.
-    upsertNodeOverride({
-      symbol: sym,
-      stage: node.stage,
-      sector: null,
-      name: node.name,
-      blurb: node.blurb,
-      source,
-      acceptedAt: now,
-      sectorId
-    })
-    nodesAdded += 1
-  }
-
   let edgesAdded = 0
-  for (const edge of chain.edges) {
-    let from = edge.from.toUpperCase()
-    let to = edge.to.toUpperCase()
-    let relationship = edge.relationship
-    if (!from || !to || from === to) continue
-    if (!tickerSymbols.has(from) || !tickerSymbols.has(to)) continue
-    // Normalize at write time: "customer" and "supplier" describe the same
-    // directional relationship from opposite ends. Storing both forms would
-    // produce duplicate rows (X→Y supplier AND Y→X customer mean the same
-    // thing). Canonicalize to supplier-form so the DB holds one row per
-    // directed economic relationship. The UI's downstream logic no longer
-    // has to swap at render time, and cross-chain duplicates collapse via
-    // the consensus-merge PK on (from, to, relationship).
-    if (relationship === 'customer') {
-      const swap = from
-      from = to
-      to = swap
-      relationship = 'supplier'
+
+  const txWork = db.transaction(() => {
+    db.prepare(`DELETE FROM graph_node_overrides WHERE source = ?`).run(source)
+    const edgeRowsOwned = db
+      .prepare<[string, string, string, string], {
+        fromSymbol: string
+        toSymbol: string
+        relationship: string
+        source: string
+      }>(
+        `SELECT fromSymbol, toSymbol, relationship, source FROM graph_edge_overrides
+          WHERE source = ? OR source LIKE ? OR source LIKE ? OR source LIKE ?`
+      )
+      .all(source, `${source},%`, `%,${source},%`, `%,${source}`)
+    const deleteEdge = db.prepare<[string, string, string]>(
+      `DELETE FROM graph_edge_overrides
+        WHERE fromSymbol = ? AND toSymbol = ? AND relationship = ?`
+    )
+    const updateEdgeSources = db.prepare<[string, string, string, string]>(
+      `UPDATE graph_edge_overrides SET source = ?
+        WHERE fromSymbol = ? AND toSymbol = ? AND relationship = ?`
+    )
+    for (const row of edgeRowsOwned) {
+      const sources = row.source.split(',').map((s) => s.trim()).filter((s) => s && s !== source)
+      if (sources.length === 0) {
+        deleteEdge.run(row.fromSymbol, row.toSymbol, row.relationship)
+      } else {
+        updateEdgeSources.run(sources.join(','), row.fromSymbol, row.toSymbol, row.relationship)
+      }
     }
-    upsertEdgeOverrideWithConsensus({
-      fromSymbol: from,
-      toSymbol: to,
-      relationship,
-      note: edge.note,
-      // Generated-chain edges get a mid-tier weight: better than a bare
-      // co-occurrence signal, weaker than a 10-K-grounded supplier claim.
-      // Consensus merging boosts this when another source confirms.
-      weight: 0.65,
-      source,
-      acceptedAt: now,
-      sectorId,
-      // Forward the entire multi-cite array. graph_edge_overrides.citationJson
-      // now serializes the full array so the diagram tooltip + unified-graph
-      // focus panel can stack pills the same way the per-ticker chain card
-      // does. Falls back to the legacy single citation field for chains
-      // generated before multi-cite shipped.
-      citations:
-        edge.citations && edge.citations.length > 0
-          ? edge.citations
-          : edge.citation
-            ? [edge.citation]
-            : []
-    })
-    edgesAdded += 1
-  }
+
+    // Set of symbols whose nodes in THIS chain are real tickers — used to
+    // filter edges whose endpoints are unverified labels. Focus is
+    // implicitly a ticker.
+    const tickerSymbols = new Set<string>([focus])
+    for (const node of chain.nodes) {
+      if (node.kind === 'ticker') tickerSymbols.add(node.symbol.toUpperCase())
+    }
+
+    for (const node of chain.nodes) {
+      if (node.kind !== 'ticker') continue
+      const sym = node.symbol.toUpperCase()
+      // The focus ticker itself is absorbed too — otherwise a generated
+      // chain for COF (not in supplyChainGraph.json) leaves COF invisible
+      // from the unified view even though its sector tab just showed up.
+      // Passive-ticker upsert runs BEFORE the static-graph / existing-override
+      // short-circuits so every ticker-kind node (not just truly-new ones)
+      // gets a tickers-table row, which is what makes the stocks scheduler
+      // poll quotes for it. Without this, absorbed tiles render as "EXT" with
+      // no price because the scheduler doesn't know they exist.
+      const hadTicker = !!getTickerBySymbol(sym)
+      ensurePassiveTicker({ symbol: sym, companyName: node.name })
+      if (!hadTicker) newPassiveTickers += 1
+      if (STATIC_NODE_SYMBOLS.has(sym)) continue
+      if (hasNodeOverride(sym)) continue
+      // Every absorbed node inherits the chain's sectorId. For a high-quality
+      // chain generator (Claude), non-focus nodes are almost always real
+      // sector peers of the focus (banks that appear in COF's chain ARE
+      // financials; payments networks in MA's chain ARE fin-payments). The
+      // inheritance makes the unified Value Chain tabs + Diagram view feel
+      // like a dynamically growing graph — generate one focus and its whole
+      // ecosystem becomes navigable. If the node later gets its own chain
+      // generated, its own ticker_sectors classification takes precedence
+      // over this inherited tag.
+      upsertNodeOverride({
+        symbol: sym,
+        stage: node.stage,
+        sector: null,
+        name: node.name,
+        blurb: node.blurb,
+        source,
+        acceptedAt: now,
+        sectorId
+      })
+      nodesAdded += 1
+    }
+
+    for (const edge of chain.edges) {
+      let from = edge.from.toUpperCase()
+      let to = edge.to.toUpperCase()
+      let relationship = edge.relationship
+      if (!from || !to || from === to) continue
+      if (!tickerSymbols.has(from) || !tickerSymbols.has(to)) continue
+      // Normalize at write time: "customer" and "supplier" describe the same
+      // directional relationship from opposite ends. Storing both forms would
+      // produce duplicate rows (X→Y supplier AND Y→X customer mean the same
+      // thing). Canonicalize to supplier-form so the DB holds one row per
+      // directed economic relationship. The UI's downstream logic no longer
+      // has to swap at render time, and cross-chain duplicates collapse via
+      // the consensus-merge PK on (from, to, relationship).
+      if (relationship === 'customer') {
+        const swap = from
+        from = to
+        to = swap
+        relationship = 'supplier'
+      }
+      upsertEdgeOverrideWithConsensus({
+        fromSymbol: from,
+        toSymbol: to,
+        relationship,
+        note: edge.note,
+        // Generated-chain edges get a mid-tier weight: better than a bare
+        // co-occurrence signal, weaker than a 10-K-grounded supplier claim.
+        // Consensus merging boosts this when another source confirms.
+        weight: 0.65,
+        source,
+        acceptedAt: now,
+        sectorId,
+        // Forward the entire multi-cite array. graph_edge_overrides.citationJson
+        // now serializes the full array so the diagram tooltip + unified-graph
+        // focus panel can stack pills the same way the per-ticker chain card
+        // does. Falls back to the legacy single citation field for chains
+        // generated before multi-cite shipped.
+        citations:
+          edge.citations && edge.citations.length > 0
+            ? edge.citations
+            : edge.citation
+              ? [edge.citation]
+              : []
+      })
+      edgesAdded += 1
+    }
+  })
+  txWork()
 
   // Fire the graph:updated broadcast that the ValueChain renderer and the
   // Settings audit UI already listen to. Without this the newly-absorbed

@@ -39,8 +39,23 @@ function recentArticles(hours: number, limit: number): RecentArticle[] {
 // ---- Daily Drip: keyword-frequency, no Ollama needed ----
 
 export async function runDailyDrip(): Promise<number> {
-  const held = new Set(listTickers().filter((t) => t.isActive).map((t) => t.symbol.toUpperCase()))
-  const articles = recentArticles(48, 300)
+  // Top-level guard mirrors the other service ticks: the DB reads on the
+  // first two lines run before any nested try/catch, so a shutdown-race
+  // "Database not initialized" throw (closeDatabase fired while the
+  // setTimeout callback was already queued) would surface as an
+  // unhandled promise rejection at the `void runDailyDrip()` call site.
+  let held: Set<string>
+  let articles: ReturnType<typeof recentArticles>
+  try {
+    held = new Set(listTickers().filter((t) => t.isActive).map((t) => t.symbol.toUpperCase()))
+    articles = recentArticles(48, 300)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (!msg.includes('Database not initialized')) {
+      console.warn('[discovery] runDailyDrip setup failed:', msg)
+    }
+    return 0
+  }
   if (articles.length === 0) return 0
 
   const mentions = new Map<string, { ref: TickerRef; count: number; articleIds: number[] }>()
@@ -108,10 +123,22 @@ export async function runWeeklyCurated(): Promise<number> {
     return 0
   }
 
-  const held = listTickers().filter((t) => t.isActive)
-  const heldSymbols = new Set(held.map((t) => t.symbol.toUpperCase()))
-  const holdingsList = held.map((t) => `${t.symbol} (${t.companyName})`).join(', ')
-  const articles = recentArticles(7 * 24, 50)
+  let held: ReturnType<typeof listTickers>
+  let heldSymbols: Set<string>
+  let holdingsList: string
+  let articles: ReturnType<typeof recentArticles>
+  try {
+    held = listTickers().filter((t) => t.isActive)
+    heldSymbols = new Set(held.map((t) => t.symbol.toUpperCase()))
+    holdingsList = held.map((t) => `${t.symbol} (${t.companyName})`).join(', ')
+    articles = recentArticles(7 * 24, 50)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (!msg.includes('Database not initialized')) {
+      console.warn('[discovery] runWeeklyCurated setup failed:', msg)
+    }
+    return 0
+  }
   if (articles.length === 0) return 0
 
   const summaries = articles

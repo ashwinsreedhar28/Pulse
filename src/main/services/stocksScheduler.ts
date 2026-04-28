@@ -81,7 +81,11 @@ async function tick(): Promise<void> {
       console.warn(
         `[stocks] Yahoo returned ${yahooHits}/${quotes.length} priced quotes — falling back to Stooq`
       )
-      const stooqQuotes = await getStooqQuotes(symbols)
+      // Stooq's tab-separated CSV header has shifted shape before; if the
+      // hand-rolled parser throws, treat it as a partial outage like the
+      // Yahoo fallback above does — return [] so we keep the prior
+      // tick's lastQuotes instead of blanking the marquee.
+      const stooqQuotes = await getStooqQuotes(symbols).catch(() => [] as StockQuote[])
       const overlay = shouldOverlayExtended()
         ? await getExtendedQuotes(symbols).catch(() => [])
         : []

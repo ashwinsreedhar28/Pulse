@@ -83,12 +83,14 @@ export async function pollAllFeeds(options: { force?: boolean } = {}): Promise<P
   const startedAt = Date.now()
   const feeds = listEnabledFeedsForPolling()
   const scoringCtx = buildUrgencyContext()
-  const promptLists = buildPromptLists()
   // Snapshot the active watchlist once per poll so every inserted article is
   // classified against the same ticker set — cheaper than re-reading from DB
   // per feed batch and identical in behaviour since ticker changes are rare
-  // relative to poll cadence.
-  const activeTickers = listTickers().filter((t) => t.isActive)
+  // relative to poll cadence. Reuse the same snapshot for promptLists so
+  // pollAllFeeds doesn't pay for two `SELECT * FROM tickers` per cycle.
+  const allTickers = listTickers()
+  const activeTickers = allTickers.filter((t) => t.isActive)
+  const promptLists = buildPromptLists(allTickers)
   let articlesInserted = 0
   const errors: PollSummary['errors'] = []
 
@@ -145,8 +147,8 @@ interface PromptLists {
   interests: string[]
 }
 
-function buildPromptLists(): PromptLists {
-  const tickers = listTickers()
+function buildPromptLists(allTickers: Ticker[]): PromptLists {
+  const tickers = allTickers
     .filter((t) => t.isActive)
     .map((t) => `${t.symbol} (${t.companyName})`)
   const interests = listGeoInterests()

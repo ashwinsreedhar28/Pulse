@@ -61,7 +61,14 @@ export async function refreshCikMapIfStale(force = false): Promise<void> {
   if (!force && last !== null && Date.now() - last < CIK_MAP_TTL_MS) return
   try {
     const entries = await fetchTickerMap()
-    if (entries.length > 0) upsertCikMap(entries)
+    if (entries.length > 0) {
+      upsertCikMap(entries)
+      // companyNameResolver caches a derived index over sec_cik_map +
+      // sec_former_names. Invalidate after each refresh so subsequent
+      // resolves see the updated names instead of a stale snapshot.
+      const { invalidateNameIndex } = await import('./companyNameResolver')
+      invalidateNameIndex()
+    }
   } catch (err) {
     console.warn(
       '[sec] ticker map refresh failed:',
@@ -90,6 +97,10 @@ export async function refreshFilings(symbol: string): Promise<number | null> {
           toDate: f.toDate
         }))
       )
+      // Same rationale as the cik-map refresh path: derived name index
+      // needs to forget its cached snapshot when former-names change.
+      const { invalidateNameIndex } = await import('./companyNameResolver')
+      invalidateNameIndex()
     }
     if (filings.length === 0) return 0
     const count = upsertFilings(sym, filings)

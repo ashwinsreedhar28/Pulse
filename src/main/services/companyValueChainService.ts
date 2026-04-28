@@ -208,9 +208,13 @@ async function fetchEightKExcerpt(symbol: string): Promise<FilingExcerptResult |
 // Bilateral fetching (counterparty filings) and customer-concentration
 // extraction both want to scan filing bodies, and a chain regen for one
 // focus can hit the same counterparty's 10-K from multiple edges. Cache
-// by accession so we never re-fetch the same document inside a single
-// process lifetime. Cleared at process start; never invalidated since
-// SEC accessions are immutable.
+// by accession so we never re-fetch the same document inside one chain
+// generation. SEC accessions are immutable, but each cached entry is
+// 800KB-3MB after stripHtmlToText — over multi-day sessions an
+// unbounded cache for ~100 tickers × 5-15 counterparties each grows to
+// 300-750MB resident. LRU-cap to avoid that. Re-fetching an evicted
+// filing is a ~200ms SEC roundtrip, near-zero correctness cost.
+const FILING_BODY_CACHE_MAX = 50
 interface CachedFilingBody {
   text: string
   url: string
@@ -242,6 +246,13 @@ async function fetchFilingBody(filing: SecFiling): Promise<CachedFilingBody | nu
     if (text.length < 300) return null
     const body: CachedFilingBody = { text, url, filing }
     filingBodyCache.set(key, body)
+    // LRU eviction — Map preserves insertion order, so the first key
+    // is the oldest. Drop one when over cap so steady-state memory
+    // stays bounded across long sessions.
+    if (filingBodyCache.size > FILING_BODY_CACHE_MAX) {
+      const oldest = filingBodyCache.keys().next().value
+      if (oldest) filingBodyCache.delete(oldest)
+    }
     return body
   } catch (err) {
     console.warn(
@@ -2877,6 +2888,13 @@ export async function regenerateAllChains(
 ): Promise<RegenerateAllProgress> {
   if (regenRunning) return regenProgress
   regenRunning = true
+  // Wrap the entire body in try/finally so a throw between here and the
+  // per-symbol try/catch (e.g. listCompanyValueChainSymbols throws
+  // "Database not initialized" mid-shutdown race) doesn't leak the
+  // running flag forever. Without the finally, a subsequent click of
+  // Regenerate-all in the same session short-circuits on the early
+  // `if (regenRunning) return` guard above.
+  try {
   // Expanded scope: "regenerate all" now means every ticker the user has
   // expressed interest in — union of (a) tickers that already have a chain
   // (refresh them with the latest classifier / prompt / model) and
@@ -2991,9 +3009,11 @@ export async function regenerateAllChains(
   }
 
   regenProgress = { ...regenProgress, currentSymbol: null, running: false }
-  regenRunning = false
   broadcastRegenProgress()
   return regenProgress
+  } finally {
+    regenRunning = false
+  }
 }
 
 // ---- on-boot auto-regeneration ---------------------------------------------

@@ -142,7 +142,16 @@ function getMatchers(ticker: Ticker): Matchers {
   return m
 }
 
-export function invalidateMatcherCache(): void {
+// When a single symbol mutates (add / delete / activate), narrow the
+// invalidation to just that entry. Building one entry is ~0.5 ms; full
+// rebuild for a 100-ticker watchlist is ~50 ms × every back-to-back
+// add. Pass undefined to wipe the whole cache (only needed for bulk
+// resets — none of the current call sites hit that path).
+export function invalidateMatcherCache(symbol?: string): void {
+  if (symbol) {
+    matcherCache.delete(symbol.toUpperCase())
+    return
+  }
   matcherCache.clear()
 }
 

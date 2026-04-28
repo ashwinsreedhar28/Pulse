@@ -51,17 +51,28 @@ async function refreshTopic(topic: ResearchTopicRow): Promise<void> {
 }
 
 async function tick(): Promise<void> {
-  const topics = listResearchTopics()
-  const now = Date.now()
-  const due = topics.filter(
-    (t) => t.lastBriefAt === null || now - t.lastBriefAt >= REFRESH_INTERVAL_MS
-  )
-  if (due.length === 0) return
-  // Sequential refresh to avoid bursting the Anthropic + Semantic
-  // Scholar APIs simultaneously. With cadence at 7 days the queue
-  // is tiny in practice (1-2 topics per tick).
-  for (const topic of due) {
-    await refreshTopic(topic)
+  // Top-level guard: the DB reads below run before any per-topic try/catch.
+  // A shutdown-race throw (closeDatabase fired while the tick callback was
+  // queued) used to surface as an unhandled promise rejection from the
+  // `void tick()` call sites — noisy in logs today, would terminate the
+  // process under Node's future `--unhandled-rejections=throw` default.
+  try {
+    const topics = listResearchTopics()
+    const now = Date.now()
+    const due = topics.filter(
+      (t) => t.lastBriefAt === null || now - t.lastBriefAt >= REFRESH_INTERVAL_MS
+    )
+    if (due.length === 0) return
+    // Sequential refresh to avoid bursting the Anthropic + Semantic
+    // Scholar APIs simultaneously. With cadence at 7 days the queue
+    // is tiny in practice (1-2 topics per tick).
+    for (const topic of due) {
+      await refreshTopic(topic)
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('Database not initialized')) return
+    console.warn('[researchScheduler] tick failed:', msg)
   }
 }
 

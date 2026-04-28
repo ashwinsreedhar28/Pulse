@@ -1376,5 +1376,21 @@ export const migrations: Migration[] = [
          ON discovery_suggestions(createdAt DESC);`
       )
     }
+  },
+  {
+    version: 47,
+    name: 'index sec_cik_map.cik for former-names join',
+    // companyNameResolver.loadIndex joins sec_former_names to sec_cik_map
+    // on cik to produce the rebrand-aware name index. sec_cik_map's only
+    // index was its PK on `symbol`, so the join did a full scan per row.
+    // With sec_former_names now populated, regen-all (~30 nodes × ~60
+    // chains = ~1800 calls) compounded the cost noticeably. Adding the
+    // cik index makes the join indexed even on cold first call.
+    up: (db) => {
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_sec_cik_map_cik
+         ON sec_cik_map(cik);`
+      )
+    }
   }
 ]

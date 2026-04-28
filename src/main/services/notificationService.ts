@@ -63,7 +63,16 @@ export interface NotificationCandidate {
 
 export type DispatchOutcome =
   | { ok: true }
-  | { ok: false; reason: 'category-disabled' | 'duplicate' | 'quiet-hours' | 'capped' | 'unsupported' }
+  | {
+      ok: false
+      reason:
+        | 'category-disabled'
+        | 'duplicate'
+        | 'quiet-hours'
+        | 'capped'
+        | 'unsupported'
+        | 'failed'
+    }
 
 let showMainWindowFn: (() => void) | null = null
 
@@ -217,18 +226,31 @@ export function dispatchNotification(candidate: NotificationCandidate): Dispatch
     icon: icon ?? undefined
   })
   attachClickHandler(notif, candidate.clickAction ?? null)
+  // macOS lets the user revoke notification permission per app via
+  // System Settings; Notification.isSupported() returns true regardless.
+  // When permission is off, .show() silently no-ops and the OS surfaces
+  // a 'failed' event. Skip the log row in that case so dedup + daily-cap
+  // accounting reflect what the user actually saw — and a buffered
+  // breaking event can re-fire if the user later re-grants permission.
+  let delivered = true
+  notif.once('failed', (_event, error) => {
+    delivered = false
+    console.warn('[notification] OS dropped notification:', error)
+  })
   notif.show()
 
-  recordLogEntry({
-    category: candidate.category,
-    identityKey: candidate.identityKey,
-    payloadJson: JSON.stringify({
-      title: candidate.title,
-      body: candidate.body,
-      subtitle: candidate.subtitle,
-      importance,
-      clickAction: candidate.clickAction ?? null
+  if (delivered) {
+    recordLogEntry({
+      category: candidate.category,
+      identityKey: candidate.identityKey,
+      payloadJson: JSON.stringify({
+        title: candidate.title,
+        body: candidate.body,
+        subtitle: candidate.subtitle,
+        importance,
+        clickAction: candidate.clickAction ?? null
+      })
     })
-  })
-  return { ok: true }
+  }
+  return delivered ? { ok: true } : { ok: false, reason: 'failed' }
 }

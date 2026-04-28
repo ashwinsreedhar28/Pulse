@@ -3150,18 +3150,28 @@ function StocksPage({
     }
   }
 
-  const bySymbol = new Map(quotes.map((q) => [q.symbol.toUpperCase(), q]))
-  const sectorOrder: string[] = []
-  const grouped: Record<string, Ticker[]> = {}
-  for (const t of tickers) {
-    if (!t.isActive) continue
-    const sector = t.sector?.trim() || 'Other'
-    if (!(sector in grouped)) {
-      grouped[sector] = []
-      sectorOrder.push(sector)
+  // bySymbol legitimately invalidates on every quote tick — child cards
+  // need the fresh quote object. The sectorOrder/grouped derivation
+  // only depends on `tickers` (rare to mutate during a session) so
+  // memo-ing it stops the per-tick allocation pass.
+  const bySymbol = useMemo(
+    () => new Map(quotes.map((q) => [q.symbol.toUpperCase(), q])),
+    [quotes]
+  )
+  const { sectorOrder, grouped } = useMemo(() => {
+    const order: string[] = []
+    const buckets: Record<string, Ticker[]> = {}
+    for (const t of tickers) {
+      if (!t.isActive) continue
+      const sector = t.sector?.trim() || 'Other'
+      if (!(sector in buckets)) {
+        buckets[sector] = []
+        order.push(sector)
+      }
+      buckets[sector].push(t)
     }
-    grouped[sector].push(t)
-  }
+    return { sectorOrder: order, grouped: buckets }
+  }, [tickers])
 
   const gainers = quotes.filter((q) => (q.change ?? 0) > 0).length
   const losers = quotes.filter((q) => (q.change ?? 0) < 0).length

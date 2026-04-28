@@ -104,6 +104,7 @@ import {
 } from '../services/reelService'
 import { classifyAllArticlesForTicker, pollAllFeeds } from '../services/feedPoller'
 import { invalidateMatcherCache } from '../services/tickerRelevance'
+import { invalidateNameIndex } from '../services/companyNameResolver'
 import { deleteMatchesForSymbol } from '../database/articleTickerMatches'
 import {
   getOrComputeRelevance,
@@ -260,7 +261,8 @@ export function registerDbIpc(): void {
     const t = existing
       ? (tickersDb.setTickerActive(existing.id, true), tickersDb.getTicker(existing.id)!)
       : tickersDb.createTicker(input)
-    invalidateMatcherCache()
+    invalidateMatcherCache(t.symbol)
+    invalidateNameIndex()
     // Provision this ticker's dedicated Yahoo + Nasdaq news feeds so the
     // poller picks them up on its next cycle (and on the force-triggered
     // poll we kick below).
@@ -307,7 +309,8 @@ export function registerDbIpc(): void {
     const t = tickersDb.listTickers().find((x) => x.id === id)
     tickersDb.deleteTicker(id)
     if (t) {
-      invalidateMatcherCache()
+      invalidateMatcherCache(t.symbol)
+      invalidateNameIndex()
       deleteMatchesForSymbol(t.symbol)
     }
     invalidateAllRelevance()
@@ -320,7 +323,8 @@ export function registerDbIpc(): void {
     tickersDb.setTickerActive(id, true)
     const t = tickersDb.getTicker(id)
     if (!t) return null
-    invalidateMatcherCache()
+    invalidateMatcherCache(t.symbol)
+    invalidateNameIndex()
     provisionFeedsForTicker(t)
     void classifyAllArticlesForTicker(t).finally(() => refreshTickerSummary(t.id))
     void pollAllFeeds({ force: true })
