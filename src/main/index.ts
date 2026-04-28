@@ -9,7 +9,8 @@ import {
   nativeTheme,
   shell,
   protocol,
-  net
+  net,
+  dialog
 } from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -529,35 +530,53 @@ app.setName('Pulse')
 app.whenReady().then(async () => {
   splashWindow = createSplashWindow()
 
-  initDatabase()
-  splashUpdate('db', 'ok')
+  // Boot init guard: any synchronous throw between here and the splash
+  // watchdog (~line 715 below) used to leave the user staring at a
+  // transparent splash forever — initDatabase rejects synchronously on
+  // a failed migration / SQLITE_FULL / corrupt DB, no .catch was chained,
+  // no uncaughtException handler was registered. Now we surface the
+  // failure via a real Electron error dialog and quit cleanly. Healthy
+  // boots are unaffected — this branch only runs on init failure.
+  try {
+    initDatabase()
+    splashUpdate('db', 'ok')
 
-  // Sector catalog sync + ticker_sectors backfill runs immediately after
-  // migrations. Idempotent — re-syncs on every boot, but the backfill only
-  // fires when ticker_sectors is empty.
-  bootstrapSectorCatalog()
+    // Sector catalog sync + ticker_sectors backfill runs immediately after
+    // migrations. Idempotent — re-syncs on every boot, but the backfill only
+    // fires when ticker_sectors is empty.
+    bootstrapSectorCatalog()
 
-  // One-time fix for chain-absorbed tickers created before the absorber
-  // started calling ensurePassiveTicker. Without this, the stocks scheduler
-  // has no tickers-table row for those symbols and their tiles render as
-  // EXT with no quote. Idempotent — skips symbols that already have rows.
-  const passiveBackfilled = backfillPassiveTickersForAbsorbedNodes()
-  if (passiveBackfilled > 0) {
-    console.log(
-      `[boot] created ${passiveBackfilled} passive ticker row(s) for absorbed nodes`
+    // One-time fix for chain-absorbed tickers created before the absorber
+    // started calling ensurePassiveTicker. Without this, the stocks scheduler
+    // has no tickers-table row for those symbols and their tiles render as
+    // EXT with no quote. Idempotent — skips symbols that already have rows.
+    const passiveBackfilled = backfillPassiveTickersForAbsorbedNodes()
+    if (passiveBackfilled > 0) {
+      console.log(
+        `[boot] created ${passiveBackfilled} passive ticker row(s) for absorbed nodes`
+      )
+    }
+
+    // Populate sectorId on absorbed non-focus nodes that were written with
+    // a null tag by an earlier, more conservative absorber. With Claude's
+    // chain quality, counterparties in a focus's chain are almost always in
+    // the focus's sector (banks in COF's chain are financials, payments
+    // networks in MA's chain are fin-payments). Making them inheritable
+    // lights up the unified Value Chain tabs + Diagram so the graph grows
+    // dynamically as the user generates each focus.
+    const reseeded = repopulateAbsorbedSectorIds()
+    if (reseeded > 0) {
+      console.log(`[boot] repopulated sectorId on ${reseeded} absorbed override row(s)`)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[boot] database initialization failed:', err)
+    dialog.showErrorBox(
+      'Pulse failed to start',
+      `Database initialization failed:\n\n${message}\n\nThe app cannot continue. Please check the dev console (Cmd+Opt+I in development) or report this issue.`
     )
-  }
-
-  // Populate sectorId on absorbed non-focus nodes that were written with
-  // a null tag by an earlier, more conservative absorber. With Claude's
-  // chain quality, counterparties in a focus's chain are almost always in
-  // the focus's sector (banks in COF's chain are financials, payments
-  // networks in MA's chain are fin-payments). Making them inheritable
-  // lights up the unified Value Chain tabs + Diagram so the graph grows
-  // dynamically as the user generates each focus.
-  const reseeded = repopulateAbsorbedSectorIds()
-  if (reseeded > 0) {
-    console.log(`[boot] repopulated sectorId on ${reseeded} absorbed override row(s)`)
+    app.quit()
+    return
   }
 
   registerReelProtocol()
