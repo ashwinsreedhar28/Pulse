@@ -544,3 +544,61 @@ export async function getPaper(paperId: string): Promise<ResearchPaper | null> {
     return null
   }
 }
+
+// ---------- Foundational refs (Phase 2A) ------------------------------------
+
+// Intents we treat as "foundational" — citations that match the user's
+// "explicitly named in intro/related-works as the basis for this work"
+// definition. S2 tags each citation with one or more intents; multi-tag
+// is common (a methodology citation also gets `background` flagged).
+const FOUNDATIONAL_INTENTS = new Set(['background', 'methodology', 'extension'])
+
+// Fetch the references for a paper with intent + influence metadata,
+// filter to the foundational subset, and return hydrated ResearchPapers.
+// The S2 references endpoint accepts `intents,isInfluential` alongside
+// the per-ref `citedPaper.*` fields. Limit 100 to capture the full
+// reference list of most papers (median is ~30-50 refs).
+export async function fetchFoundationalReferences(
+  paperId: string
+): Promise<ResearchPaper[]> {
+  const fields = [
+    'intents',
+    'isInfluential',
+    ...PAPER_FIELDS.split(',').map((f) => `citedPaper.${f}`)
+  ].join(',')
+  const url =
+    `${S2_BASE}/paper/${encodeURIComponent(paperId)}/references` +
+    `?limit=100&fields=${encodeURIComponent(fields)}`
+  let response: {
+    data?: Array<{
+      isInfluential?: boolean
+      intents?: string[]
+      citedPaper?: S2Paper
+    }>
+  }
+  try {
+    response = await fetchJson<typeof response>(url)
+  } catch (err) {
+    console.warn(
+      '[research] foundational refs fetch failed for',
+      paperId,
+      ':',
+      err instanceof Error ? err.message : err
+    )
+    return []
+  }
+  const items = response.data ?? []
+  const foundational: ResearchPaper[] = []
+  for (const item of items) {
+    if (item.isInfluential !== true) continue
+    if (!Array.isArray(item.intents)) continue
+    if (!item.intents.some((i) => FOUNDATIONAL_INTENTS.has(i))) continue
+    if (!item.citedPaper) continue
+    const paper = fromS2Paper(item.citedPaper)
+    if (paper) foundational.push(paper)
+  }
+  // Sort by influence — most-cited foundational refs lead. Same
+  // paperScore the search-result list uses, keeps surfaces consistent.
+  foundational.sort((a, b) => paperScore(b) - paperScore(a))
+  return foundational
+}

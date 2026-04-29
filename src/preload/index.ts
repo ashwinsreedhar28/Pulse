@@ -1714,7 +1714,15 @@ const api = {
     bookmark: (paper: ResearchPaper): Promise<ResearchBookmarkRow> =>
       invoke<ResearchBookmarkRow>('research:bookmark', paper),
     unbookmark: (paperId: string): Promise<{ ok: boolean }> =>
-      invoke<{ ok: boolean }>('research:unbookmark', paperId)
+      invoke<{ ok: boolean }>('research:unbookmark', paperId),
+    // Foundational refs — papers this work explicitly builds on per S2's
+    // isInfluential + intents (background/methodology/extension)
+    // classifier. Cached locally, auto-fetched on bookmark.
+    getFoundational: (paperId: string): Promise<ResearchPaper[]> =>
+      invoke<ResearchPaper[]>('research:getFoundational', paperId),
+    // Inverse direction — bookmarks that name this paper as foundational.
+    getFoundationalFor: (paperId: string): Promise<ResearchPaper[]> =>
+      invoke<ResearchPaper[]>('research:getFoundationalFor', paperId)
   },
   fred: {
     getSnapshot: (): Promise<FredSeriesSnapshot[]> =>

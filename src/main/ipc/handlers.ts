@@ -740,12 +740,64 @@ export function registerDbIpc(): void {
   })
   ipcMain.handle('research:bookmark', async (_e, paper: import('../../preload').ResearchPaper) => {
     const { bookmarkResearchPaper } = await import('../database/researchBookmarks')
-    return bookmarkResearchPaper(paper)
+    const row = bookmarkResearchPaper(paper)
+    // Auto-fetch foundational refs so the "Built on" section renders
+    // immediately when the user opens detail later. Fire-and-forget;
+    // the user sees the bookmark land instantly even if S2 is slow.
+    void (async () => {
+      try {
+        const { getFoundationalCache, upsertFoundationalCache } = await import(
+          '../database/researchFoundational'
+        )
+        if (getFoundationalCache(paper.paperId)) return
+        const { fetchFoundationalReferences } = await import('../services/researchService')
+        const foundational = await fetchFoundationalReferences(paper.paperId)
+        upsertFoundationalCache(paper.paperId, foundational)
+      } catch (err) {
+        console.warn(
+          '[research] auto-fetch foundational on bookmark failed:',
+          err instanceof Error ? err.message : err
+        )
+      }
+    })()
+    return row
   })
   ipcMain.handle('research:unbookmark', async (_e, paperId: string) => {
     const { unbookmarkResearchPaper } = await import('../database/researchBookmarks')
     unbookmarkResearchPaper(paperId)
     return { ok: true }
+  })
+  // Foundational refs lookup. Cache-first; on miss, fetches from S2,
+  // applies the isInfluential + intents heuristic, persists, and
+  // returns. Renderer calls this when the paper detail panel opens.
+  ipcMain.handle('research:getFoundational', async (_e, paperId: string) => {
+    const { getFoundationalCache, upsertFoundationalCache } = await import(
+      '../database/researchFoundational'
+    )
+    const cached = getFoundationalCache(paperId)
+    if (cached) return cached.foundational
+    const { fetchFoundationalReferences } = await import('../services/researchService')
+    const foundational = await fetchFoundationalReferences(paperId)
+    upsertFoundationalCache(paperId, foundational)
+    return foundational
+  })
+  // Inverse direction — given a paper P, return the user's bookmarks
+  // that named P as foundational (i.e. P appears in their cached list).
+  // Walks all bookmark caches in-memory; cheap at hundreds of bookmarks,
+  // doesn't hit S2 at all.
+  ipcMain.handle('research:getFoundationalFor', async (_e, paperId: string) => {
+    const { listResearchBookmarks } = await import('../database/researchBookmarks')
+    const { getFoundationalCache } = await import('../database/researchFoundational')
+    const bookmarks = listResearchBookmarks()
+    const out: import('../../preload').ResearchPaper[] = []
+    for (const b of bookmarks) {
+      const cache = getFoundationalCache(b.paperId)
+      if (!cache) continue
+      if (cache.foundational.some((p) => p.paperId === paperId)) {
+        out.push(b.paper)
+      }
+    }
+    return out
   })
 
   // ---- FRED macro panel ----------------------------------------------------

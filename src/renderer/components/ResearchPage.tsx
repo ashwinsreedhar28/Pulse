@@ -805,15 +805,30 @@ function PaperDetailPanel({
 }): JSX.Element {
   const [citing, setCiting] = useState<ResearchPaper[] | null>(null)
   const [refs, setRefs] = useState<ResearchPaper[] | null>(null)
+  const [foundational, setFoundational] = useState<ResearchPaper[] | null>(null)
+  const [foundationalFor, setFoundationalFor] = useState<ResearchPaper[] | null>(null)
   useEffect(() => {
     let cancelled = false
     setCiting(null)
     setRefs(null)
+    setFoundational(null)
+    setFoundationalFor(null)
     void window.api.research.listCiting(paper.paperId).then((list) => {
       if (!cancelled) setCiting(list)
     })
     void window.api.research.listReferences(paper.paperId).then((list) => {
       if (!cancelled) setRefs(list)
+    })
+    // Foundational refs — what THIS paper builds on. Cache-first; first
+    // call after bookmark may be slow if S2 is throttled, but the
+    // bookmark auto-fetch usually populates it before the user opens
+    // detail.
+    void window.api.research.getFoundational(paper.paperId).then((list) => {
+      if (!cancelled) setFoundational(list)
+    })
+    // Inverse — bookmarks that name this paper as foundational.
+    void window.api.research.getFoundationalFor(paper.paperId).then((list) => {
+      if (!cancelled) setFoundationalFor(list)
     })
     return (): void => {
       cancelled = true
@@ -903,6 +918,24 @@ function PaperDetailPanel({
         </div>
 
         <LineageList
+          title="Built on"
+          subtitle="Foundational papers this work explicitly builds on (S2 isInfluential + intent in background/methodology/extension)"
+          papers={foundational}
+          onSelectPaper={onSelectPaper}
+          accent="amber"
+          glyph="▲"
+        />
+        {foundationalFor && foundationalFor.length > 0 && (
+          <LineageList
+            title="Foundational for"
+            subtitle="Bookmarks that name this paper as foundational"
+            papers={foundationalFor}
+            onSelectPaper={onSelectPaper}
+            accent="amber"
+            glyph="▲"
+          />
+        )}
+        <LineageList
           title="Cited by"
           subtitle="Top influential papers that cite this work"
           papers={citing}
@@ -910,7 +943,7 @@ function PaperDetailPanel({
         />
         <LineageList
           title="References"
-          subtitle="Top-cited foundational papers this work builds on"
+          subtitle="Top-cited papers this work references (full bibliography)"
           papers={refs}
           onSelectPaper={onSelectPaper}
         />
@@ -923,17 +956,32 @@ function LineageList({
   title,
   subtitle,
   papers,
-  onSelectPaper
+  onSelectPaper,
+  accent,
+  glyph
 }: {
   title: string
   subtitle: string
   papers: ResearchPaper[] | null
   onSelectPaper: (p: ResearchPaper) => void
+  // Optional accent — currently 'amber' for the foundational sections
+  // (Built on / Foundational for) to distinguish them from the
+  // emerald-tinted Cited-by / References lineage. Default is the
+  // existing zinc/violet styling.
+  accent?: 'amber'
+  glyph?: string
 }): JSX.Element {
+  const titleTone =
+    accent === 'amber' ? 'text-amber-300' : 'text-zinc-400'
   return (
     <section>
       <div className="flex items-center gap-2 mb-1">
-        <h4 className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
+        {glyph && (
+          <span className={`text-[12px] leading-none ${titleTone}`}>{glyph}</span>
+        )}
+        <h4
+          className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${titleTone}`}
+        >
           {title}
         </h4>
         {papers !== null && (

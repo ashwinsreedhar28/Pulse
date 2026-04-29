@@ -1412,5 +1412,31 @@ export const migrations: Migration[] = [
           ON research_bookmarks(savedAt DESC);
       `)
     }
+  },
+  {
+    version: 49,
+    name: 'research_paper_foundational',
+    // Per-paper cache of "foundational" references — the ~3-7 refs S2
+    // marks isInfluential=true AND tags with intents in {background,
+    // methodology, extension}. Approximates "papers explicitly named
+    // in intro/related-works as the basis for this work."
+    //
+    // Cached locally because (a) we auto-fetch on bookmark to populate
+    // before the user opens detail, (b) the inverse query — "which of
+    // my bookmarks list paper X as foundational" — needs to walk every
+    // bookmark's cache without paying per-call S2 latency. Stores the
+    // full hydrated ResearchPaper[] JSON so the "Built on" list renders
+    // with no extra fetches.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS research_paper_foundational (
+          paperId TEXT PRIMARY KEY,
+          foundationalJson TEXT NOT NULL,
+          fetchedAt INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_research_paper_foundational_fetchedAt
+          ON research_paper_foundational(fetchedAt);
+      `)
+    }
   }
 ]
