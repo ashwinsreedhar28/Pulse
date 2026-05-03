@@ -1438,5 +1438,25 @@ export const migrations: Migration[] = [
           ON research_paper_foundational(fetchedAt);
       `)
     }
+  },
+  {
+    version: 50,
+    name: 'research_recent_searches',
+    // Auto-recorded recent searches. Distinct from research_topics
+    // (explicitly-saved with a weekly scheduler) and research_bookmarks
+    // (saved papers). Just a "stuff I searched recently" list so the
+    // user can re-run a query without re-typing. query is PK so repeat
+    // searches upsert; searchCount + lastSearchedAt drive ranking.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS research_recent_searches (
+          query TEXT PRIMARY KEY,
+          lastSearchedAt INTEGER NOT NULL,
+          searchCount INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS idx_research_recent_lastSearchedAt
+          ON research_recent_searches(lastSearchedAt DESC);
+      `)
+    }
   }
 ]

@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   BridgePaperResult,
+  RecentSearchRow,
   ResearchBriefBullet,
   ResearchBriefPayload,
   ResearchBriefSection,
@@ -60,10 +61,10 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
   const [selectedPaper, setSelectedPaper] = useState<ResearchPaper | null>(null)
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set())
   const [pdfReader, setPdfReader] = useState<PdfReaderState | null>(null)
+  const [recentSearches, setRecentSearches] = useState<RecentSearchRow[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Bookmarks: load once on mount; per-toggle handler patches the local
-  // Set so the ⭐ icon updates without a re-fetch.
+  // Bookmarks + recent searches: load once on mount.
   useEffect(() => {
     let cancelled = false
     void window.api.research
@@ -75,10 +76,42 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
       .catch(() => {
         /* keep prior state */
       })
+    void window.api.research
+      .listRecent(10)
+      .then((rows) => {
+        if (cancelled) return
+        setRecentSearches(rows)
+      })
+      .catch(() => {
+        /* keep prior state */
+      })
     return (): void => {
       cancelled = true
     }
   }, [])
+
+  const reloadRecent = useCallback(async (): Promise<void> => {
+    try {
+      const rows = await window.api.research.listRecent(10)
+      setRecentSearches(rows)
+    } catch (err) {
+      console.warn('[research] listRecent failed:', err)
+    }
+  }, [])
+
+  const removeRecent = useCallback(
+    async (query: string): Promise<void> => {
+      // Optimistic removal so the chip disappears instantly.
+      setRecentSearches((prev) => prev.filter((r) => r.query !== query))
+      try {
+        await window.api.research.clearRecent(query)
+      } catch (err) {
+        console.warn('[research] clearRecent failed:', err)
+        void reloadRecent()
+      }
+    },
+    [reloadRecent]
+  )
 
   const toggleBookmark = useCallback(
     async (paper: ResearchPaper): Promise<void> => {
@@ -188,6 +221,15 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
     if (!q) return
     setView({ kind: 'loading', query: q, brief: null, papers: [], topicId: null })
     setSelectedPaper(null)
+    // Record the search regardless of whether S2 returns results — the
+    // user expressed intent, and they may want to retry the same query
+    // later if S2 was rate-limited or empty.
+    void window.api.research
+      .recordRecent(q)
+      .then(() => reloadRecent())
+      .catch(() => {
+        /* silent — recents are nice-to-have */
+      })
     try {
       const result = await window.api.research.search(q)
       setView({
@@ -322,7 +364,9 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
         <div className="flex-1 min-w-0 overflow-y-auto px-6 py-5">
-          {(topics.length > 0 || bookmarkedIds.size > 0) && (
+          {(topics.length > 0 ||
+            bookmarkedIds.size > 0 ||
+            recentSearches.length > 0) && (
             <SavedTopicsStrip
               topics={topics}
               activeId={view.topicId}
@@ -331,6 +375,13 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
               bookmarksCount={bookmarkedIds.size}
               isBookmarksActive={view.kind === 'bookmarks'}
               onOpenBookmarks={openBookmarks}
+              recentSearches={recentSearches}
+              activeQuery={view.kind === 'results' ? view.query : null}
+              onRunRecent={(q) => {
+                setDraft(q)
+                void runSearch(q)
+              }}
+              onRemoveRecent={(q) => void removeRecent(q)}
             />
           )}
 
@@ -474,7 +525,11 @@ function SavedTopicsStrip({
   onDelete,
   bookmarksCount,
   isBookmarksActive,
-  onOpenBookmarks
+  onOpenBookmarks,
+  recentSearches,
+  activeQuery,
+  onRunRecent,
+  onRemoveRecent
 }: {
   topics: ResearchTopic[]
   activeId: number | null
@@ -483,53 +538,107 @@ function SavedTopicsStrip({
   bookmarksCount: number
   isBookmarksActive: boolean
   onOpenBookmarks: () => void
+  recentSearches: RecentSearchRow[]
+  activeQuery: string | null
+  onRunRecent: (query: string) => void
+  onRemoveRecent: (query: string) => void
 }): JSX.Element {
+  // Hide recent-search chips that duplicate a saved topic — saved
+  // topics are persistent + scheduled and read more authoritatively.
+  const topicQueries = new Set(topics.map((t) => t.query.toLowerCase()))
+  const filteredRecent = recentSearches.filter(
+    (r) => !topicQueries.has(r.query.toLowerCase())
+  )
   return (
-    <div className="mb-5">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-2">
-        Saved
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {/* Bookmarks chip — sky-toned to match the per-paper ⭐ color. */}
-        {bookmarksCount > 0 && (
-          <button
-            onClick={onOpenBookmarks}
-            title="Browse your bookmarked papers"
-            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
-              isBookmarksActive
-                ? 'border-sky-400/60 bg-sky-500/15 text-sky-200'
-                : 'border-edge bg-surface-1 text-zinc-300 hover:border-sky-500/40 hover:text-sky-300'
-            }`}
-          >
-            <span>★ Bookmarks</span>
-            <span className="text-[10px] tabular-nums opacity-70">{bookmarksCount}</span>
-          </button>
-        )}
-        {topics.map((t) => {
-          const active = t.id === activeId
-          return (
-            <div
-              key={t.id}
-              className={`group inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
-                active
-                  ? 'border-violet-400/50 bg-violet-500/10 text-violet-200'
-                  : 'border-edge bg-surface-1 text-zinc-300 hover:border-zinc-500'
+    <div className="mb-5 space-y-3">
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-2">
+          Saved
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {/* Bookmarks chip — sky-toned to match the per-paper ⭐ color. */}
+          {bookmarksCount > 0 && (
+            <button
+              onClick={onOpenBookmarks}
+              title="Browse your bookmarked papers"
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
+                isBookmarksActive
+                  ? 'border-sky-400/60 bg-sky-500/15 text-sky-200'
+                  : 'border-edge bg-surface-1 text-zinc-300 hover:border-sky-500/40 hover:text-sky-300'
               }`}
             >
-              <button onClick={() => onOpen(t)} className="text-left">
-                {t.label || t.query}
-              </button>
-              <button
-                onClick={() => onDelete(t.id)}
-                title="Remove topic"
-                className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-rose-400 transition-opacity"
+              <span>★ Bookmarks</span>
+              <span className="text-[10px] tabular-nums opacity-70">{bookmarksCount}</span>
+            </button>
+          )}
+          {topics.map((t) => {
+            const active = t.id === activeId
+            return (
+              <div
+                key={t.id}
+                className={`group inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
+                  active
+                    ? 'border-violet-400/50 bg-violet-500/10 text-violet-200'
+                    : 'border-edge bg-surface-1 text-zinc-300 hover:border-zinc-500'
+                }`}
               >
-                ×
-              </button>
-            </div>
-          )
-        })}
+                <button onClick={() => onOpen(t)} className="text-left">
+                  {t.label || t.query}
+                </button>
+                <button
+                  onClick={() => onDelete(t.id)}
+                  title="Remove topic"
+                  className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-rose-400 transition-opacity"
+                >
+                  ×
+                </button>
+              </div>
+            )
+          })}
+        </div>
       </div>
+      {/* Recent searches — auto-recorded chip group, neutral zinc tone
+          to read as "history" rather than "saved." Hidden when there's
+          nothing to show (filtered against saved topics). */}
+      {filteredRecent.length > 0 && (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mb-2">
+            Recent
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {filteredRecent.map((r) => {
+              const active =
+                activeQuery !== null &&
+                r.query.toLowerCase() === activeQuery.toLowerCase()
+              return (
+                <div
+                  key={r.query}
+                  className={`group inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
+                    active
+                      ? 'border-zinc-400/60 bg-zinc-500/15 text-zinc-100'
+                      : 'border-edge/70 bg-surface-1/60 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+                  }`}
+                >
+                  <button
+                    onClick={() => onRunRecent(r.query)}
+                    className="text-left"
+                    title={`Searched ${r.searchCount}× — click to re-run`}
+                  >
+                    {r.query}
+                  </button>
+                  <button
+                    onClick={() => onRemoveRecent(r.query)}
+                    title="Remove from recents"
+                    className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-rose-400 transition-opacity"
+                  >
+                    ×
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1283,6 +1283,16 @@ export interface BridgePaperResult {
   citingBookmarkIds: string[]
 }
 
+// Auto-recorded recent search. Renderer renders these as a third chip
+// group in the Saved strip — "stuff you searched lately, click to
+// re-run." Distinct from saved topics (no scheduler / weekly brief)
+// and bookmarks (no associated papers).
+export interface RecentSearchRow {
+  query: string
+  lastSearchedAt: number
+  searchCount: number
+}
+
 // FRED macro panel snapshot. Mirror of FredSeriesSnapshot from the main
 // process. `format` tells the renderer how to print latestValue:
 // 'percent' → '4.50%', 'percent-change-yoy' → '+3.1%', 'index' → '14.85',
@@ -1737,7 +1747,14 @@ const api = {
     // bookmarks but not yet bookmarked themselves. Suggested adds to
     // the library, computed entirely from local caches (no S2 calls).
     listBridgePapers: (): Promise<BridgePaperResult[]> =>
-      invoke<BridgePaperResult[]>('research:listBridgePapers')
+      invoke<BridgePaperResult[]>('research:listBridgePapers'),
+    // Auto-recorded recent searches. Click a chip to re-run the query.
+    listRecent: (limit?: number): Promise<RecentSearchRow[]> =>
+      invoke<RecentSearchRow[]>('research:listRecent', limit),
+    recordRecent: (query: string): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('research:recordRecent', query),
+    clearRecent: (query: string): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('research:clearRecent', query)
   },
   fred: {
     getSnapshot: (): Promise<FredSeriesSnapshot[]> =>

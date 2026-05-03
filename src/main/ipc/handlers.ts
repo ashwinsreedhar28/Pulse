@@ -799,6 +799,22 @@ export function registerDbIpc(): void {
     }
     return out
   })
+  // Auto-recorded recent searches — distinct from saved topics and
+  // bookmarks. Just a "stuff I searched recently" list.
+  ipcMain.handle('research:listRecent', async (_e, limit?: number) => {
+    const { listRecentSearches } = await import('../database/researchRecentSearches')
+    return listRecentSearches(limit ?? 10)
+  })
+  ipcMain.handle('research:recordRecent', async (_e, query: string) => {
+    const { recordRecentSearch } = await import('../database/researchRecentSearches')
+    recordRecentSearch(query)
+    return { ok: true }
+  })
+  ipcMain.handle('research:clearRecent', async (_e, query: string) => {
+    const { clearRecentSearch } = await import('../database/researchRecentSearches')
+    clearRecentSearch(query)
+    return { ok: true }
+  })
   // Bridge papers — papers cited as foundational by ≥2 of the user's
   // bookmarks but not yet bookmarked themselves. Surfaces high-leverage
   // suggestions in the Bookmarks view: papers that anchor multiple
