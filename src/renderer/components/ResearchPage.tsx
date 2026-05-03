@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  BridgePaperResult,
   ResearchBriefBullet,
   ResearchBriefPayload,
   ResearchBriefSection,
@@ -108,6 +109,21 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
     [bookmarkedIds]
   )
 
+  // Bridge papers — populated whenever the Bookmarks view opens so the
+  // suggestion list is fresh against the current bookmark set + cache
+  // state. Cheap (in-memory walk over caches), no S2 calls.
+  const [bridges, setBridges] = useState<BridgePaperResult[]>([])
+
+  const reloadBridges = useCallback(async (): Promise<void> => {
+    try {
+      const list = await window.api.research.listBridgePapers()
+      setBridges(list)
+    } catch (err) {
+      console.warn('[research] listBridgePapers failed:', err)
+      setBridges([])
+    }
+  }, [])
+
   const openBookmarks = useCallback(async (): Promise<void> => {
     try {
       const rows = await window.api.research.listBookmarks()
@@ -121,10 +137,24 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
       setBookmarkedIds(new Set(rows.map((r) => r.paperId)))
       setSelectedPaper(null)
       setDraft('')
+      void reloadBridges()
     } catch (err) {
       console.warn('[research] listBookmarks failed:', err)
     }
-  }, [])
+  }, [reloadBridges])
+
+  // Refresh bridges whenever the bookmark set changes in the Bookmarks
+  // view — bookmarking a bridge candidate drops it off the suggestion
+  // list, unbookmarking might bring others back. Note: the new
+  // bookmark's foundational cache populates async via auto-fetch, so a
+  // fresh bridge "from this bookmark's foundationals" appears on the
+  // next reload (a few seconds later, fine).
+  useEffect(() => {
+    if (view.kind !== 'bookmarks') return
+    void reloadBridges()
+    // bookmarkedIds is the trigger — reloadBridges is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookmarkedIds, view.kind])
 
   // ----- saved topics -----
   const reloadTopics = useCallback(async (): Promise<void> => {
@@ -338,6 +368,19 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
             <div className="mt-12 text-center text-[12px] text-zinc-500">
               No bookmarked papers yet. Hit ☆ on a paper card to save it.
             </div>
+          )}
+
+          {view.kind === 'bookmarks' && bridges.length > 0 && (
+            <BridgePapersSection
+              bridges={bridges}
+              bookmarkedIds={bookmarkedIds}
+              onToggleBookmark={(p) => void toggleBookmark(p)}
+              onSelect={(p) => setSelectedPaper(p)}
+              onOpenURL={onOpenURL}
+              onOpenPdfInline={(url, title, subtitle) =>
+                setPdfReader({ url, title, subtitle })
+              }
+            />
           )}
 
           {view.papers.length > 0 && (
@@ -680,6 +723,129 @@ function PaperList({
               isBookmarked={bookmarkedIds.has(p.paperId)}
               onToggleBookmark={() => onToggleBookmark(p)}
             />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+// Bridge papers section — surfaces papers cited as foundational by 2+
+// of the user's bookmarks but not bookmarked themselves. Suggested
+// adds, ranked by how many of the library's papers anchor to them.
+function BridgePapersSection({
+  bridges,
+  bookmarkedIds,
+  onToggleBookmark,
+  onSelect,
+  onOpenURL,
+  onOpenPdfInline
+}: {
+  bridges: BridgePaperResult[]
+  bookmarkedIds: Set<string>
+  onToggleBookmark: (paper: ResearchPaper) => void
+  onSelect: (paper: ResearchPaper) => void
+  onOpenURL: (url: string, title: string, subtitle?: string | null) => void
+  onOpenPdfInline?: (url: string, title: string, subtitle: string | null) => void
+}): JSX.Element {
+  const [collapsed, setCollapsed] = useCollapsedSection('researchBridges', false)
+  return (
+    <section className="mt-2 mb-2">
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center gap-3 mb-3 group"
+      >
+        <span className="text-[12px] leading-none text-amber-300">▲</span>
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-300 group-hover:text-amber-200">
+          Suggested
+        </h3>
+        <span className="text-[10px] text-zinc-500 normal-case tracking-normal">
+          papers cited as foundational by 2+ of your bookmarks
+        </span>
+        <span className="h-px flex-1 bg-amber-500/20" />
+        <span className="text-[10px] tabular-nums text-amber-300/80">{bridges.length}</span>
+        <CollapseChevron open={!collapsed} />
+      </button>
+      {!collapsed && (
+        <div className="space-y-2">
+          {bridges.map((b) => (
+            <div
+              key={b.paper.paperId}
+              className="rounded-lg border border-amber-500/20 bg-amber-500/[0.03] px-4 py-3"
+            >
+              <button onClick={() => onSelect(b.paper)} className="w-full text-left min-w-0">
+                <div className="flex items-start gap-2">
+                  <span
+                    className="text-[10px] font-semibold uppercase tracking-[0.18em] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-200 ring-1 ring-inset ring-amber-500/30 shrink-0 tabular-nums"
+                    title={`Cited as foundational by ${b.citedByBookmarkCount} of your bookmarks`}
+                  >
+                    {b.citedByBookmarkCount}× foundational
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] text-zinc-100 leading-snug">
+                      {b.paper.title}
+                    </div>
+                    <div className="mt-1 text-[11px] text-zinc-500 truncate">
+                      {b.paper.authors.slice(0, 3).join(', ')}
+                      {b.paper.authors.length > 3 && ' et al.'}
+                      {b.paper.year && ` · ${b.paper.year}`}
+                      {b.paper.venue && ` · ${b.paper.venue}`}
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-3 text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                      <span>{b.paper.citationCount.toLocaleString()} citations</span>
+                      {b.paper.influentialCitationCount > 0 && (
+                        <span className="text-violet-300">
+                          {b.paper.influentialCitationCount} influential
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </button>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToggleBookmark(b.paper)
+                  }}
+                  title={
+                    bookmarkedIds.has(b.paper.paperId)
+                      ? 'Remove bookmark'
+                      : 'Add to bookmarks'
+                  }
+                  className={`text-[11px] leading-none px-2 py-0.5 rounded-full transition-colors ${
+                    bookmarkedIds.has(b.paper.paperId)
+                      ? 'bg-sky-500/20 text-sky-200 ring-1 ring-inset ring-sky-500/40 hover:bg-sky-500/30'
+                      : 'text-zinc-400 hover:text-sky-300 hover:bg-sky-500/10 ring-1 ring-inset ring-edge'
+                  }`}
+                >
+                  {bookmarkedIds.has(b.paper.paperId) ? '★ Bookmarked' : '☆ Bookmark'}
+                </button>
+                {b.paper.pdfUrl && onOpenPdfInline && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenPdfInline(b.paper.pdfUrl!, b.paper.title, b.paper.venue)
+                    }}
+                    className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/30 hover:bg-emerald-500/25"
+                  >
+                    PDF
+                  </button>
+                )}
+                {b.paper.url && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenURL(b.paper.url!, b.paper.title, b.paper.venue)
+                    }}
+                    className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2"
+                  >
+                    Source ↗
+                  </button>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       )}

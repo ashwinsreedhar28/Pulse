@@ -799,6 +799,28 @@ export function registerDbIpc(): void {
     }
     return out
   })
+  // Bridge papers — papers cited as foundational by ≥2 of the user's
+  // bookmarks but not yet bookmarked themselves. Surfaces high-leverage
+  // suggestions in the Bookmarks view: papers that anchor multiple
+  // works in your library are likely worth opening. Computed entirely
+  // from local caches (research_bookmarks + research_paper_foundational),
+  // no S2 calls.
+  ipcMain.handle('research:listBridgePapers', async () => {
+    const { listResearchBookmarks } = await import('../database/researchBookmarks')
+    const { getFoundationalCache } = await import('../database/researchFoundational')
+    const { computeBridgePapers } = await import('../services/researchService')
+    const bookmarks = listResearchBookmarks()
+    const bookmarkedIds = new Set(bookmarks.map((b) => b.paperId))
+    const foundationalByBookmark = new Map<
+      string,
+      import('../../preload').ResearchPaper[]
+    >()
+    for (const b of bookmarks) {
+      const cache = getFoundationalCache(b.paperId)
+      if (cache) foundationalByBookmark.set(b.paperId, cache.foundational)
+    }
+    return computeBridgePapers(bookmarkedIds, foundationalByBookmark)
+  })
 
   // ---- FRED macro panel ----------------------------------------------------
   ipcMain.handle('fred:getSnapshot', async () => {

@@ -602,3 +602,67 @@ export async function fetchFoundationalReferences(
   foundational.sort((a, b) => paperScore(b) - paperScore(a))
   return foundational
 }
+
+// Bridge papers — high-leverage suggestions for the Bookmarks view.
+// Walk every bookmark's foundational cache; count how many bookmarks
+// name each non-bookmarked paper as foundational; return the top N
+// papers cited by ≥2 bookmarks. Same intuition as the Value Chain's
+// "consensus edges from multiple chains carry more weight" — a paper
+// that anchors multiple papers in your library is high-signal.
+export interface BridgePaperResult {
+  paper: ResearchPaper
+  // Number of bookmarks that name this paper as foundational.
+  citedByBookmarkCount: number
+  // The bookmark paperIds that cited it — for the "from your library:
+  // [B1, B2, B3]" attribution line under each suggestion.
+  citingBookmarkIds: string[]
+}
+
+export function computeBridgePapers(
+  bookmarkedIds: Set<string>,
+  foundationalByBookmark: Map<string, ResearchPaper[]>,
+  options: { minCitedBy?: number; limit?: number } = {}
+): BridgePaperResult[] {
+  const minCitedBy = options.minCitedBy ?? 2
+  const limit = options.limit ?? 20
+  // paperId → { paper, set of citing bookmark ids }. Use a Map to
+  // dedupe across multiple foundational lists referencing the same
+  // paper, and keep one canonical paper object per entry.
+  const counts = new Map<
+    string,
+    { paper: ResearchPaper; citers: Set<string> }
+  >()
+  for (const [bookmarkId, foundational] of foundationalByBookmark) {
+    for (const p of foundational) {
+      // Skip bridges to papers the user already bookmarked — they're
+      // not suggestions, they're already in the library. The "they
+      // build on each other" relationship is already surfaced by the
+      // Foundational-for inverse section in the detail panel.
+      if (bookmarkedIds.has(p.paperId)) continue
+      const existing = counts.get(p.paperId)
+      if (existing) {
+        existing.citers.add(bookmarkId)
+      } else {
+        counts.set(p.paperId, { paper: p, citers: new Set([bookmarkId]) })
+      }
+    }
+  }
+  const results: BridgePaperResult[] = []
+  for (const { paper, citers } of counts.values()) {
+    if (citers.size < minCitedBy) continue
+    results.push({
+      paper,
+      citedByBookmarkCount: citers.size,
+      citingBookmarkIds: [...citers]
+    })
+  }
+  // Rank by citation count first, then by paperScore as a tiebreaker
+  // so foundational influence shows on top within the same count bucket.
+  results.sort((a, b) => {
+    if (a.citedByBookmarkCount !== b.citedByBookmarkCount) {
+      return b.citedByBookmarkCount - a.citedByBookmarkCount
+    }
+    return paperScore(b.paper) - paperScore(a.paper)
+  })
+  return results.slice(0, limit)
+}

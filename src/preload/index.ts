@@ -1273,6 +1273,16 @@ export interface ResearchBookmarkRow {
   paper: ResearchPaper
 }
 
+// Bridge paper — a paper cited as foundational by ≥2 of the user's
+// bookmarks but not yet bookmarked itself. Surfaces in the Bookmarks
+// view as a "papers worth adding" suggestion list, ranked by how many
+// of your existing bookmarks build on it.
+export interface BridgePaperResult {
+  paper: ResearchPaper
+  citedByBookmarkCount: number
+  citingBookmarkIds: string[]
+}
+
 // FRED macro panel snapshot. Mirror of FredSeriesSnapshot from the main
 // process. `format` tells the renderer how to print latestValue:
 // 'percent' → '4.50%', 'percent-change-yoy' → '+3.1%', 'index' → '14.85',
@@ -1722,7 +1732,12 @@ const api = {
       invoke<ResearchPaper[]>('research:getFoundational', paperId),
     // Inverse direction — bookmarks that name this paper as foundational.
     getFoundationalFor: (paperId: string): Promise<ResearchPaper[]> =>
-      invoke<ResearchPaper[]>('research:getFoundationalFor', paperId)
+      invoke<ResearchPaper[]>('research:getFoundationalFor', paperId),
+    // Bridge papers — papers cited as foundational by ≥2 of your
+    // bookmarks but not yet bookmarked themselves. Suggested adds to
+    // the library, computed entirely from local caches (no S2 calls).
+    listBridgePapers: (): Promise<BridgePaperResult[]> =>
+      invoke<BridgePaperResult[]>('research:listBridgePapers')
   },
   fred: {
     getSnapshot: (): Promise<FredSeriesSnapshot[]> =>
