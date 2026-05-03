@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   BridgePaperResult,
   RecentSearchRow,
+  ResearchBookmarkRow,
   ResearchBriefBullet,
   ResearchBriefPayload,
   ResearchBriefSection,
@@ -176,6 +177,30 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
     }
   }, [reloadBridges])
 
+  // Tagged bookmarks for the current topic view. Populated when
+  // openTopic runs alongside the brief fetch. Cleared when leaving
+  // topic view.
+  const [topicBookmarks, setTopicBookmarks] = useState<ResearchBookmarkRow[]>([])
+
+  // Increments whenever a paper's tag set changes — used by
+  // PaperDetailPanel to invalidate its internal taggedTopics fetch
+  // without lifting that state up to ResearchPage.
+  const [tagsRevision, setTagsRevision] = useState(0)
+  const onTagsChanged = useCallback((): void => {
+    setTagsRevision((r) => r + 1)
+    // If we're viewing a topic, refresh its tagged-bookmarks list so a
+    // newly-tagged paper appears immediately and an untagged one drops.
+    if (view.kind === 'topic' && view.topicId !== null) {
+      const tid = view.topicId
+      void window.api.research
+        .listBookmarksForTopic(tid)
+        .then(setTopicBookmarks)
+        .catch(() => {
+          /* keep prior */
+        })
+    }
+  }, [view])
+
   // Refresh bridges whenever the bookmark set changes in the Bookmarks
   // view — bookmarking a bridge candidate drops it off the suggestion
   // list, unbookmarking might bring others back. Note: the new
@@ -272,6 +297,12 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
     })
     setDraft(topic.query)
     setSelectedPaper(null)
+    // Fetch tagged bookmarks in parallel with the brief — they render
+    // alongside the synthesis in the topic view.
+    void window.api.research
+      .listBookmarksForTopic(topic.id)
+      .then(setTopicBookmarks)
+      .catch(() => setTopicBookmarks([]))
     const row = await window.api.research.getBrief(topic.id)
     if (row) {
       // Re-fetch papers via search to fill the cards (we only persist
@@ -415,6 +446,21 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
             />
           )}
 
+          {view.kind === 'topic' && topicBookmarks.length > 0 && (
+            <PaperList
+              papers={topicBookmarks.map((b) => b.paper)}
+              onSelect={(p) => setSelectedPaper(p)}
+              selectedId={selectedPaper?.paperId ?? null}
+              onOpenURL={onOpenURL}
+              onOpenPdfInline={(url, title, subtitle) =>
+                setPdfReader({ url, title, subtitle })
+              }
+              bookmarkedIds={bookmarkedIds}
+              onToggleBookmark={(p) => void toggleBookmark(p)}
+              title="Your tagged bookmarks"
+            />
+          )}
+
           {view.kind === 'bookmarks' && view.papers.length === 0 && (
             <div className="mt-12 text-center text-[12px] text-zinc-500">
               No bookmarked papers yet. Hit ☆ on a paper card to save it.
@@ -467,6 +513,9 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
               onSelectPaper={setSelectedPaper}
               isBookmarked={bookmarkedIds.has(selectedPaper.paperId)}
               onToggleBookmark={() => void toggleBookmark(selectedPaper)}
+              availableTopics={topics}
+              tagsRevision={tagsRevision}
+              onTagsChanged={onTagsChanged}
             />
           )
         )}
@@ -1068,7 +1117,10 @@ function PaperDetailPanel({
   onOpenPdfInline,
   onSelectPaper,
   isBookmarked,
-  onToggleBookmark
+  onToggleBookmark,
+  availableTopics,
+  tagsRevision,
+  onTagsChanged
 }: {
   paper: ResearchPaper
   onClose: () => void
@@ -1077,11 +1129,21 @@ function PaperDetailPanel({
   onSelectPaper: (p: ResearchPaper) => void
   isBookmarked: boolean
   onToggleBookmark: () => void
+  // All saved topics, for the tag picker. Tagging requires the paper
+  // to be bookmarked first (the FK enforces this).
+  availableTopics: ResearchTopic[]
+  // Bumped by the parent whenever any tag mutates so this panel re-
+  // fetches its taggedTopics list (covers cross-bookmark tag changes
+  // even though they're rare).
+  tagsRevision: number
+  onTagsChanged: () => void
 }): JSX.Element {
   const [citing, setCiting] = useState<ResearchPaper[] | null>(null)
   const [refs, setRefs] = useState<ResearchPaper[] | null>(null)
   const [foundational, setFoundational] = useState<ResearchPaper[] | null>(null)
   const [foundationalFor, setFoundationalFor] = useState<ResearchPaper[] | null>(null)
+  const [taggedTopics, setTaggedTopics] = useState<ResearchTopic[]>([])
+  const [tagMenuOpen, setTagMenuOpen] = useState(false)
   useEffect(() => {
     let cancelled = false
     setCiting(null)
@@ -1108,7 +1170,64 @@ function PaperDetailPanel({
     return (): void => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paper.paperId])
+
+  // Tag fetch — runs on paper change AND when tagsRevision bumps
+  // (covers tag mutations from elsewhere in the renderer that might
+  // affect this paper's set, though that's rare).
+  useEffect(() => {
+    let cancelled = false
+    if (!isBookmarked) {
+      // Tag UI hidden when not bookmarked; skip the fetch.
+      setTaggedTopics([])
+      return
+    }
+    void window.api.research
+      .listTopicsForBookmark(paper.paperId)
+      .then((list) => {
+        if (!cancelled) setTaggedTopics(list)
+      })
+      .catch(() => {
+        /* keep prior */
+      })
+    return (): void => {
+      cancelled = true
+    }
+  }, [paper.paperId, isBookmarked, tagsRevision])
+
+  const handleTag = async (topicId: number): Promise<void> => {
+    // Optimistic add — show the chip instantly, roll back on failure.
+    const topic = availableTopics.find((t) => t.id === topicId)
+    if (!topic) return
+    setTaggedTopics((prev) => (prev.some((t) => t.id === topicId) ? prev : [...prev, topic]))
+    setTagMenuOpen(false)
+    try {
+      await window.api.research.tagBookmark(paper.paperId, topicId)
+      onTagsChanged()
+    } catch (err) {
+      console.warn('[research] tagBookmark failed:', err)
+      setTaggedTopics((prev) => prev.filter((t) => t.id !== topicId))
+    }
+  }
+
+  const handleUntag = async (topicId: number): Promise<void> => {
+    const removed = taggedTopics.find((t) => t.id === topicId)
+    setTaggedTopics((prev) => prev.filter((t) => t.id !== topicId))
+    try {
+      await window.api.research.untagBookmark(paper.paperId, topicId)
+      onTagsChanged()
+    } catch (err) {
+      console.warn('[research] untagBookmark failed:', err)
+      if (removed) {
+        setTaggedTopics((prev) => [...prev, removed])
+      }
+    }
+  }
+
+  // Topics not yet tagged — populate the dropdown options.
+  const taggedIds = new Set(taggedTopics.map((t) => t.id))
+  const untaggedTopics = availableTopics.filter((t) => !taggedIds.has(t.id))
 
   const authorLine =
     paper.authors.length === 0
@@ -1190,6 +1309,59 @@ function PaperDetailPanel({
               </button>
             )}
           </div>
+
+          {/* Topics — only when bookmarked, since the FK enforces that
+              the paper has a bookmark row before it can be tagged. */}
+          {isBookmarked && (
+            <div className="mt-3 flex items-start flex-wrap gap-1.5">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mt-1 mr-1 shrink-0">
+                Topics
+              </span>
+              {taggedTopics.map((t) => (
+                <div
+                  key={t.id}
+                  className="group inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border border-violet-400/40 bg-violet-500/10 text-violet-200"
+                >
+                  <span>{t.label || t.query}</span>
+                  <button
+                    onClick={() => void handleUntag(t.id)}
+                    title="Remove tag"
+                    className="opacity-50 group-hover:opacity-100 hover:text-rose-300 transition-opacity"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {untaggedTopics.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setTagMenuOpen((o) => !o)}
+                    className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full text-zinc-400 ring-1 ring-inset ring-edge hover:text-violet-300 hover:ring-violet-500/40"
+                  >
+                    + Tag
+                  </button>
+                  {tagMenuOpen && (
+                    <div className="absolute z-20 mt-1 left-0 min-w-[200px] max-h-[260px] overflow-y-auto rounded-md border border-edge bg-surface-2 shadow-xl py-1">
+                      {untaggedTopics.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => void handleTag(t.id)}
+                          className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-violet-500/10 hover:text-violet-200"
+                        >
+                          {t.label || t.query}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {availableTopics.length === 0 && (
+                <span className="text-[10px] text-zinc-600 italic">
+                  Save a topic to tag bookmarks with it
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <LineageList

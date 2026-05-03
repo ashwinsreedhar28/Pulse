@@ -799,6 +799,38 @@ export function registerDbIpc(): void {
     }
     return out
   })
+  // Topic ↔ bookmark tagging — many-to-many junction. Each call wraps
+  // a single row mutation; the renderer fans these out.
+  ipcMain.handle('research:listTopicsForBookmark', async (_e, paperId: string) => {
+    const { listTopicsForBookmark } = await import('../database/researchBookmarkTopics')
+    return listTopicsForBookmark(paperId)
+  })
+  ipcMain.handle('research:listBookmarksForTopic', async (_e, topicId: number) => {
+    const { listBookmarksForTopic } = await import('../database/researchBookmarkTopics')
+    return listBookmarksForTopic(topicId)
+  })
+  ipcMain.handle(
+    'research:tagBookmark',
+    async (_e, paperId: string, topicId: number) => {
+      const { tagBookmark } = await import('../database/researchBookmarkTopics')
+      tagBookmark(paperId, topicId)
+      return { ok: true }
+    }
+  )
+  ipcMain.handle(
+    'research:untagBookmark',
+    async (_e, paperId: string, topicId: number) => {
+      const { untagBookmark } = await import('../database/researchBookmarkTopics')
+      untagBookmark(paperId, topicId)
+      return { ok: true }
+    }
+  )
+  ipcMain.handle('research:listAllBookmarkTopicLinks', async () => {
+    const { getAllBookmarkTopicLinks } = await import(
+      '../database/researchBookmarkTopics'
+    )
+    return getAllBookmarkTopicLinks()
+  })
   // Auto-recorded recent searches — distinct from saved topics and
   // bookmarks. Just a "stuff I searched recently" list.
   ipcMain.handle('research:listRecent', async (_e, limit?: number) => {

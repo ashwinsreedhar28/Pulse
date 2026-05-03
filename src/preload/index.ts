@@ -1293,6 +1293,15 @@ export interface RecentSearchRow {
   searchCount: number
 }
 
+// Many-to-many tagging junction between bookmarks and saved topics.
+// listAllBookmarkTopicLinks returns every row; the renderer indexes
+// in-memory to avoid per-bookmark IPC calls when rendering chip lists.
+export interface BookmarkTopicLink {
+  bookmarkPaperId: string
+  topicId: number
+  createdAt: number
+}
+
 // FRED macro panel snapshot. Mirror of FredSeriesSnapshot from the main
 // process. `format` tells the renderer how to print latestValue:
 // 'percent' → '4.50%', 'percent-change-yoy' → '+3.1%', 'index' → '14.85',
@@ -1754,7 +1763,18 @@ const api = {
     recordRecent: (query: string): Promise<{ ok: boolean }> =>
       invoke<{ ok: boolean }>('research:recordRecent', query),
     clearRecent: (query: string): Promise<{ ok: boolean }> =>
-      invoke<{ ok: boolean }>('research:clearRecent', query)
+      invoke<{ ok: boolean }>('research:clearRecent', query),
+    // Topic ↔ bookmark tagging (many-to-many).
+    listTopicsForBookmark: (paperId: string): Promise<ResearchTopic[]> =>
+      invoke<ResearchTopic[]>('research:listTopicsForBookmark', paperId),
+    listBookmarksForTopic: (topicId: number): Promise<ResearchBookmarkRow[]> =>
+      invoke<ResearchBookmarkRow[]>('research:listBookmarksForTopic', topicId),
+    tagBookmark: (paperId: string, topicId: number): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('research:tagBookmark', paperId, topicId),
+    untagBookmark: (paperId: string, topicId: number): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('research:untagBookmark', paperId, topicId),
+    listAllBookmarkTopicLinks: (): Promise<BookmarkTopicLink[]> =>
+      invoke<BookmarkTopicLink[]>('research:listAllBookmarkTopicLinks')
   },
   fred: {
     getSnapshot: (): Promise<FredSeriesSnapshot[]> =>

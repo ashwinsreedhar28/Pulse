@@ -1458,5 +1458,31 @@ export const migrations: Migration[] = [
           ON research_recent_searches(lastSearchedAt DESC);
       `)
     }
+  },
+  {
+    version: 51,
+    name: 'research_bookmark_topics',
+    // Many-to-many junction between bookmarks and saved topics. A
+    // bookmark can carry multiple topic tags; a topic can list
+    // multiple bookmarks. ON DELETE CASCADE on both sides so
+    // unbookmarking or deleting a topic auto-clears the relevant
+    // junction rows (depends on PRAGMA foreign_keys = ON, which the
+    // connection layer already sets).
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS research_bookmark_topics (
+          bookmarkPaperId TEXT NOT NULL,
+          topicId INTEGER NOT NULL,
+          createdAt INTEGER NOT NULL,
+          PRIMARY KEY (bookmarkPaperId, topicId),
+          FOREIGN KEY (bookmarkPaperId) REFERENCES research_bookmarks(paperId) ON DELETE CASCADE,
+          FOREIGN KEY (topicId) REFERENCES research_topics(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_research_bookmark_topics_topicId
+          ON research_bookmark_topics(topicId);
+        CREATE INDEX IF NOT EXISTS idx_research_bookmark_topics_paperId
+          ON research_bookmark_topics(bookmarkPaperId);
+      `)
+    }
   }
 ]
