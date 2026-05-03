@@ -67,6 +67,7 @@ Ollama reachable? `curl -s http://localhost:11434/api/tags` — the app works wi
 - **Yahoo crumb+cookie.** [yahooFinanceService.ts](src/main/services/yahooFinanceService.ts) does a one-time `fc.yahoo.com` handshake + `getcrumb`. Expect 401s to force a re-handshake; don't "simplify" this.
 - **External links** are routed through `shell.openExternal` via `setWindowOpenHandler`. Webview has `allowpopups` disabled. Both are load-bearing for the no-tracker-noise guarantee.
 - **Reel protocol.** Reel audio/video is served over a custom `reel://` scheme (registered as privileged). Paths are validated against `..` and `/` before joining with the reels dir.
+- **No `backdrop-blur` on viewport-filling overlays.** Chromium re-composes the entire underlying frame through the blur filter on every paint; in packaged builds running full-window this surfaces as visible jitter. Both Settings and PeerCompareModal use `bg-black/[0.88]` instead. Small surfaces (header bars, tooltips, popover) are fine.
 
 ## Conventions worth preserving
 

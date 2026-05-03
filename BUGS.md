@@ -38,4 +38,4 @@ _(none)_
 
 ## Resolved
 
-_(populate as items close out — date noted, brief outcome)_
+- (2026-05-03) [renderer] Massive jitter when opening Settings in the packaged build. `Settings.tsx:90` overlay used `backdrop-blur-sm` over the entire viewport — Chromium re-composed the underlying frame through the blur filter every paint, hidden in dev (DevTools shrinks the blurred area) but obvious full-window. Fixed by swapping for `bg-black/[0.88]` solid overlay (same pattern PeerCompareModal already uses). Also added the gotcha to CLAUDE.md so this doesn't regress.

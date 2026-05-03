@@ -87,7 +87,13 @@ export function Settings({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/60 backdrop-blur-sm pt-12 pb-8 px-6"
+      // Solid 88% overlay instead of backdrop-blur-sm — the blur filter
+      // recomputes per frame against the entire viewport behind it,
+      // which surfaces as visible jitter in packaged builds running
+      // full-window. Same fix that PeerCompareModal already applied for
+      // the same reason. Opacity gives the same "focus this modal"
+      // darken effect without the per-frame GPU cost.
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/[0.88] pt-12 pb-8 px-6"
       style={{ isolation: 'isolate' }}
     >
       <div className="bg-surface-1 border border-edge rounded-lg shadow-2xl w-full max-w-3xl max-h-[calc(100vh-80px)] flex flex-col overflow-hidden">
