@@ -9,6 +9,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  BookmarkFoundationalEdge,
+  BookmarkTopicLink,
   BridgePaperResult,
   RecentSearchRow,
   ResearchBookmarkRow,
@@ -19,6 +21,7 @@ import type {
   ResearchTopic
 } from '../../preload'
 import { CollapseChevron, useCollapsedSection } from './collapseUI'
+import { ResearchMap } from './ResearchMap'
 
 interface Props {
   onClose: () => void
@@ -148,6 +151,29 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
   // state. Cheap (in-memory walk over caches), no S2 calls.
   const [bridges, setBridges] = useState<BridgePaperResult[]>([])
 
+  // Research Map data + display toggle. The map view is a swap-in for
+  // the bookmarks list, not a separate top-level view kind — keeps the
+  // bookmark detail/PDF pane logic shared.
+  const [bookmarksMode, setBookmarksMode] = useState<'list' | 'map'>('list')
+  const [bookmarksFull, setBookmarksFull] = useState<ResearchBookmarkRow[]>([])
+  const [foundationalEdges, setFoundationalEdges] = useState<BookmarkFoundationalEdge[]>([])
+  const [bookmarkTopicLinks, setBookmarkTopicLinks] = useState<BookmarkTopicLink[]>([])
+
+  const reloadMapData = useCallback(async (): Promise<void> => {
+    try {
+      const [bms, edges, links] = await Promise.all([
+        window.api.research.listBookmarks(),
+        window.api.research.listBookmarkFoundationalEdges(),
+        window.api.research.listAllBookmarkTopicLinks()
+      ])
+      setBookmarksFull(bms)
+      setFoundationalEdges(edges)
+      setBookmarkTopicLinks(links)
+    } catch (err) {
+      console.warn('[research] reloadMapData failed:', err)
+    }
+  }, [])
+
   const reloadBridges = useCallback(async (): Promise<void> => {
     try {
       const list = await window.api.research.listBridgePapers()
@@ -172,10 +198,14 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
       setSelectedPaper(null)
       setDraft('')
       void reloadBridges()
+      // Map view needs the full bookmark rows + edges + topic links.
+      // Always preload so flipping to map is instant — these are
+      // small payloads and pure local DB reads.
+      void reloadMapData()
     } catch (err) {
       console.warn('[research] listBookmarks failed:', err)
     }
-  }, [reloadBridges])
+  }, [reloadBridges, reloadMapData])
 
   // Tagged bookmarks for the current topic view. Populated when
   // openTopic runs alongside the brief fetch. Cleared when leaving
@@ -201,18 +231,20 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
     }
   }, [view])
 
-  // Refresh bridges whenever the bookmark set changes in the Bookmarks
-  // view — bookmarking a bridge candidate drops it off the suggestion
-  // list, unbookmarking might bring others back. Note: the new
-  // bookmark's foundational cache populates async via auto-fetch, so a
-  // fresh bridge "from this bookmark's foundationals" appears on the
-  // next reload (a few seconds later, fine).
+  // Refresh bridges + map data whenever the bookmark set or tag set
+  // changes in the Bookmarks view — bookmarking a bridge candidate
+  // drops it off the suggestion list, tagging a bookmark recolors the
+  // map node, etc. Note: the new bookmark's foundational cache
+  // populates async via auto-fetch, so a fresh bridge "from this
+  // bookmark's foundationals" + the corresponding map edge appear on
+  // the next reload (a few seconds later, fine).
   useEffect(() => {
     if (view.kind !== 'bookmarks') return
     void reloadBridges()
-    // bookmarkedIds is the trigger — reloadBridges is stable.
+    void reloadMapData()
+    // bookmarkedIds + tagsRevision are the triggers — reloaders are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookmarkedIds, view.kind])
+  }, [bookmarkedIds, tagsRevision, view.kind])
 
   // ----- saved topics -----
   const reloadTopics = useCallback(async (): Promise<void> => {
@@ -467,33 +499,74 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
             </div>
           )}
 
-          {view.kind === 'bookmarks' && bridges.length > 0 && (
-            <BridgePapersSection
-              bridges={bridges}
-              bookmarkedIds={bookmarkedIds}
-              onToggleBookmark={(p) => void toggleBookmark(p)}
+          {view.kind === 'bookmarks' && view.papers.length > 0 && (
+            <div className="mt-2 mb-4 flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500 mr-1">
+                View
+              </span>
+              <button
+                onClick={() => setBookmarksMode('list')}
+                className={`text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full transition-colors ${
+                  bookmarksMode === 'list'
+                    ? 'bg-violet-500/15 text-violet-200 ring-1 ring-inset ring-violet-500/40'
+                    : 'text-zinc-400 ring-1 ring-inset ring-edge hover:text-zinc-100'
+                }`}
+              >
+                List
+              </button>
+              <button
+                onClick={() => setBookmarksMode('map')}
+                className={`text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full transition-colors ${
+                  bookmarksMode === 'map'
+                    ? 'bg-violet-500/15 text-violet-200 ring-1 ring-inset ring-violet-500/40'
+                    : 'text-zinc-400 ring-1 ring-inset ring-edge hover:text-zinc-100'
+                }`}
+              >
+                Map
+              </button>
+            </div>
+          )}
+
+          {view.kind === 'bookmarks' && bookmarksMode === 'map' && (
+            <ResearchMap
+              bookmarks={bookmarksFull}
+              edges={foundationalEdges}
+              topicLinks={bookmarkTopicLinks}
+              selectedId={selectedPaper?.paperId ?? null}
               onSelect={(p) => setSelectedPaper(p)}
-              onOpenURL={onOpenURL}
-              onOpenPdfInline={(url, title, subtitle) =>
-                setPdfReader({ url, title, subtitle })
-              }
             />
           )}
 
-          {view.papers.length > 0 && (
-            <PaperList
-              papers={view.papers}
-              onSelect={(p) => setSelectedPaper(p)}
-              selectedId={selectedPaper?.paperId ?? null}
-              onOpenURL={onOpenURL}
-              onOpenPdfInline={(url, title, subtitle) =>
-                setPdfReader({ url, title, subtitle })
-              }
-              bookmarkedIds={bookmarkedIds}
-              onToggleBookmark={(p) => void toggleBookmark(p)}
-              title={view.kind === 'bookmarks' ? 'Bookmarks' : 'Papers'}
-            />
-          )}
+          {(view.kind !== 'bookmarks' || bookmarksMode === 'list') &&
+            view.kind === 'bookmarks' &&
+            bridges.length > 0 && (
+              <BridgePapersSection
+                bridges={bridges}
+                bookmarkedIds={bookmarkedIds}
+                onToggleBookmark={(p) => void toggleBookmark(p)}
+                onSelect={(p) => setSelectedPaper(p)}
+                onOpenURL={onOpenURL}
+                onOpenPdfInline={(url, title, subtitle) =>
+                  setPdfReader({ url, title, subtitle })
+                }
+              />
+            )}
+
+          {(view.kind !== 'bookmarks' || bookmarksMode === 'list') &&
+            view.papers.length > 0 && (
+              <PaperList
+                papers={view.papers}
+                onSelect={(p) => setSelectedPaper(p)}
+                selectedId={selectedPaper?.paperId ?? null}
+                onOpenURL={onOpenURL}
+                onOpenPdfInline={(url, title, subtitle) =>
+                  setPdfReader({ url, title, subtitle })
+                }
+                bookmarkedIds={bookmarkedIds}
+                onToggleBookmark={(p) => void toggleBookmark(p)}
+                title={view.kind === 'bookmarks' ? 'Bookmarks' : 'Papers'}
+              />
+            )}
         </div>
 
         {pdfReader ? (

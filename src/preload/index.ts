@@ -1302,6 +1302,14 @@ export interface BookmarkTopicLink {
   createdAt: number
 }
 
+// Directed edge among the user's bookmarks. `from` builds on `to`
+// (i.e. `to` appears in `from`'s foundational cache). Drives the
+// Research Map visualization's edge set.
+export interface BookmarkFoundationalEdge {
+  from: string
+  to: string
+}
+
 // FRED macro panel snapshot. Mirror of FredSeriesSnapshot from the main
 // process. `format` tells the renderer how to print latestValue:
 // 'percent' → '4.50%', 'percent-change-yoy' → '+3.1%', 'index' → '14.85',
@@ -1774,7 +1782,11 @@ const api = {
     untagBookmark: (paperId: string, topicId: number): Promise<{ ok: boolean }> =>
       invoke<{ ok: boolean }>('research:untagBookmark', paperId, topicId),
     listAllBookmarkTopicLinks: (): Promise<BookmarkTopicLink[]> =>
-      invoke<BookmarkTopicLink[]>('research:listAllBookmarkTopicLinks')
+      invoke<BookmarkTopicLink[]>('research:listAllBookmarkTopicLinks'),
+    // Directed edges among bookmarks (foundational links). Used by the
+    // Research Map. Computed entirely from local caches, no S2 calls.
+    listBookmarkFoundationalEdges: (): Promise<BookmarkFoundationalEdge[]> =>
+      invoke<BookmarkFoundationalEdge[]>('research:listBookmarkFoundationalEdges')
   },
   fred: {
     getSnapshot: (): Promise<FredSeriesSnapshot[]> =>

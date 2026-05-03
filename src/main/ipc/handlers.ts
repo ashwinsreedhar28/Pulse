@@ -831,6 +831,29 @@ export function registerDbIpc(): void {
     )
     return getAllBookmarkTopicLinks()
   })
+  // Directed edges among bookmarks where one bookmark's foundational
+  // list names another bookmark. Drives the Research Map's edge set —
+  // visualizes the citation web inside the user's library. Pure
+  // in-memory walk over local caches; no S2 calls.
+  ipcMain.handle('research:listBookmarkFoundationalEdges', async () => {
+    const { listResearchBookmarks } = await import('../database/researchBookmarks')
+    const { getFoundationalCache } = await import('../database/researchFoundational')
+    const bookmarks = listResearchBookmarks()
+    const bookmarkedIds = new Set(bookmarks.map((b) => b.paperId))
+    const edges: Array<{ from: string; to: string }> = []
+    for (const b of bookmarks) {
+      const cache = getFoundationalCache(b.paperId)
+      if (!cache) continue
+      for (const f of cache.foundational) {
+        // Edge only if the foundational target is also bookmarked.
+        // Directed: b builds on f, so the arrow is b → f.
+        if (bookmarkedIds.has(f.paperId)) {
+          edges.push({ from: b.paperId, to: f.paperId })
+        }
+      }
+    }
+    return edges
+  })
   // Auto-recorded recent searches — distinct from saved topics and
   // bookmarks. Just a "stuff I searched recently" list.
   ipcMain.handle('research:listRecent', async (_e, limit?: number) => {
