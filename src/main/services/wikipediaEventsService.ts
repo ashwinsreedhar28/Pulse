@@ -16,7 +16,7 @@
 import { JSDOM, VirtualConsole } from 'jsdom'
 
 const WIKI_PARSE_API = 'https://en.wikipedia.org/w/api.php'
-const FETCH_TIMEOUT_MS = 10_000
+const FETCH_TIMEOUT_MS = 5_000
 const DAY_TTL_MS = 60 * 60_000
 // Per-day cap doubles as day-normalization: today's portal page is often empty
 // until editors populate it, so without an equal cap the two days before

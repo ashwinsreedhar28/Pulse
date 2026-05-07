@@ -10,7 +10,7 @@ const YAHOO_CRUMB_URL = 'https://query2.finance.yahoo.com/v1/test/getcrumb'
 const YAHOO_CONSENT_URL = 'https://fc.yahoo.com/'
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15'
-const FETCH_TIMEOUT_MS = 10_000
+const FETCH_TIMEOUT_MS = 6_000
 const CACHE_TTL_MS = 5 * 60_000
 const FUNDAMENTALS_TTL_MS = 30 * 60_000
 // 1 h TTL on the in-memory Yahoo earnings cache. Was 24 h, dropped to

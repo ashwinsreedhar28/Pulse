@@ -4,7 +4,7 @@
 // "Intraday" change uses close - open because stooq doesn't expose previous-close on this endpoint.
 
 const STOOQ_BASE = 'https://stooq.com/q/l/'
-const FETCH_TIMEOUT_MS = 10_000
+const FETCH_TIMEOUT_MS = 5_000
 const CACHE_TTL_MS = 55_000
 // Stooq silently returns N/D rows for a subset of symbols once the batch
 // gets past ~100. Observed: a 106-symbol batch drops 6 rows; anything ≤100
@@ -94,8 +94,11 @@ async function fetchChunk(symbols: string[]): Promise<StockQuote[] | null> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const body = await res.text()
     return parseCsv(body, symbols)
-  } catch (err) {
-    console.warn('[stooq] chunk fetch failed:', err instanceof Error ? err.message : err)
+  } catch {
+    // Per-chunk failures used to log inline, which during offline → online
+    // transitions amounted to a flood of identical lines. Caller (getQuotes
+    // / stocksScheduler) sees the null + cached-fallback and emits a single
+    // per-cycle summary instead.
     return null
   } finally {
     clearTimeout(timer)

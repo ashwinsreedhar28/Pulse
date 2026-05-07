@@ -13,8 +13,8 @@ import Parser from 'rss-parser'
 import type { ReaderResult } from './readerService'
 import { getUpcomingIpos, type UpcomingIpo } from './nasdaqCalendarService'
 
-const EDGAR_FETCH_TIMEOUT_MS = 10_000
-const NEWS_FETCH_TIMEOUT_MS = 10_000
+const EDGAR_FETCH_TIMEOUT_MS = 5_000
+const NEWS_FETCH_TIMEOUT_MS = 5_000
 const BRIEF_TTL_MS = 6 * 60 * 60_000
 
 // EDGAR explicitly requires a descriptive User-Agent with a contact string, or

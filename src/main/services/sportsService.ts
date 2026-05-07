@@ -4,7 +4,7 @@
 
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports'
 const ESPN_BASE_V3 = 'https://site.api.espn.com/apis/site/v3/sports'
-const FETCH_TIMEOUT_MS = 12_000
+const FETCH_TIMEOUT_MS = 6_000
 const SCOREBOARD_TTL_MS = 15_000
 // Summary (box score) TTL bumped from 10s to 60s. The original 10s was
 // fine when getGameDetail was only called by the user opening a game
@@ -165,7 +165,7 @@ export async function listNcaaConferences(leagueId: string): Promise<NcaaConfere
   const url = `https://site.api.espn.com/apis/site/v2/sports/${path}/groups`
   try {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 8_000)
+    const timer = setTimeout(() => controller.abort(), 4_000)
     let res: Response
     try {
       res = await fetch(url, {

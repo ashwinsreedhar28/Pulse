@@ -19,6 +19,7 @@ import { classifyArticleAgainstTickers } from './tickerRelevance'
 import { isVideoGenBusy, onVideoGenSettled } from './videoGenService'
 import { isKokoroBusy, onKokoroSettled } from './kokoroService'
 import { isMediaToolsBusy, onMediaToolsSettled } from './mediaToolsService'
+import { isOnline } from './networkStatus'
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 const POLL_CONCURRENCY = 6
@@ -76,6 +77,14 @@ export async function pollAllFeeds(options: { force?: boolean } = {}): Promise<P
       onKokoroSettled(runDeferred)
       onMediaToolsSettled(runDeferred)
     }
+    return { startedAt: Date.now(), durationMs: 0, feedsPolled: 0, articlesInserted: 0, errors: [] }
+  }
+  // Skip when the OS reports no connectivity. Without this gate, a wake
+  // from a long offline period fans out 44 RSS fetches that all wait the
+  // full timeout before failing — the network stack saturates and other
+  // IPC traffic (theme broadcasts, renderer events) starves. The natural
+  // interval will retry on the next tick once the OS sees the network.
+  if (!options.force && !isOnline()) {
     return { startedAt: Date.now(), durationMs: 0, feedsPolled: 0, articlesInserted: 0, errors: [] }
   }
   pollInProgress = true

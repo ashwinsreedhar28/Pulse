@@ -1,7 +1,12 @@
 import Parser from 'rss-parser'
 
 const USER_AGENT = 'Pulse/0.1 (macOS news reader; contact via app)'
-const FETCH_TIMEOUT_MS = 15_000
+// Fast-fail timeout. RSS endpoints normally first-byte in <1s; 8s is well
+// above any healthy response and short enough that 44 simultaneous failed
+// fetches resolve in seconds rather than minutes during offline → online
+// transitions. The networkStatus.isOnline gate in feedPoller catches the
+// pure-offline case before any fetch fires.
+const FETCH_TIMEOUT_MS = 8_000
 
 export interface FetchedArticle {
   guid: string | null
