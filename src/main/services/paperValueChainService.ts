@@ -1153,12 +1153,19 @@ async function maybeEnrichWithFocalPaperReading(input: {
     }
   }
 
-  // PDF availability gate — no openAccessPdf URL on the focal means
-  // we have nothing to read. UI shows the metadata-only badge.
-  const pdfUrl = input.focal.openAccessPdf?.url ?? null
+  // PDF availability gate. Prefer S2's openAccessPdf; fall back to a
+  // constructed arXiv PDF URL when the paper has an ArXiv externalId.
+  // Mirrors fromS2Paper in researchService — landmark papers like
+  // "Attention is All You Need" frequently come back from S2 with
+  // openAccessPdf=null but externalIds.ArXiv set, so checking only
+  // openAccessPdf misses the most-readable papers in the corpus.
+  const arxivId = input.focal.externalIds?.ArXiv ?? null
+  const pdfUrl =
+    input.focal.openAccessPdf?.url ??
+    (arxivId ? `https://arxiv.org/pdf/${arxivId}` : null)
   if (!pdfUrl) {
     console.log(
-      `[paper-chain] enrichment skipped for ${focusId}: no openAccessPdf URL`
+      `[paper-chain] enrichment skipped for ${focusId}: no openAccessPdf and no ArXiv id`
     )
     return {
       chain: input.baseChain,
