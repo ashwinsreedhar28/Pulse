@@ -418,8 +418,20 @@ function authorYearLabel(p: S2Paper): string {
 function nodeFromS2(p: S2Paper, stageId: string): PaperValueChainNode | null {
   if (!p.paperId || !p.title) return null
   const arxivId = p.externalIds?.ArXiv ?? null
+  // Same S2 quirk as in researchService.fromS2Paper / maybeEnrichWith…:
+  // openAccessPdf is sometimes returned as {url:'', status:null,
+  // license:null} for papers freely readable on arXiv but not formally
+  // OA. Empty string isn't nullish so a plain `??` lets it through and
+  // breaks the arXiv fallback — chain nodes (including counterparts in
+  // the bilateral panel) end up with pdfUrl='' and the "open PDF" pill
+  // disabled. Normalize empty/whitespace to null first.
+  const openAccessRaw = p.openAccessPdf?.url
+  const openAccessUrl =
+    typeof openAccessRaw === 'string' && openAccessRaw.trim().length > 0
+      ? openAccessRaw
+      : null
   const pdfUrl =
-    p.openAccessPdf?.url ?? (arxivId ? `https://arxiv.org/pdf/${arxivId}` : null)
+    openAccessUrl ?? (arxivId ? `https://arxiv.org/pdf/${arxivId}` : null)
   const url =
     p.url ??
     (arxivId ? `https://arxiv.org/abs/${arxivId}` : null) ??
