@@ -85,6 +85,21 @@ export type PaperValueChainEdgeCitation =
       otherPaperId: string
     }
   | {
+      // Phase 3B — Haiku read the focal paper's intro and quoted a
+      // sentence that grounds this edge. `paperId` is the focal paper
+      // (the document the quote came from); `pageOffset` is the
+      // 1-indexed PDF page where the sentence lives so the renderer can
+      // deep-link via `#page=N`. `charOffset` is reserved for a future
+      // pdfjs-rendered viewer that supports text-position highlighting;
+      // 3B's Chromium PDF viewer can only honor #page=N.
+      kind: 'paper-pdf'
+      paperId: string
+      otherPaperId: string
+      quotedSentence: string // <=240 chars; pre-trimmed at write time
+      pageOffset: number
+      charOffset: number
+    }
+  | {
       // No grounded source — the model's free-text attribution. Carries
       // the lowest confidence; renderer can render dimmed.
       kind: 'model'

@@ -16,8 +16,12 @@ import {
   shareAnyAuthor,
   shareAnyFieldOfStudy,
   topNByRank,
+  tokenSetSimilarity,
+  resolveCitedHint,
+  reconcileRelationship,
   FIXED_STAGES,
-  STAGE_IDS
+  STAGE_IDS,
+  type RefMeta
 } from './paperValueChainService'
 
 describe('intentToRelationship', () => {
@@ -226,3 +230,182 @@ describe('FIXED_STAGES', () => {
     expect(labelsAtIndex(7)).toBe('Replications / Refutations')
   })
 })
+
+// ============================================================
+// Phase 3B — focal-paper-intro enrichment
+// ============================================================
+
+describe('tokenSetSimilarity', () => {
+  it('returns 1 for identical token sets', () => {
+    expect(tokenSetSimilarity('attention is all you need', 'attention is all you need')).toBe(1)
+  })
+
+  it('is asymmetric: short fragments score high against long titles', () => {
+    // Spec: token-set similarity uses intersection / min, so a short
+    // partial title gets a high score against a long matching title.
+    const sim = tokenSetSimilarity(
+      'attention all need',
+      'Attention Is All You Need: A Transformer Approach'
+    )
+    expect(sim).toBeGreaterThanOrEqual(0.7)
+  })
+
+  it('returns 0 for disjoint token sets', () => {
+    expect(tokenSetSimilarity('graph neural networks', 'cardiac arrest models')).toBe(0)
+  })
+
+  it('drops tokens shorter than 3 chars (filters articles)', () => {
+    // "is", "a", "in" are dropped. "transformer" is kept on both sides.
+    const sim = tokenSetSimilarity('a transformer is in', 'a transformer is in')
+    expect(sim).toBe(1)
+    // No real tokens on either side ("is", "a" both dropped) → 0.
+    expect(tokenSetSimilarity('is a', 'in a')).toBe(0)
+  })
+
+  it('handles punctuation and case', () => {
+    expect(
+      tokenSetSimilarity('GraphNet: Neural Networks', 'graphnet  Neural,  networks!')
+    ).toBe(1)
+  })
+})
+
+describe('resolveCitedHint', () => {
+  const refs: RefMeta[] = [
+    {
+      paperId: 's2:vaswani-2017',
+      title: 'Attention Is All You Need',
+      firstAuthor: 'Ashish Vaswani',
+      year: 2017,
+      isInfluential: true,
+      intents: ['methodology'],
+      paper: {
+        paperId: 's2:vaswani-2017',
+        title: 'Attention Is All You Need',
+        authors: [{ name: 'Ashish Vaswani' }],
+        year: 2017
+      }
+    },
+    {
+      paperId: 's2:he-2016',
+      title: 'Deep Residual Learning for Image Recognition',
+      firstAuthor: 'Kaiming He',
+      year: 2016,
+      isInfluential: true,
+      intents: ['background'],
+      paper: {
+        paperId: 's2:he-2016',
+        title: 'Deep Residual Learning for Image Recognition',
+        authors: [{ name: 'Kaiming He' }],
+        year: 2016
+      }
+    },
+    {
+      paperId: 's2:smith-2019',
+      title: 'A Smaller Approach to Sparse Attention',
+      firstAuthor: 'Jane Smith',
+      year: 2019,
+      isInfluential: false,
+      intents: ['background'],
+      paper: {
+        paperId: 's2:smith-2019',
+        title: 'A Smaller Approach to Sparse Attention',
+        authors: [{ name: 'Jane Smith' }],
+        year: 2019
+      }
+    }
+  ]
+
+  it('matches by token-set ≥0.7 + first-author surname (Path 1)', () => {
+    expect(
+      resolveCitedHint(
+        { titleFragment: 'Attention Is All You Need', firstAuthor: 'Vaswani' },
+        refs
+      )
+    ).toBe('s2:vaswani-2017')
+  })
+
+  it('matches partial title fragments via Path 1', () => {
+    expect(
+      resolveCitedHint(
+        { titleFragment: 'attention all need', firstAuthor: 'Vaswani', year: 2017 },
+        refs
+      )
+    ).toBe('s2:vaswani-2017')
+  })
+
+  it('rejects when title matches but author differs (Path 1 needs both)', () => {
+    expect(
+      resolveCitedHint(
+        { titleFragment: 'Attention Is All You Need', firstAuthor: 'Different' },
+        refs
+      )
+    ).toBeNull()
+  })
+
+  it('matches by exact year + title prefix (Path 2)', () => {
+    // Even when surname differs, exact year + identical first 30 chars
+    // of title resolves.
+    expect(
+      resolveCitedHint(
+        {
+          titleFragment: 'Deep Residual Learning for Imag',
+          firstAuthor: 'WrongAuthor',
+          year: 2016
+        },
+        refs
+      )
+    ).toBe('s2:he-2016')
+  })
+
+  it('returns null when neither path matches (hallucination defense)', () => {
+    // Hint names a paper that isn't in the focal's reference list.
+    // Phase 3B drops these silently — never adds as kind:'unverified'.
+    expect(
+      resolveCitedHint(
+        {
+          titleFragment: 'Some Fictional Architecture',
+          firstAuthor: 'Doesnotexist',
+          year: 2099
+        },
+        refs
+      )
+    ).toBeNull()
+  })
+
+  it('uses surname (last word) for author match — handles full names', () => {
+    // First-author "Ashish Vaswani"; hint says "A. Vaswani" or just
+    // "Vaswani" — both should match because we compare last words.
+    expect(
+      resolveCitedHint(
+        { titleFragment: 'Attention Is All You Need', firstAuthor: 'A. Vaswani' },
+        refs
+      )
+    ).toBe('s2:vaswani-2017')
+  })
+})
+
+describe('reconcileRelationship', () => {
+  it('Haiku contrasts always overrides existing positive relationship', () => {
+    // Negative-citation override per spec — S2's classifier is known
+    // to be weak on negative citations, so Haiku's reading wins.
+    expect(reconcileRelationship('builds-on', 'contrasts', true)).toBe('contrasts')
+    expect(reconcileRelationship('builds-on', 'contrasts', false)).toBe('contrasts')
+  })
+
+  it('Haiku refutes always overrides existing positive relationship', () => {
+    expect(reconcileRelationship('extends', 'refutes', true)).toBe('refutes')
+    expect(reconcileRelationship('uses-method', 'refutes', false)).toBe('refutes')
+  })
+
+  it('Haiku positive defers to existing when s2-influential anchored', () => {
+    // s2-influential is the strongest S2 signal; we don't downgrade.
+    expect(reconcileRelationship('uses-method', 'extends', true)).toBe('uses-method')
+    expect(reconcileRelationship('builds-on', 'extends', true)).toBe('builds-on')
+  })
+
+  it('Haiku positive overrides existing when not anchored on influential', () => {
+    expect(reconcileRelationship('extends', 'uses-method', false)).toBe('uses-method')
+    expect(reconcileRelationship('extends', 'builds-on', false)).toBe('builds-on')
+  })
+})
+

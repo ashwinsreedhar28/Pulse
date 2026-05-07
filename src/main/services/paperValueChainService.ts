@@ -1,22 +1,33 @@
 // Paper Value Chain — research analog to companyValueChainService. Generates
-// a fixed-stage citation lineage for a focus paper using ONLY S2 data: refs
-// and citations are bucketed into upstream / focal / downstream stages by
-// intent + isInfluential + recency + subfield, then each stage is top-N
-// pruned and rendered as a star around the focal paper.
+// a fixed-stage citation lineage for a focus paper using S2 + (Phase 3B)
+// the focal paper's own intro/related-work text read by Haiku.
 //
-// Phase 3A scope (this file):
-//   - S2 only. No Claude. No PDF reading.
-//   - Stages are FIXED. The generator never proposes new ones — every chain
-//     uses the same 7 stages (Replications/Refutations is empty until 3D)
-//     so a user can compare two chains side-by-side without re-translating
-//     labels.
-//   - Edge citations are limited to s2-influential and s2-intent kinds.
-//     The other kinds in PaperValueChainEdgeCitation are reserved for later
-//     phases (haiku-pdf in 3C, bilateral in 3D).
-//   - Total S2 calls per generation: 3 in the common path (focal getPaper
-//     + refs bulk + citations bulk). Per-paper detail lookups would only
-//     fire if we needed extra fields not in the bulk endpoints; today we
-//     don't, so we stay well under the 40-call ceiling.
+// Phase 3A built the S2-only spine: refs + citations bucketed into fixed
+// stages, top-N pruned, edges anchored at the focal paper.
+//
+// Phase 3B (this file's `enrichWithFocalPaperReading` path) adds the
+// "read the focal paper's intro" step — analog of pulling a 10-K Item 1
+// in the stock chain. The intro is the author's required formal self-
+// positioning, structured and quotable. We:
+//   - extract intro + related-work text via paperPdfExtractor
+//   - send extracted text to Haiku with a structured-output prompt
+//   - resolve each citedPaperHint against the focal's S2 reference list
+//     using fuzzy matching (token-set ≥0.7 + first-author surname, OR
+//     exact year + title prefix); drop hints that don't resolve
+//   - upgrade existing s2-intent edges to paper-pdf provenance, override
+//     relationship to 'contrasts' / 'refutes' when Haiku found explicit
+//     negative-citation wording (S2's classifier is known to be weak on
+//     negative citations)
+//   - surface NEW edges only when the resolved paperId is in the S2
+//     reference list AND no existing edge already covers it
+//
+// Hallucination defense: a Haiku-named paper that doesn't fuzzy-match
+// any S2 reference is dropped silently and logged. Such papers are
+// NEVER added as kind:'unverified' — S2 is the truth anchor.
+//
+// Stages are FIXED. Phase 3B does not change the taxonomy; new
+// enrichment-surfaced nodes land in upstream-ancestors (the catch-all
+// upstream bucket) when no stronger signal places them.
 //
 // We DO NOT share code with researchService.ts yet. A shared rate-limiter
 // + S2 fetcher is the natural Phase 4 refactor once both feature shapes
@@ -34,6 +45,14 @@ import {
   type PaperValueChainStage
 } from '../database/paperValueChains'
 import { getPreferences } from '../database/preferences'
+import { extractFocalPaperIntro } from './paperPdfExtractor'
+import {
+  getPaperChainEnrichment,
+  upsertPaperChainEnrichment,
+  deletePaperChainEnrichment
+} from '../database/paperChainEnrichments'
+import { callClaude, CLAUDE_MODELS } from './claudeService'
+import { recordClaudeCall } from './aiClient'
 
 const S2_BASE = 'https://api.semanticscholar.org/graph/v1'
 const FETCH_TIMEOUT_MS = 20_000
@@ -718,6 +737,13 @@ export interface GeneratePaperValueChainResult {
   chain: PaperValueChain | null
   s2CallsUsed: number
   reason?: 'rate_limited' | 'focal_not_found' | 'empty'
+  // Phase 3B — enrichment outcome. 'enriched' = Haiku read the focal
+  // PDF and refined the chain. 'metadata-only' = either no openAccessPdf,
+  // PDF parse failed, or Haiku was unavailable. 'cache' = enrichment
+  // cache hit, no Haiku call this round. UI surfaces this as a badge
+  // on the chain card. Undefined on cold paths where enrichment didn't
+  // run at all (e.g. focal_not_found / S2 rate-limited).
+  enrichmentBadge?: 'enriched' | 'metadata-only' | 'cache'
 }
 
 export async function generatePaperValueChain(
@@ -887,7 +913,7 @@ export async function generatePaperValueChain(
   // present in FIXED_STAGES so the renderer always allocates its column;
   // 3D will populate the nodes.
 
-  const chain: PaperValueChain = {
+  const baseChain: PaperValueChain = {
     focusPaperId: focal.paperId!,
     focusLabel: focalNode.authorYearLabel,
     stages: FIXED_STAGES,
@@ -895,17 +921,41 @@ export async function generatePaperValueChain(
     edges,
     s2CallsUsed: totalCalls
   }
-  setPaperValueChain({ focusPaperId: id, status: 'ready', graph: chain })
+
+  // Phase 3B — try to enrich with focal-paper-intro reading. The
+  // enrichment step is best-effort: any failure (no PDF, parse failure,
+  // Haiku rate-limit, key missing) returns the base chain unchanged and
+  // the UI falls back to the "metadata only" badge. Enrichment cache is
+  // 90-day TTL and consulted before re-running Haiku.
+  const refsForEnrichment = buildRefsMetaForEnrichment(refs)
+  const enriched = await maybeEnrichWithFocalPaperReading({
+    baseChain,
+    focal,
+    refsMeta: refsForEnrichment
+  })
+  const finalChain = enriched.chain
+  setPaperValueChain({ focusPaperId: id, status: 'ready', graph: finalChain })
 
   // Empty-chain telemetry. Spec acceptance requires "given a paper with
   // ≥5 references and ≥5 citations, generates a chain with all 7 active
   // stages populated" — for thinner papers we still return ok=true but
   // surface 'empty' as a soft signal to the UI.
-  const activeNodeCount = nodes.length - 1 // minus focal
+  const activeNodeCount = finalChain.nodes.length - 1 // minus focal
   if (activeNodeCount === 0) {
-    return { ok: true, chain, s2CallsUsed: totalCalls, reason: 'empty' }
+    return {
+      ok: true,
+      chain: finalChain,
+      s2CallsUsed: totalCalls,
+      enrichmentBadge: enriched.badge,
+      reason: 'empty'
+    }
   }
-  return { ok: true, chain, s2CallsUsed: totalCalls }
+  return {
+    ok: true,
+    chain: finalChain,
+    s2CallsUsed: totalCalls,
+    enrichmentBadge: enriched.badge
+  }
 }
 
 // Cache-first read. Returns the persisted chain when present; renderer
@@ -921,5 +971,522 @@ export function getCachedPaperValueChain(
 export async function regeneratePaperValueChain(
   paperId: string
 ): Promise<GeneratePaperValueChainResult> {
+  // Invalidate the Haiku enrichment cache so a regen always re-runs the
+  // PDF read + Haiku call against the current S2 data. Generate path
+  // does NOT delete this on its own — that's why getCachedPaperValueChain
+  // can return an enriched chain instantly without paying the Haiku
+  // cost on every renderer mount.
+  deletePaperChainEnrichment(paperId.trim())
   return generatePaperValueChain(paperId)
+}
+
+// =====================================================================
+// Phase 3B — focal-paper-intro enrichment
+// =====================================================================
+
+// 90-day TTL on the enrichment cache. A regen invalidates immediately
+// (regeneratePaperValueChain calls deletePaperChainEnrichment). Outside
+// of regen the cache stands until expiry.
+const ENRICHMENT_CACHE_TTL_MS = 90 * 86_400_000
+// Hard ceiling on Haiku-proposed claims per chain. Keeps the prompt
+// bounded and the parser cheap; >12 claims would overflow the chain
+// visually anyway.
+const MAX_HAIKU_CLAIMS = 12
+// Truncation length for quoted sentences before they're stored on the
+// edge citation. Renderer hover-preview is comfortable up to ~240 chars.
+const QUOTED_SENTENCE_MAX_CHARS = 240
+
+// ----- Reference-list metadata for fuzzy matching -------------------------
+
+// Distilled view of a single S2 reference, used both for fuzzy hint
+// matching AND for placing enrichment-surfaced new nodes into the chain.
+// Exported for unit tests of the matcher.
+export interface RefMeta {
+  paperId: string
+  title: string
+  firstAuthor: string
+  year: number | null
+  isInfluential: boolean
+  intents: string[]
+  // Carrier of the underlying S2 paper so a new-node addition can
+  // hydrate via nodeFromS2 without round-tripping S2 again.
+  paper: S2Paper
+}
+
+function buildRefsMetaForEnrichment(refs: S2RefRow[]): RefMeta[] {
+  const out: RefMeta[] = []
+  for (const row of refs) {
+    const p = row.citedPaper
+    if (!p?.paperId || !p.title) continue
+    const firstAuthor = p.authors?.[0]?.name?.trim() ?? ''
+    out.push({
+      paperId: p.paperId,
+      title: p.title,
+      firstAuthor,
+      year: p.year ?? null,
+      isInfluential: row.isInfluential === true,
+      intents: (row.intents ?? []).map((x) => x.toLowerCase()),
+      paper: p
+    })
+  }
+  return out
+}
+
+// ----- Fuzzy match (exported for tests) -----------------------------------
+
+// Token-set similarity. Returns intersection size / min(setA.size, setB.size)
+// rather than Jaccard so a partial title fragment ("Attention is all you need")
+// scores well against the full title ("Attention Is All You Need: A Transformer
+// Approach for ..."). Tokens shorter than 3 chars are dropped (filters out
+// articles like "a", "of", "is" without depending on a stopword list).
+export function tokenSetSimilarity(a: string, b: string): number {
+  const tokenize = (s: string): Set<string> => {
+    const tokens = s
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]/g, ' ')
+      .split(/\s+/)
+      .filter((t) => t.length >= 3)
+    return new Set(tokens)
+  }
+  const setA = tokenize(a)
+  const setB = tokenize(b)
+  if (setA.size === 0 || setB.size === 0) return 0
+  let inter = 0
+  for (const t of setA) if (setB.has(t)) inter += 1
+  return inter / Math.min(setA.size, setB.size)
+}
+
+function lastWord(s: string): string {
+  return s.trim().split(/\s+/).slice(-1)[0]?.toLowerCase() ?? ''
+}
+
+export interface CitedHint {
+  titleFragment: string
+  firstAuthor: string
+  year?: number
+}
+
+// Resolve a Haiku-proposed citedPaperHint to a paperId in the focal
+// paper's S2 reference list, or null if no match. Two acceptance paths
+// per spec:
+//   1. Token-set title similarity ≥ 0.7 AND first-author surname match
+//   2. Exact year match AND title prefix match (first 30 lowercased chars)
+// Returns the FIRST match found. Hints that don't fall under either
+// path return null and the caller drops the edge silently.
+export function resolveCitedHint(
+  hint: CitedHint,
+  refs: RefMeta[]
+): string | null {
+  const hintAuthorLast = lastWord(hint.firstAuthor)
+  // Path 1
+  for (const ref of refs) {
+    const sim = tokenSetSimilarity(hint.titleFragment, ref.title)
+    if (sim < 0.7) continue
+    const refAuthorLast = lastWord(ref.firstAuthor)
+    if (hintAuthorLast && refAuthorLast && hintAuthorLast === refAuthorLast) {
+      return ref.paperId
+    }
+  }
+  // Path 2
+  if (hint.year != null) {
+    const fragmentPrefix = hint.titleFragment.toLowerCase().slice(0, 30)
+    for (const ref of refs) {
+      if (ref.year !== hint.year) continue
+      const titlePrefix = ref.title.toLowerCase().slice(0, 30)
+      if (fragmentPrefix === titlePrefix) return ref.paperId
+    }
+  }
+  return null
+}
+
+// ----- Haiku claim shape + relationship reconciliation -------------------
+
+interface HaikuClaim {
+  claim: string
+  citedPaperHint: CitedHint
+  relationship: PaperValueChainRelationship
+  quotedSentence: string
+}
+
+// Spec rule: a 'refutes' or 'contrasts' relationship from Haiku always
+// overrides s2-intent, since S2's classifier is known to be weak on
+// negative citations. Other Haiku relationships only override when the
+// existing edge has no specific relationship signal yet (i.e. the edge
+// fell back to 'extends' from the S2-side fallback path). Exported for
+// unit tests.
+export function reconcileRelationship(
+  existing: PaperValueChainRelationship,
+  fromHaiku: PaperValueChainRelationship,
+  hasInfluentialCitation: boolean
+): PaperValueChainRelationship {
+  if (fromHaiku === 'refutes' || fromHaiku === 'contrasts') return fromHaiku
+  // For positive relationships, defer to existing IF it was anchored
+  // in s2-influential (the strongest S2 signal). Otherwise let Haiku's
+  // reading refine it — Haiku has the actual sentence in hand.
+  if (hasInfluentialCitation) return existing
+  return fromHaiku
+}
+
+// ----- Haiku call ---------------------------------------------------------
+
+interface EnrichmentOutcome {
+  chain: PaperValueChain
+  badge: 'enriched' | 'metadata-only' | 'cache'
+  haikuCallsUsed: number
+}
+
+async function maybeEnrichWithFocalPaperReading(input: {
+  baseChain: PaperValueChain
+  focal: S2Paper
+  refsMeta: RefMeta[]
+}): Promise<EnrichmentOutcome> {
+  const focusId = input.baseChain.focusPaperId
+
+  // Cache check — 90-day TTL. A regen path deletes this row before
+  // calling generate, so a hit here means "no regen since enrichment."
+  const cached = getPaperChainEnrichment(focusId)
+  if (cached && Date.now() - cached.enrichedAt < ENRICHMENT_CACHE_TTL_MS) {
+    return {
+      chain: cached.enrichedGraph,
+      badge: 'cache',
+      haikuCallsUsed: 0
+    }
+  }
+
+  // PDF availability gate — no openAccessPdf URL on the focal means
+  // we have nothing to read. UI shows the metadata-only badge.
+  const pdfUrl = input.focal.openAccessPdf?.url ?? null
+  if (!pdfUrl) {
+    return {
+      chain: input.baseChain,
+      badge: 'metadata-only',
+      haikuCallsUsed: 0
+    }
+  }
+
+  const extractResult = await extractFocalPaperIntro({
+    paperId: focusId,
+    pdfUrl
+  })
+  if (!extractResult.ok || !extractResult.extract) {
+    return {
+      chain: input.baseChain,
+      badge: 'metadata-only',
+      haikuCallsUsed: 0
+    }
+  }
+
+  // Build the Haiku prompt. Reference list is numbered so the model
+  // can refer to entries by index when convenient; the structured
+  // output also takes free-text titleFragment / firstAuthor / year so
+  // the matcher works without relying on the model returning indices.
+  const refList = input.refsMeta
+    .slice(0, 60) // hard ceiling on the prompt size; 60 covers most
+    .map(
+      (r, i) =>
+        `[${i + 1}] ${r.title} — ${r.firstAuthor || 'unknown'}${
+          r.year != null ? ` — ${r.year}` : ''
+        }`
+    )
+    .join('\n')
+  const introBlob = extractResult.extract.sections
+    .map((s) => (s.heading ? `# ${s.heading}\n${s.text}` : s.text))
+    .join('\n\n')
+
+  const system =
+    `You read the introduction and related-work sections of a research ` +
+    `paper. Identify places where the paper EXPLICITLY positions itself ` +
+    `relative to specific cited works — building on, using methods from, ` +
+    `extending, contrasting, replicating, or refuting them.\n\n` +
+    `Output STRICT JSON only — an array of up to ${MAX_HAIKU_CLAIMS} ` +
+    `entries, no prose, no fences:\n` +
+    `[\n` +
+    `  {\n` +
+    `    "claim": "brief paraphrase of what the focal paper says",\n` +
+    `    "citedPaperHint": {\n` +
+    `      "titleFragment": "fragment of the cited paper's title",\n` +
+    `      "firstAuthor": "first author name as cited",\n` +
+    `      "year": 2017\n` +
+    `    },\n` +
+    `    "relationship": "builds-on|uses-method|extends|contrasts|replicates|refutes",\n` +
+    `    "quotedSentence": "verbatim sentence from the text grounding the claim"\n` +
+    `  }\n` +
+    `]\n\n` +
+    `Rules:\n` +
+    `- Only return citations the focal paper EXPLICITLY discusses. Do not ` +
+    `infer relationships from a bare citation marker.\n` +
+    `- Use 'contrasts' when the focal paper says it differs from / takes ` +
+    `a different approach than the cited work. Use 'refutes' only when ` +
+    `the focal paper actively argues the cited work is wrong.\n` +
+    `- The reference list below is the only set of papers the focal cites. ` +
+    `If you can't link a claim to one of these, drop it.\n` +
+    `- quotedSentence MUST be a verbatim substring of the intro text. ` +
+    `Don't paraphrase or summarize the sentence.`
+
+  const user =
+    `Reference list (focal paper cites these):\n${refList}\n\n` +
+    `Intro / related-work text:\n${introBlob}`
+
+  recordClaudeCall()
+  const raw = await callClaude({
+    model: CLAUDE_MODELS.classifier,
+    system,
+    user,
+    maxTokens: 4_000
+  })
+  if (!raw) {
+    return {
+      chain: input.baseChain,
+      badge: 'metadata-only',
+      haikuCallsUsed: 1
+    }
+  }
+
+  const claims = parseHaikuClaims(raw)
+  if (claims.length === 0) {
+    // Haiku ran successfully but found nothing groundable. Persist the
+    // enrichment cache row anyway with the base chain so a re-render
+    // doesn't burn another Haiku call.
+    upsertPaperChainEnrichment({
+      focusPaperId: focusId,
+      enrichedGraph: input.baseChain,
+      haikuCallsUsed: 1
+    })
+    return {
+      chain: input.baseChain,
+      badge: 'enriched',
+      haikuCallsUsed: 1
+    }
+  }
+
+  const enriched = applyClaimsToChain({
+    baseChain: input.baseChain,
+    refsMeta: input.refsMeta,
+    claims,
+    pdfSections: extractResult.extract.sections
+  })
+
+  upsertPaperChainEnrichment({
+    focusPaperId: focusId,
+    enrichedGraph: enriched,
+    haikuCallsUsed: 1
+  })
+
+  return { chain: enriched, badge: 'enriched', haikuCallsUsed: 1 }
+}
+
+// Tolerant JSON parse — Haiku occasionally wraps the array in a
+// ```json fence or prepends a one-line preamble. Slice between the
+// first '[' and last ']' before parsing. Returns [] on any failure;
+// the enrichment caller treats that as "ran but found nothing."
+function parseHaikuClaims(raw: string): HaikuClaim[] {
+  const start = raw.indexOf('[')
+  const end = raw.lastIndexOf(']')
+  if (start < 0 || end <= start) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw.slice(start, end + 1))
+  } catch (err) {
+    console.warn(
+      '[paper-chain] Haiku JSON parse failed:',
+      err instanceof Error ? err.message : err
+    )
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+  const out: HaikuClaim[] = []
+  for (const entry of parsed) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const e = entry as Record<string, unknown>
+    const hint = e.citedPaperHint as Record<string, unknown> | undefined
+    if (!hint || typeof hint !== 'object') continue
+    const titleFragment = typeof hint.titleFragment === 'string' ? hint.titleFragment.trim() : ''
+    const firstAuthor = typeof hint.firstAuthor === 'string' ? hint.firstAuthor.trim() : ''
+    if (!titleFragment || !firstAuthor) continue
+    const year = typeof hint.year === 'number' ? hint.year : undefined
+    const relationship = e.relationship as PaperValueChainRelationship
+    if (
+      relationship !== 'builds-on' &&
+      relationship !== 'uses-method' &&
+      relationship !== 'extends' &&
+      relationship !== 'contrasts' &&
+      relationship !== 'replicates' &&
+      relationship !== 'refutes'
+    ) {
+      continue
+    }
+    const claimText = typeof e.claim === 'string' ? e.claim.trim() : ''
+    const quotedSentence = typeof e.quotedSentence === 'string' ? e.quotedSentence.trim() : ''
+    if (!quotedSentence) continue
+    out.push({
+      claim: claimText,
+      citedPaperHint: { titleFragment, firstAuthor, year },
+      relationship,
+      quotedSentence
+    })
+    if (out.length >= MAX_HAIKU_CLAIMS) break
+  }
+  return out
+}
+
+// Apply the resolved + matched Haiku claims to the base chain.
+// Returns a new chain (never mutates the input) so callers can compare
+// pre/post for tests.
+//
+// Per spec:
+//   - Haiku UPGRADES an existing edge: append paper-pdf citation,
+//     override relationship for 'refutes' / 'contrasts' (or via
+//     reconcileRelationship for positive cases when the edge isn't
+//     anchored on s2-influential).
+//   - Haiku SURFACES a new edge ONLY IF the citedPaperHint resolves to
+//     a paper in the S2 reference list (already enforced — claims
+//     unresolved by resolveCitedHint never make it here).
+//   - Hallucination defense: claims that don't resolve are dropped
+//     silently; never added as kind:'unverified'.
+function applyClaimsToChain(input: {
+  baseChain: PaperValueChain
+  refsMeta: RefMeta[]
+  claims: HaikuClaim[]
+  pdfSections: ReturnType<typeof Object> extends never
+    ? never
+    : { heading: string | null; text: string; pageOffset: number }[]
+}): PaperValueChain {
+  // Clone-on-write: copy node + edge arrays so mutations stay local.
+  const nodes = input.baseChain.nodes.map((n) => ({ ...n }))
+  const edges = input.baseChain.edges.map((e) => ({
+    ...e,
+    citations: [...e.citations]
+  }))
+  const focusId = input.baseChain.focusPaperId
+  const refsByPaperId = new Map<string, RefMeta>(
+    input.refsMeta.map((r) => [r.paperId, r])
+  )
+  const nodesByPaperId = new Map<string, number>(
+    nodes.map((n, i) => [n.paperId, i])
+  )
+
+  for (const claim of input.claims) {
+    const resolvedId = resolveCitedHint(claim.citedPaperHint, input.refsMeta)
+    if (!resolvedId) {
+      // Hallucination defense — log and drop. Never surfaces in the
+      // chain; never becomes kind:'unverified'.
+      console.warn(
+        '[paper-chain] dropping Haiku claim — citedPaperHint did not resolve to any S2 reference:',
+        JSON.stringify(claim.citedPaperHint)
+      )
+      continue
+    }
+
+    // Locate the quoted sentence's page in the extract. Pick the FIRST
+    // section whose text contains the sentence (case-insensitive); use
+    // the section's pageOffset. charOffset is the index within the
+    // section's text; reserved for future pdfjs-rendered viewer
+    // highlighting (Phase 3B's Chromium viewer can only honor #page=N).
+    const pageInfo = locateSentenceInSections(
+      claim.quotedSentence,
+      input.pdfSections
+    )
+    const quotedSentenceTrimmed = claim.quotedSentence.slice(
+      0,
+      QUOTED_SENTENCE_MAX_CHARS
+    )
+
+    const paperPdfCitation: PaperValueChainEdgeCitation = {
+      kind: 'paper-pdf',
+      paperId: focusId,
+      otherPaperId: resolvedId,
+      quotedSentence: quotedSentenceTrimmed,
+      pageOffset: pageInfo.pageOffset,
+      charOffset: pageInfo.charOffset
+    }
+
+    // Find an existing edge between focal and resolvedId in either
+    // direction. Upstream edges have from=focal, to=resolved; downstream
+    // are reversed. For Phase 3B's intro-reading scope we only deal
+    // with the upstream direction (focal cites resolved), so check that
+    // direction first; fall back to the reverse for safety.
+    const existingIdx = edges.findIndex(
+      (e) =>
+        (e.from === focusId && e.to === resolvedId) ||
+        (e.from === resolvedId && e.to === focusId)
+    )
+    if (existingIdx >= 0) {
+      const e = edges[existingIdx]
+      const hadInfluential = e.citations.some(
+        (c) => c.kind === 's2-influential'
+      )
+      e.citations.push(paperPdfCitation)
+      e.relationship = reconcileRelationship(
+        e.relationship,
+        claim.relationship,
+        hadInfluential
+      )
+      // Note carries the Haiku claim paraphrase when present — gives
+      // the renderer a one-line summary of why the edge exists beyond
+      // S2's intent label.
+      if (e.note === null && claim.claim) {
+        e.note = claim.claim.slice(0, 140)
+      }
+      continue
+    }
+
+    // SURFACE new edge. Only if the resolvedId ↔ S2 ref list link
+    // exists (always true here since resolveCitedHint walked refsMeta).
+    const refMeta = refsByPaperId.get(resolvedId)
+    if (!refMeta) continue
+    edges.push({
+      from: focusId,
+      to: resolvedId,
+      relationship: claim.relationship,
+      note: claim.claim ? claim.claim.slice(0, 140) : null,
+      citations: [paperPdfCitation]
+    })
+
+    // If the resolved paper isn't already a node in the chain, add it
+    // to upstream-ancestors (catch-all upstream bucket — Phase 3B
+    // doesn't sub-bucket enrichment-surfaced nodes; spec says stage
+    // taxonomy is unchanged).
+    if (!nodesByPaperId.has(resolvedId)) {
+      const node = nodeFromS2(refMeta.paper, STAGE_IDS.upstreamAncestors)
+      if (node) {
+        nodes.push(node)
+        nodesByPaperId.set(resolvedId, nodes.length - 1)
+      }
+    }
+  }
+
+  return {
+    ...input.baseChain,
+    nodes,
+    edges
+  }
+}
+
+// Find which extracted section a sentence lives in. Returns the
+// matching section's pageOffset + character index of the sentence
+// within that section, or { pageOffset: 1, charOffset: 0 } when no
+// section contains the sentence (graceful fallback — the renderer
+// opens at page 1, accepts ±1 page tolerance per spec).
+function locateSentenceInSections(
+  sentence: string,
+  sections: { heading: string | null; text: string; pageOffset: number }[]
+): { pageOffset: number; charOffset: number } {
+  if (!sentence) return { pageOffset: 1, charOffset: 0 }
+  // Use the first ~80 chars of the sentence for the search — shorter
+  // is more tolerant of pdfjs's whitespace + ligature quirks.
+  const needle = sentence.slice(0, 80).toLowerCase().trim()
+  if (!needle) return { pageOffset: 1, charOffset: 0 }
+  for (const section of sections) {
+    const idx = section.text.toLowerCase().indexOf(needle)
+    if (idx >= 0) {
+      return { pageOffset: section.pageOffset, charOffset: idx }
+    }
+  }
+  // Fall back to the first section's page so the deep-link still
+  // opens "near" the relevant text. Page 1 is a safer default than
+  // unconditionally page 0.
+  return {
+    pageOffset: sections[0]?.pageOffset ?? 1,
+    charOffset: 0
+  }
 }

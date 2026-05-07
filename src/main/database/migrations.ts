@@ -1521,5 +1521,39 @@ export const migrations: Migration[] = [
           ON paper_value_chain_edges(toPaperId);
       `)
     }
+  },
+  {
+    version: 53,
+    name: 'paper_pdf_extracts_and_chain_enrichments',
+    // Phase 3B caches.
+    //   paper_pdf_extracts — extracted intro + related-work text per
+    //     paperId. Reused by 3C bilateral checks, so this lives apart
+    //     from paper_chain_enrichments. 90-day TTL enforced at read time
+    //     by the consumer; nothing in the table itself prevents stale
+    //     reads.
+    //   paper_chain_enrichments — the Haiku-augmented chain JSON keyed
+    //     by focusPaperId. Consulted before re-running enrichment so a
+    //     regen that hits the same focal paper within 90 days reuses the
+    //     prior Haiku output without paying for the Anthropic call again.
+    //     Invalidated when the underlying chain row is regenerated (the
+    //     service deletes the enrichment row alongside).
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS paper_pdf_extracts (
+          paperId TEXT PRIMARY KEY,
+          extractedAt INTEGER NOT NULL,
+          sectionsJson TEXT NOT NULL,
+          rawIntroLength INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS paper_chain_enrichments (
+          focusPaperId TEXT PRIMARY KEY,
+          enrichedAt INTEGER NOT NULL,
+          enrichedGraphJson TEXT NOT NULL,
+          haikuCallsUsed INTEGER NOT NULL,
+          FOREIGN KEY (focusPaperId) REFERENCES paper_value_chains(focusPaperId) ON DELETE CASCADE
+        );
+      `)
+    }
   }
 ]

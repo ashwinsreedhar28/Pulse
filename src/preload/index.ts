@@ -1349,6 +1349,18 @@ export type PaperValueChainEdgeCitation =
     }
   | { kind: 'bilateral'; otherPaperId: string }
   | { kind: 'haiku-pdf'; excerpt: string; otherPaperId: string }
+  | {
+      // Phase 3B — Haiku-grounded citation pointing at a specific
+      // sentence in the focal paper's intro/related-work. paperId is
+      // the focal paper (where the quote lives); pageOffset enables
+      // #page=N deep-linking in the in-window reader.
+      kind: 'paper-pdf'
+      paperId: string
+      otherPaperId: string
+      quotedSentence: string
+      pageOffset: number
+      charOffset: number
+    }
   | { kind: 'model'; attribution?: string }
 
 export type PaperValueChainRelationship =
@@ -1387,6 +1399,14 @@ export interface GeneratePaperValueChainResult {
   chain: PaperValueChain | null
   s2CallsUsed: number
   reason?: 'rate_limited' | 'focal_not_found' | 'empty'
+  // Phase 3B — Haiku enrichment outcome.
+  // 'enriched' = focal PDF was read, edges upgraded with paper-pdf
+  //              citations and possibly relationship overrides.
+  // 'metadata-only' = no openAccessPdf OR PDF parse failed OR Haiku was
+  //              unavailable; chain comes back as base S2-only.
+  // 'cache' = enrichment cache hit (90-day TTL); no Haiku call ran this
+  //              round. Functionally identical to 'enriched' for the UI.
+  enrichmentBadge?: 'enriched' | 'metadata-only' | 'cache'
 }
 
 // FRED macro panel snapshot. Mirror of FredSeriesSnapshot from the main

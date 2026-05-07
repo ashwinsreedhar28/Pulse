@@ -51,6 +51,13 @@ interface PdfReaderState {
   url: string
   title: string
   subtitle: string | null
+  // Phase 3B — optional 1-indexed page hint for deep-linking via the
+  // Chromium PDF viewer's `#page=N` fragment. When set, the webview
+  // src becomes `${url}#page=${pageOffset}` and Chromium opens the
+  // viewer scrolled to that page. Sentence-level highlighting requires
+  // a pdfjs-rendered viewer (planned for a future phase) — Chromium's
+  // built-in viewer doesn't reliably honor `#search=` across builds.
+  pageOffset?: number
 }
 
 export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
@@ -462,6 +469,18 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
                   const found = view.papers.find((p) => p.paperId === paperId)
                   if (found) setSelectedPaper(found)
                 }}
+                onOpenFocalPdfAtPage={(pageOffset) => {
+                  // Phase 3B — paper-pdf citation pill click. Opens the
+                  // focal paper's PDF in the in-window reader at the
+                  // page where Haiku quoted the grounding sentence.
+                  if (!chainPaper.pdfUrl) return
+                  setPdfReader({
+                    url: chainPaper.pdfUrl,
+                    title: chainPaper.title,
+                    subtitle: chainPaper.venue,
+                    pageOffset
+                  })
+                }}
               />
             </section>
           )}
@@ -668,9 +687,15 @@ function PdfReaderPane({
           openAccessPdf URLs (arxiv.org/pdf/..., S2 mirrors) all return.
           allowpopups omitted on purpose — links inside the PDF that
           would open new windows route through setWindowOpenHandler →
-          shell.openExternal, matching the rest of the app. */}
+          shell.openExternal, matching the rest of the app.
+
+          When pageOffset is set (Phase 3B paper-pdf deep-linking), append
+          `#page=N` to the URL — Chromium's PDF viewer parses the fragment
+          and opens scrolled to that page. ±1 page tolerance accepted by
+          spec; sentence-level highlighting needs a pdfjs-rendered
+          viewer (deferred). */}
       <webview
-        src={state.url}
+        src={state.pageOffset ? `${state.url}#page=${state.pageOffset}` : state.url}
         className="flex-1 min-h-0"
         partition="persist:pdfreader"
         style={{ width: '100%', height: '100%', display: 'flex' }}
