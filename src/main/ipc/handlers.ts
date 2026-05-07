@@ -893,6 +893,24 @@ export function registerDbIpc(): void {
     return computeBridgePapers(bookmarkedIds, foundationalByBookmark)
   })
 
+  // ---- Paper Value Chain (Research Phase 3A) -----------------------------
+  // Cache-first read. Returns the persisted chain when present, null
+  // otherwise. Renderer calls this on mount to render instantly when a
+  // chain has been generated before; falls back to regenerate when null.
+  ipcMain.handle('research:getPaperChain', async (_e, paperId: string) => {
+    const { getCachedPaperValueChain } = await import('../services/paperValueChainService')
+    return getCachedPaperValueChain(paperId)
+  })
+  // On-demand regeneration. The button on each paper card calls this;
+  // returns the freshly-generated chain (or a tagged failure result so
+  // the UI can surface rate-limit / focal-not-found states distinctly).
+  ipcMain.handle('research:regeneratePaperChain', async (_e, paperId: string) => {
+    const { regeneratePaperValueChain } = await import(
+      '../services/paperValueChainService'
+    )
+    return regeneratePaperValueChain(paperId)
+  })
+
   // ---- FRED macro panel ----------------------------------------------------
   ipcMain.handle('fred:getSnapshot', async () => {
     const { getMacroSnapshot } = await import('../services/fredService')

@@ -1310,6 +1310,85 @@ export interface BookmarkFoundationalEdge {
   to: string
 }
 
+// ---- Paper Value Chain (Research Phase 3A) -------------------------------
+// Renderer-facing types for the per-paper lineage chain. Mirror of the
+// shapes in src/main/database/paperValueChains.ts; kept synchronized
+// manually since main can't safely import preload types and vice-versa.
+
+export interface PaperValueChainStage {
+  id: string
+  label: string
+  order: number
+  band: 'upstream' | 'focal' | 'downstream'
+}
+
+export interface PaperValueChainNode {
+  paperId: string
+  stage: string
+  title: string
+  authorYearLabel: string
+  abstract: string | null
+  year: number | null
+  citationCount: number
+  influentialCitationCount: number
+  url: string | null
+  pdfUrl: string | null
+  kind: 'paper' | 'unverified'
+}
+
+export type PaperValueChainEdgeCitation =
+  | {
+      kind: 's2-influential'
+      intent: 'background' | 'methodology' | 'extension' | 'result' | 'comparison'
+      otherPaperId: string
+    }
+  | {
+      kind: 's2-intent'
+      intent: 'background' | 'methodology' | 'extension' | 'result' | 'comparison'
+      otherPaperId: string
+    }
+  | { kind: 'bilateral'; otherPaperId: string }
+  | { kind: 'haiku-pdf'; excerpt: string; otherPaperId: string }
+  | { kind: 'model'; attribution?: string }
+
+export type PaperValueChainRelationship =
+  | 'builds-on'
+  | 'uses-method'
+  | 'extends'
+  | 'contrasts'
+  | 'replicates'
+  | 'refutes'
+
+export interface PaperValueChainEdge {
+  from: string
+  to: string
+  relationship: PaperValueChainRelationship
+  note: string | null
+  citations: PaperValueChainEdgeCitation[]
+}
+
+export interface PaperValueChain {
+  focusPaperId: string
+  focusLabel: string
+  stages: PaperValueChainStage[]
+  nodes: PaperValueChainNode[]
+  edges: PaperValueChainEdge[]
+  s2CallsUsed: number
+}
+
+// Result from a regenerate call. `chain` is the freshly-built chain on
+// success; `reason` carries a tagged failure mode the UI can render
+// distinctly ('rate_limited' → "try again in ~30s", 'focal_not_found'
+// → "S2 doesn't have this paper", 'empty' → "no refs/citations to
+// build a chain from"). When ok=true and reason='empty', `chain` still
+// has the focal node so the UI can show a degraded-but-valid view.
+export interface GeneratePaperValueChainResult {
+  ok: boolean
+  chain: PaperValueChain | null
+  s2CallsUsed: number
+  reason?: 'rate_limited' | 'focal_not_found' | 'empty'
+}
+
 // FRED macro panel snapshot. Mirror of FredSeriesSnapshot from the main
 // process. `format` tells the renderer how to print latestValue:
 // 'percent' → '4.50%', 'percent-change-yoy' → '+3.1%', 'index' → '14.85',
@@ -1785,7 +1864,14 @@ const api = {
     // Directed edges among bookmarks (foundational links). Used by the
     // Research Map. Computed entirely from local caches, no S2 calls.
     listBookmarkFoundationalEdges: (): Promise<BookmarkFoundationalEdge[]> =>
-      invoke<BookmarkFoundationalEdge[]>('research:listBookmarkFoundationalEdges')
+      invoke<BookmarkFoundationalEdge[]>('research:listBookmarkFoundationalEdges'),
+    // Paper Value Chain — per-paper lineage. getPaperChain is cache-first
+    // (returns null when no chain has been generated yet); regenerate
+    // forces a fresh build.
+    getPaperChain: (paperId: string): Promise<PaperValueChain | null> =>
+      invoke<PaperValueChain | null>('research:getPaperChain', paperId),
+    regeneratePaperChain: (paperId: string): Promise<GeneratePaperValueChainResult> =>
+      invoke<GeneratePaperValueChainResult>('research:regeneratePaperChain', paperId)
   },
   fred: {
     getSnapshot: (): Promise<FredSeriesSnapshot[]> =>

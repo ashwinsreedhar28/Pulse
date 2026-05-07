@@ -1484,5 +1484,42 @@ export const migrations: Migration[] = [
           ON research_bookmark_topics(bookmarkPaperId);
       `)
     }
+  },
+  {
+    version: 52,
+    name: 'paper_value_chains',
+    // Per-paper generated lineage chain. Mirrors company_value_chains
+    // (v25): one row per focus paper, status + JSON blob holding the
+    // self-contained subgraph (stages, nodes, edges).
+    //
+    // The companion paper_value_chain_edges table denormalizes edges
+    // for cross-chain queries — same shape as chain_edge_mentions
+    // (v40). Not consumed in 3A but populated alongside the JSON blob
+    // so 3E (Universe view) can look up "which other chains mention
+    // this paper" without parsing every graphJson.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS paper_value_chains (
+          focusPaperId TEXT PRIMARY KEY,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'ready', 'error')),
+          graphJson TEXT,
+          generatedAt INTEGER,
+          updatedAt INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS paper_value_chain_edges (
+          sourceFocusPaperId TEXT NOT NULL,
+          fromPaperId TEXT NOT NULL,
+          toPaperId TEXT NOT NULL,
+          relationship TEXT NOT NULL,
+          PRIMARY KEY (sourceFocusPaperId, fromPaperId, toPaperId, relationship),
+          FOREIGN KEY (sourceFocusPaperId) REFERENCES paper_value_chains(focusPaperId) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_paper_value_chain_edges_from
+          ON paper_value_chain_edges(fromPaperId);
+        CREATE INDEX IF NOT EXISTS idx_paper_value_chain_edges_to
+          ON paper_value_chain_edges(toPaperId);
+      `)
+    }
   }
 ]

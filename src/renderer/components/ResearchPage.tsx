@@ -22,6 +22,7 @@ import type {
 } from '../../preload'
 import { CollapseChevron, useCollapsedSection } from './collapseUI'
 import { ResearchMap } from './ResearchMap'
+import { PaperValueChainCard } from './PaperValueChainCard'
 
 interface Props {
   onClose: () => void
@@ -66,6 +67,11 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set())
   const [pdfReader, setPdfReader] = useState<PdfReaderState | null>(null)
   const [recentSearches, setRecentSearches] = useState<RecentSearchRow[]>([])
+  // Phase 3A — paper-value-chain takeover. When non-null, the center
+  // pane shows the chain at the top (above the brief / paper list); the
+  // paper itself stays in the source list so the user keeps context.
+  // Cleared via the chain card's "Close" button.
+  const [chainPaper, setChainPaper] = useState<ResearchPaper | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Bookmarks + recent searches: load once on mount.
@@ -427,6 +433,39 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
         <div className="flex-1 min-w-0 overflow-y-auto px-6 py-5">
+          {chainPaper && (
+            <section className="mb-5 rounded-lg border border-violet-500/30 bg-violet-500/[0.04] p-3">
+              <header className="flex items-baseline justify-between mb-2 gap-3">
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-violet-300 font-semibold">
+                    Paper value chain
+                  </div>
+                  <div className="text-[13px] text-zinc-100 mt-0.5 truncate" title={chainPaper.title}>
+                    {chainPaper.title}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setChainPaper(null)}
+                  className="text-[11px] text-zinc-400 hover:text-zinc-100 shrink-0"
+                >
+                  Close ×
+                </button>
+              </header>
+              <PaperValueChainCard
+                paper={chainPaper}
+                onOpenPaperById={(paperId) => {
+                  // Within the chain, clicking a node card opens the
+                  // existing detail panel for that paper. We don't
+                  // recurse into a chain-of-a-chain — keeps the
+                  // navigation model simple (one chain at a time).
+                  const found = view.papers.find((p) => p.paperId === paperId)
+                  if (found) setSelectedPaper(found)
+                }}
+              />
+            </section>
+          )}
+
           {(topics.length > 0 ||
             bookmarkedIds.size > 0 ||
             recentSearches.length > 0) && (
@@ -489,6 +528,7 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
               }
               bookmarkedIds={bookmarkedIds}
               onToggleBookmark={(p) => void toggleBookmark(p)}
+              onOpenChain={(p) => setChainPaper(p)}
               title="Your tagged bookmarks"
             />
           )}
@@ -564,6 +604,7 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
                 }
                 bookmarkedIds={bookmarkedIds}
                 onToggleBookmark={(p) => void toggleBookmark(p)}
+                onOpenChain={(p) => setChainPaper(p)}
                 title={view.kind === 'bookmarks' ? 'Bookmarks' : 'Papers'}
               />
             )}
@@ -915,6 +956,7 @@ function PaperList({
   onOpenPdfInline,
   bookmarkedIds,
   onToggleBookmark,
+  onOpenChain,
   title = 'Papers'
 }: {
   papers: ResearchPaper[]
@@ -924,6 +966,8 @@ function PaperList({
   onOpenPdfInline?: (url: string, title: string, subtitle: string | null) => void
   bookmarkedIds: Set<string>
   onToggleBookmark: (paper: ResearchPaper) => void
+  // Phase 3A: opens the per-paper value chain takeover.
+  onOpenChain?: (paper: ResearchPaper) => void
   title?: string
 }): JSX.Element {
   const [collapsed, setCollapsed] = useCollapsedSection('researchPapers', false)
@@ -953,6 +997,7 @@ function PaperList({
               onOpenPdfInline={onOpenPdfInline}
               isBookmarked={bookmarkedIds.has(p.paperId)}
               onToggleBookmark={() => onToggleBookmark(p)}
+              onOpenChain={onOpenChain ? () => onOpenChain(p) : undefined}
             />
           ))}
         </div>
@@ -1091,7 +1136,8 @@ function PaperCard({
   onOpenURL,
   onOpenPdfInline,
   isBookmarked,
-  onToggleBookmark
+  onToggleBookmark,
+  onOpenChain
 }: {
   paper: ResearchPaper
   selected: boolean
@@ -1103,6 +1149,9 @@ function PaperCard({
   onOpenPdfInline?: (url: string, title: string, subtitle: string | null) => void
   isBookmarked: boolean
   onToggleBookmark: () => void
+  // Phase 3A — open the paper value chain takeover. Optional so callers
+  // that haven't been migrated keep working.
+  onOpenChain?: () => void
 }): JSX.Element {
   const authorLine =
     paper.authors.length === 0
@@ -1174,6 +1223,18 @@ function PaperCard({
             className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2"
           >
             Source ↗
+          </button>
+        )}
+        {onOpenChain && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenChain()
+            }}
+            title="Generate a citation lineage chain for this paper"
+            className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-200 ring-1 ring-inset ring-violet-500/30 hover:bg-violet-500/25"
+          >
+            Chain
           </button>
         )}
       </div>
