@@ -344,56 +344,26 @@
 .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
 
-/* Ticker marquee */
-@keyframes ticker-marquee {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(-50%, 0, 0); }
-}
-.animate-ticker {
-  animation: ticker-marquee 70s linear infinite;
-  /* GPU compositor layer for the moving element. The keyframes use
-     translate3d(0)→translate3d(-50%, 0, 0), which by itself is enough to
-     force layer promotion in modern browsers — combined with will-change,
-     no static transform on the resting state is needed. (We previously
-     also set `transform: translate3d(0,0,0)` + `backface-visibility:
-     hidden` here, but those caused subpixel text-spacing shifts in the
-     ticker's children.) */
-  will-change: transform;
-}
-.animate-ticker:hover { animation-play-state: paused; }
-/* Paint containment on the ticker viewport so a section-collapse reflow
-   in the page body can't briefly paint through the bar. Avoid `layout`
-   and `style` containment — they affect how flex gap and child metrics
-   resolve, which showed up as weird spacing between ticker items. Paint
-   alone is enough to fix the flicker. */
+/* Ticker reel scroll — JS rAF-driven (useTickerAutoScroll in App.tsx)
+   instead of CSS keyframe transform. Native scrollLeft updates ride
+   through the regular paint pipeline so screen-share capture sees a
+   stable image; the previous translate3d marquee tore visibly under
+   macOS Zoom/Meet because the GPU-composited layer's refresh cadence
+   didn't match the capture sampling rate. */
 .ticker-strip,
 .ticker-viewport {
+  /* Paint containment so a section-collapse reflow in the page body
+     can't briefly paint through the bar. Avoid `layout` and `style`
+     containment — they affect how flex gap and child metrics resolve,
+     which showed up as weird spacing between ticker items. */
   contain: paint;
 }
-/* Pause every CSS animation (marquee, animate-ping, animate-pulse, kenburns,
-   etc.) while the window is hidden — GPU compositor was repainting layers
-   nobody could see. */
+/* Pause every CSS animation while the window is hidden — GPU compositor
+   was repainting layers nobody could see. (rAF tickers separately gate
+   on this same body.pulse-hidden class via JS.) */
 body.pulse-hidden *,
 body.pulse-hidden *::before,
 body.pulse-hidden *::after {
-  animation-play-state: paused !important;
-}
-
-/* Presentation mode — pauses the perpetual marquee animations + the
-   accent-dot pulse-ping. The marquee in particular shows up as visible
-   flicker/jitter when Pulse is being captured by macOS screen-share
-   (Zoom / Meet / etc.) because the OS capture sampling cadence doesn't
-   line up with the GPU compositor's animation refresh. Pausing the
-   animations is the cleanest fix for screen-shares; user toggles it
-   via a button in the title bar or Cmd+Shift+P. State is persisted to
-   localStorage by App.tsx. */
-body.pulse-presenting .animate-ticker,
-body.pulse-presenting .animate-ping,
-body.pulse-presenting .animate-pulse,
-body.pulse-presenting .earnings-pulse-warning::before,
-body.pulse-presenting .earnings-pulse-imminent::before,
-body.pulse-presenting .earnings-pulse-reported::before,
-body.pulse-presenting .earnings-pulse-ambient::before {
   animation-play-state: paused !important;
 }
 
@@ -591,22 +561,13 @@ body.pulse-presenting .earnings-pulse-ambient::before {
    already in the tone class. Amber = "incoming earnings"; sky = "just
    reported" echo. Pulse speed scales with proximity.
 
-   Animate opacity on a static peak-shadow layer instead of animating
-   box-shadow directly — box-shadow animation forces a CPU paint every frame
-   and, with 10+ tiles pulsing simultaneously, drove full-page jitter. Opacity
-   on a pre-painted shadow composites on the GPU. */
-@keyframes earnings-pulse-opacity-fast {
-  0%, 100% { opacity: 0.55; }
-  50%      { opacity: 1; }
-}
-@keyframes earnings-pulse-opacity-slow {
-  0%, 100% { opacity: 0.5; }
-  50%      { opacity: 0.95; }
-}
-@keyframes earnings-pulse-opacity-calm {
-  0%, 100% { opacity: 0.5; }
-  50%      { opacity: 0.9; }
-}
+   Static halos — no perpetual animation. The previous opacity pulses
+   showed as visible jitter on macOS screen-capture (same root cause as
+   the marquee: GPU-composited animation refresh doesn't sync with the
+   capture sampling rate). Information is preserved by varying the halo
+   intensity per state (ambient < reported < warning < imminent), so
+   "earnings imminent" still reads at a glance — just without the
+   per-frame opacity sweep that wasn't capture-friendly. */
 
 .earnings-pulse-ambient,
 .earnings-pulse-warning,
@@ -623,20 +584,16 @@ body.pulse-presenting .earnings-pulse-ambient::before {
   inset: -2px;
   border-radius: 0.625rem; /* rounded-lg is 0.5rem; +2px inset needs a hair more */
   pointer-events: none;
-  will-change: opacity;
 }
 .earnings-pulse-ambient::before {
   box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.3), 0 0 10px 2px rgba(251, 191, 36, 0.18);
 }
 .earnings-pulse-warning::before {
-  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.6), 0 0 20px 5px rgba(251, 191, 36, 0.4);
-  animation: earnings-pulse-opacity-slow 2500ms ease-in-out infinite;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.55), 0 0 20px 5px rgba(251, 191, 36, 0.35);
 }
 .earnings-pulse-imminent::before {
-  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.85), 0 0 28px 8px rgba(251, 191, 36, 0.6);
-  animation: earnings-pulse-opacity-fast 1500ms ease-in-out infinite;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.85), 0 0 28px 8px rgba(251, 191, 36, 0.55);
 }
 .earnings-pulse-reported::before {
-  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.55), 0 0 16px 4px rgba(125, 211, 252, 0.35);
-  animation: earnings-pulse-opacity-calm 4000ms ease-in-out infinite;
+  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.5), 0 0 16px 4px rgba(125, 211, 252, 0.3);
 }

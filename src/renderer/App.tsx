@@ -826,39 +826,11 @@ function TitleBar({
 }): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [aiStatus, setAiStatus] = useState<'online' | 'offline'>('offline')
-  // Presentation mode pauses the perpetual marquee animations + the
-  // accent-dot ping. Avoids visible flicker when Pulse is being screen-
-  // shared on macOS (Zoom/Meet/etc.) — the OS capture cadence doesn't
-  // line up with the GPU compositor's animation refresh. State is
-  // mirrored to body.pulse-presenting (CSS picks it up) and persisted
-  // to localStorage so it survives reloads.
-  const [presenting, setPresenting] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return window.localStorage.getItem('pulse:presenting') === '1'
-  })
 
   useEffect(() => {
     void window.api.app.getOllamaStatus().then(setAiStatus)
     const unsub = window.api.app.onOllamaStatusChange(setAiStatus)
     return unsub
-  }, [])
-
-  useEffect(() => {
-    document.body.classList.toggle('pulse-presenting', presenting)
-    window.localStorage.setItem('pulse:presenting', presenting ? '1' : '0')
-  }, [presenting])
-
-  // Cmd+Shift+P toggles presentation mode globally. Use Shift+P to keep
-  // the gesture distinct from Chromium's default Cmd+P (print).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault()
-        setPresenting((p) => !p)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   const click = async (): Promise<void> => {
@@ -874,10 +846,11 @@ function TitleBar({
     <div className="drag h-11 flex items-center justify-between px-4 border-b border-edge bg-surface-1/80 backdrop-blur">
       <div className="w-16" />
       <div className="flex items-center gap-2">
-        <span className="relative flex w-2 h-2">
-          <span className="absolute inset-0 rounded-full bg-accent/50 animate-ping" />
-          <span className="relative w-2 h-2 rounded-full bg-accent" />
-        </span>
+        {/* Static accent dot — no animate-ping. The previous pulsing
+            indicator was a screen-capture jitter source on macOS, and
+            losing it doesn't change anything informational about the
+            app being active. */}
+        <span className="w-2 h-2 rounded-full bg-accent" />
         <span className="text-[11px] tracking-[0.28em] uppercase text-zinc-200 font-semibold">
           Pulse
         </span>
@@ -900,23 +873,6 @@ function TitleBar({
           />
           AI
         </span>
-        <button
-          onClick={() => setPresenting((p) => !p)}
-          className={`no-drag w-6 h-6 flex items-center justify-center rounded hover:bg-surface-2 ${
-            presenting
-              ? 'text-sky-300 bg-sky-500/10 ring-1 ring-inset ring-sky-500/40'
-              : 'text-zinc-400 hover:text-zinc-100'
-          }`}
-          title={
-            presenting
-              ? 'Presentation mode ON — marquee paused for screen-share. Cmd+Shift+P'
-              : 'Pause marquee for screen-share (Cmd+Shift+P)'
-          }
-          aria-label="Toggle presentation mode"
-          aria-pressed={presenting}
-        >
-          {presenting ? '⏸' : '⏵'}
-        </button>
         <button
           onClick={click}
           disabled={busy}
@@ -986,10 +942,10 @@ function TickerStrip({
         title="Click to cycle: Markets → Top Stories → Sports"
         className={`no-drag shrink-0 flex items-center gap-2 px-4 h-full border-r border-edge transition-colors ${style.bgTint}`}
       >
-        <span className="relative flex w-2 h-2">
-          <span className={`absolute inset-0 rounded-full opacity-50 animate-ping ${style.dot}`} />
-          <span className={`relative w-2 h-2 rounded-full ${style.dot}`} />
-        </span>
+        {/* Static dot — see TitleBar comment about the animate-ping
+            removal. Mode color (markets/stories/sports) still
+            distinguishes the three reels. */}
+        <span className={`w-2 h-2 rounded-full ${style.dot}`} />
         <span className={`text-[10px] font-bold uppercase tracking-[0.24em] ${style.text}`}>
           {style.label}
         </span>
@@ -1005,6 +961,65 @@ function TickerStrip({
       </div>
     </div>
   )
+}
+
+// rAF-driven horizontal auto-scroll for the ticker reels. Replaces the
+// previous CSS keyframe `transform: translate3d(0)→(-50%, 0, 0)` marquee.
+// Why: GPU-composited transform animations don't sync with macOS screen-
+// capture sampling, so screen-sharing Pulse showed visible jitter. Native
+// scrollLeft updates ride through the regular paint pipeline and capture
+// cleanly. The track is rendered with its content doubled so wrapping
+// reset (when scrollLeft >= halfWidth) is invisible.
+//
+// Pauses while the pointer is over the viewport (so manual scrubbing
+// works) and while the window is occluded (the existing pulse-hidden
+// CSS pause-everything was the prior mechanism; we mirror it here).
+function useTickerAutoScroll(
+  viewportRef: React.RefObject<HTMLDivElement | null>,
+  trackRef: React.RefObject<HTMLDivElement | null>,
+  pixelsPerSecond = 28
+): void {
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+
+    let rafId = 0
+    let last = performance.now()
+    let pointerOver = false
+    const onEnter = (): void => {
+      pointerOver = true
+    }
+    const onLeave = (): void => {
+      pointerOver = false
+    }
+    viewport.addEventListener('pointerenter', onEnter)
+    viewport.addEventListener('pointerleave', onLeave)
+
+    const tick = (now: number): void => {
+      // Clamp dt so a tab-resume after long inactivity doesn't cause a
+      // huge jump on the next frame.
+      const dt = Math.min(now - last, 100)
+      last = now
+      const v = viewportRef.current
+      const t = trackRef.current
+      const occluded = document.body.classList.contains('pulse-hidden')
+      if (v && t && !pointerOver && !occluded) {
+        const halfWidth = t.scrollWidth / 2
+        if (halfWidth > 0) {
+          let next = v.scrollLeft + (pixelsPerSecond * dt) / 1000
+          if (next >= halfWidth) next -= halfWidth
+          v.scrollLeft = next
+        }
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => {
+      cancelAnimationFrame(rafId)
+      viewport.removeEventListener('pointerenter', onEnter)
+      viewport.removeEventListener('pointerleave', onLeave)
+    }
+  }, [viewportRef, trackRef, pixelsPerSecond])
 }
 
 function MarketsReel({ onOpenStock }: { onOpenStock: (symbol: string) => void }): JSX.Element {
@@ -1057,25 +1072,37 @@ function MarketsReel({ onOpenStock }: { onOpenStock: (symbol: string) => void })
     return [...cells, ...cells.map((c) => ({ ...c, key: `${c.key}-x` }))]
   }, [sectorGroups])
 
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  useTickerAutoScroll(viewportRef, trackRef)
+
   if (sectorGroups.length === 0) return <ReelPlaceholder text="Awaiting quotes\u2026" />
 
   return (
-    <div className="flex items-center gap-4 whitespace-nowrap animate-ticker pl-8">
-      {doubled.map((cell) => {
-        if (cell.kind === 'header') {
-          return <SectorHeaderChip key={cell.key} sector={cell.sector} />
-        }
-        if (cell.kind === 'sep') {
-          return <TickerDivider key={cell.key} />
-        }
-        return (
-          <StockTickerItem
-            key={cell.key}
-            quote={cell.quote}
-            onOpen={() => onOpenStock(cell.quote.symbol)}
-          />
-        )
-      })}
+    <div
+      ref={viewportRef}
+      className="h-full overflow-x-auto overflow-y-hidden scrollbar-none"
+    >
+      <div
+        ref={trackRef}
+        className="flex items-center gap-4 whitespace-nowrap pl-8"
+      >
+        {doubled.map((cell) => {
+          if (cell.kind === 'header') {
+            return <SectorHeaderChip key={cell.key} sector={cell.sector} />
+          }
+          if (cell.kind === 'sep') {
+            return <TickerDivider key={cell.key} />
+          }
+          return (
+            <StockTickerItem
+              key={cell.key}
+              quote={cell.quote}
+              onOpen={() => onOpenStock(cell.quote.symbol)}
+            />
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1138,17 +1165,29 @@ function StoriesReel({
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [])
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  useTickerAutoScroll(viewportRef, trackRef)
+
   if (articles.length === 0) return <ReelPlaceholder text="Fetching headlines…" />
   const items = [...articles, ...articles]
   return (
-    <div className="flex items-center gap-4 whitespace-nowrap animate-ticker pl-8">
-      {items.flatMap((a, i) => {
-        const key = `s-${a.id}-${i}`
-        return [
-          <StoryTickerItem key={key} article={a} onOpen={() => onOpenArticle(a.id)} />,
-          <TickerDivider key={`${key}-d`} />
-        ]
-      })}
+    <div
+      ref={viewportRef}
+      className="h-full overflow-x-auto overflow-y-hidden scrollbar-none"
+    >
+      <div
+        ref={trackRef}
+        className="flex items-center gap-4 whitespace-nowrap pl-8"
+      >
+        {items.flatMap((a, i) => {
+          const key = `s-${a.id}-${i}`
+          return [
+            <StoryTickerItem key={key} article={a} onOpen={() => onOpenArticle(a.id)} />,
+            <TickerDivider key={`${key}-d`} />
+          ]
+        })}
+      </div>
     </div>
   )
 }
@@ -1233,23 +1272,52 @@ function SportsReel({ onOpenGame }: { onOpenGame: (g: Game) => void }): JSX.Elem
   }
   const doubled = [...cells, ...cells.map((c) => ({ ...c, key: `${c.key}-x` }))]
   return (
-    <div className="flex items-center gap-5 whitespace-nowrap animate-ticker pl-8">
-      {doubled.map((cell) => {
-        if (cell.kind === 'header') {
-          return <LeagueHeaderChip key={cell.key} league={cell.league} />
-        }
-        if (cell.kind === 'sep') {
-          return <TickerDivider key={cell.key} />
-        }
-        return (
-          <GameTickerItem
-            key={cell.key}
-            game={cell.game}
-            sport={sportById[cell.game.id] ?? ''}
-            onOpen={() => onOpenGame(cell.game)}
-          />
-        )
-      })}
+    <SportsReelView
+      doubled={doubled}
+      sportById={sportById}
+      onOpenGame={onOpenGame}
+    />
+  )
+}
+
+function SportsReelView({
+  doubled,
+  sportById,
+  onOpenGame
+}: {
+  doubled: Array<{ key: string } & ({ kind: 'header'; league: SportsLeague } | { kind: 'sep' } | { kind: 'game'; game: Game })>
+  sportById: Record<string, string>
+  onOpenGame: (g: Game) => void
+}): JSX.Element {
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  useTickerAutoScroll(viewportRef, trackRef)
+  return (
+    <div
+      ref={viewportRef}
+      className="h-full overflow-x-auto overflow-y-hidden scrollbar-none"
+    >
+      <div
+        ref={trackRef}
+        className="flex items-center gap-5 whitespace-nowrap pl-8"
+      >
+        {doubled.map((cell) => {
+          if (cell.kind === 'header') {
+            return <LeagueHeaderChip key={cell.key} league={cell.league} />
+          }
+          if (cell.kind === 'sep') {
+            return <TickerDivider key={cell.key} />
+          }
+          return (
+            <GameTickerItem
+              key={cell.key}
+              game={cell.game}
+              sport={sportById[cell.game.id] ?? ''}
+              onOpen={() => onOpenGame(cell.game)}
+            />
+          )
+        })}
+      </div>
     </div>
   )
 }

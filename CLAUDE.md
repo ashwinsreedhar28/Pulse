@@ -68,6 +68,7 @@ Ollama reachable? `curl -s http://localhost:11434/api/tags` — the app works wi
 - **External links** are routed through `shell.openExternal` via `setWindowOpenHandler`. Webview has `allowpopups` disabled. Both are load-bearing for the no-tracker-noise guarantee.
 - **Reel protocol.** Reel audio/video is served over a custom `reel://` scheme (registered as privileged). Paths are validated against `..` and `/` before joining with the reels dir.
 - **No `backdrop-blur` on viewport-filling overlays.** Chromium re-composes the entire underlying frame through the blur filter on every paint; in packaged builds running full-window this surfaces as visible jitter. Both Settings and PeerCompareModal use `bg-black/[0.88]` instead. Small surfaces (header bars, tooltips, popover) are fine.
+- **No perpetual CSS keyframe animations.** The marquee + earnings-pulse halos used to be CSS keyframe animations and showed visible jitter when Pulse was screen-shared on macOS — capture sampling didn't sync with the GPU compositor's refresh. Replaced with rAF-driven `scrollLeft` updates (`useTickerAutoScroll` in App.tsx) for the marquee, and static halos for earnings state. Don't add new perpetual `animation: ... infinite` rules without the same screen-share check.
 
 ## Conventions worth preserving
 
