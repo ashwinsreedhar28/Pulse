@@ -13,6 +13,8 @@
 // has a separate budget so a malformed PDF can't hang the chain
 // generation forever.
 
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
 import {
   getPaperPdfExtract,
   upsertPaperPdfExtract,
@@ -148,6 +150,50 @@ async function fetchPdfBuffer(url: string): Promise<ArrayBuffer | null> {
   }
 }
 
+// pdfjs-dist 4.x: even the "legacy" build (intended for Node) requires
+// GlobalWorkerOptions.workerSrc to point at a real worker module URL.
+// In Node there's no Web Worker API, so the legacy build's fake-worker
+// fallback runs the worker code synchronously on the main thread —
+// but it still needs workerSrc set so it knows WHERE to import the
+// worker module FROM. Empty string fails with "Setting up fake worker
+// failed: No GlobalWorkerOptions.workerSrc specified."
+//
+// We resolve the worker path against pdfjs-dist's node_modules entry
+// (kept external by electron-vite's externalizeDepsPlugin in main),
+// then convert to a file:// URL so Node's dynamic import can load it
+// in both dev and packaged builds.
+//
+// Idempotent — short-circuits after first successful configuration so
+// repeated extractions don't re-resolve.
+let pdfjsWorkerConfigured = false
+
+async function ensurePdfjsWorkerConfigured(
+  pdfjs: typeof import('pdfjs-dist/legacy/build/pdf.mjs')
+): Promise<void> {
+  if (pdfjsWorkerConfigured) return
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const opts = (pdfjs as any).GlobalWorkerOptions as { workerSrc: string }
+  if (opts.workerSrc && opts.workerSrc.length > 0) {
+    pdfjsWorkerConfigured = true
+    return
+  }
+  try {
+    // import.meta.url resolves to the bundled main file's URL at
+    // runtime; createRequire from there walks node_modules normally.
+    const requireFn = createRequire(import.meta.url)
+    const workerPath = requireFn.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
+    opts.workerSrc = pathToFileURL(workerPath).href
+    pdfjsWorkerConfigured = true
+  } catch (err) {
+    // Don't throw — let the parse attempt fail with pdfjs's own error
+    // so the existing parse-failed handling kicks in.
+    console.warn(
+      '[paper-pdf] failed to resolve pdfjs worker path:',
+      err instanceof Error ? err.message : err
+    )
+  }
+}
+
 async function runWithTimeout<T>(fn: () => Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`timeout ${ms}ms`)), ms)
@@ -174,13 +220,7 @@ async function extractIntroSections(buf: ArrayBuffer): Promise<PaperPdfSection[]
   // graph until something actually needs it. The first paper-chain
   // enrichment after boot pays the import cost (~50ms).
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
-  // pdfjs-dist 4.x ships a worker that the legacy entry can run inline.
-  // Setting workerSrc to an empty string forces inline execution — fine
-  // for our single-PDF-at-a-time workflow; not optimal for parallel
-  // extraction but we don't do that here.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } })
-    .GlobalWorkerOptions.workerSrc = ''
+  await ensurePdfjsWorkerConfigured(pdfjs)
 
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(buf),
