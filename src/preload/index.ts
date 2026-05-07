@@ -1347,7 +1347,37 @@ export type PaperValueChainEdgeCitation =
       intent: 'background' | 'methodology' | 'extension' | 'result' | 'comparison'
       otherPaperId: string
     }
-  | { kind: 'bilateral'; otherPaperId: string }
+  | {
+      // Phase 3C — bilateral reinforcement. See main-process type for
+      // the full match-rule taxonomy. Carries two leaf citations so the
+      // renderer can show a doubled pill. counterpartCitation is null
+      // for mutual-cite (S2-only) matches.
+      kind: 'bilateral'
+      matchReason: 'mutual-cite' | 'forward-reference' | 'framing-alignment'
+      focalCitation:
+        | {
+            kind: 'paper-pdf'
+            paperId: string
+            otherPaperId: string
+            quotedSentence: string
+            pageOffset: number
+            charOffset: number
+          }
+        | {
+            kind: 's2-influential'
+            intent: 'background' | 'methodology' | 'extension' | 'result' | 'comparison'
+            otherPaperId: string
+          }
+      counterpartCitation: {
+        kind: 'paper-pdf'
+        paperId: string
+        otherPaperId: string
+        quotedSentence: string
+        pageOffset: number
+        charOffset: number
+      } | null
+      trigger: string | null
+    }
   | { kind: 'haiku-pdf'; excerpt: string; otherPaperId: string }
   | {
       // Phase 3B — Haiku-grounded citation pointing at a specific

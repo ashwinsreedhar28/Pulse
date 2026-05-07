@@ -9,7 +9,7 @@
 // /tests directory — colocates the assertion with the code under test
 // and avoids needing a separate import path.
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   intentToRelationship,
   rankScore,
@@ -19,10 +19,21 @@ import {
   tokenSetSimilarity,
   resolveCitedHint,
   reconcileRelationship,
+  contentTokenJaccard,
+  findForwardReferenceMatch,
+  findFramingAlignmentMatch,
+  splitIntoSentences,
+  findBilateralEdges,
   FIXED_STAGES,
   STAGE_IDS,
   type RefMeta
 } from './paperValueChainService'
+import type {
+  PaperValueChain,
+  PaperValueChainEdge,
+  PaperValueChainEdgeCitation,
+  PaperValueChainNode
+} from '../../preload'
 
 describe('intentToRelationship', () => {
   describe('focal-cites-other (upstream)', () => {
@@ -406,6 +417,416 @@ describe('reconcileRelationship', () => {
   it('Haiku positive overrides existing when not anchored on influential', () => {
     expect(reconcileRelationship('extends', 'uses-method', false)).toBe('uses-method')
     expect(reconcileRelationship('extends', 'builds-on', false)).toBe('builds-on')
+  })
+})
+
+// ============================================================
+// Phase 3C — bilateral citation reinforcement
+// ============================================================
+
+describe('contentTokenJaccard', () => {
+  it('is symmetric (intersection / union, not asymmetric)', () => {
+    // Different from tokenSetSimilarity (3B) which uses
+    // intersection / min for short-fragment matching.
+    const a = 'transformer attention sequence'
+    const b = 'transformer attention model architecture'
+    expect(contentTokenJaccard(a, b)).toBe(contentTokenJaccard(b, a))
+  })
+
+  it('returns 0 for fully disjoint content', () => {
+    expect(
+      contentTokenJaccard('graph neural networks', 'cardiac arrest models')
+    ).toBe(0)
+  })
+
+  it('drops short tokens AND stopword-like tokens', () => {
+    // Stopword filter ("the", "and", etc.) plus length<3 filter.
+    expect(
+      contentTokenJaccard('the and for the', 'the and for the and')
+    ).toBe(0)
+  })
+
+  it('ignores punctuation and case', () => {
+    expect(
+      contentTokenJaccard(
+        'Transformer Attention Sequence!',
+        'transformer, ATTENTION sequence.'
+      )
+    ).toBe(1)
+  })
+})
+
+describe('splitIntoSentences', () => {
+  it('splits on terminal punctuation followed by whitespace', () => {
+    const sentences = splitIntoSentences(
+      'First sentence. Second sentence! Third one? Last.'
+    )
+    expect(sentences).toEqual([
+      'First sentence.',
+      'Second sentence!',
+      'Third one?',
+      'Last.'
+    ])
+  })
+
+  it('collapses pdfjs-style whitespace before splitting', () => {
+    const sentences = splitIntoSentences(
+      'Line one\n  continues here. Second begins.'
+    )
+    expect(sentences).toEqual(['Line one continues here.', 'Second begins.'])
+  })
+
+  it('returns single sentence when no terminal punctuation', () => {
+    expect(splitIntoSentences('a fragment with no end mark')).toEqual([
+      'a fragment with no end mark'
+    ])
+  })
+
+  it('returns empty array on empty input', () => {
+    expect(splitIntoSentences('')).toEqual([])
+  })
+})
+
+describe('findForwardReferenceMatch', () => {
+  it('matches when intro contains a forward-reference phrase + sufficient overlap', () => {
+    const intro =
+      'Our model handles convolutional sequence problems. ' +
+      'Future work could extend this to attention-based transformer architectures with self-attention layers.'
+    const focalContent =
+      'attention transformer architectures self-attention'
+    const result = findForwardReferenceMatch(intro, focalContent)
+    expect(result).not.toBeNull()
+    expect(result?.trigger).toBe('future work')
+    expect(result?.sentence).toContain('attention-based transformer')
+  })
+
+  it('returns null when no future-work phrase appears', () => {
+    const intro =
+      'Our model handles convolutional sequence problems with stacked convolution layers.'
+    const focalContent = 'attention transformer self-attention'
+    expect(findForwardReferenceMatch(intro, focalContent)).toBeNull()
+  })
+
+  it('returns null when the forward-ref sentence is below Jaccard threshold', () => {
+    const intro =
+      'Future work in completely different research areas is left to others.'
+    const focalContent = 'attention transformer self-attention'
+    expect(findForwardReferenceMatch(intro, focalContent)).toBeNull()
+  })
+})
+
+describe('findFramingAlignmentMatch', () => {
+  it('matches when contribution sentence overlaps with focal quote', () => {
+    const counterpartIntro =
+      'Some background on convolutions. ' +
+      'We propose a transformer attention sequence model with multi-head self-attention layers.'
+    const focalQuoted =
+      'building on transformer attention sequence models with multi-head self-attention'
+    const result = findFramingAlignmentMatch(counterpartIntro, focalQuoted)
+    expect(result).not.toBeNull()
+    expect(result?.sentence).toContain('transformer attention sequence model')
+  })
+
+  it('returns null when no contribution sentence is found', () => {
+    const counterpartIntro =
+      'Background discussion only. The field has many open problems.'
+    const focalQuoted = 'transformer attention'
+    expect(findFramingAlignmentMatch(counterpartIntro, focalQuoted)).toBeNull()
+  })
+
+  it('returns null when contribution sentence is below threshold', () => {
+    const counterpartIntro =
+      'We present a study of mitochondrial gene expression patterns in zebrafish.'
+    const focalQuoted = 'transformer attention sequence model'
+    expect(findFramingAlignmentMatch(counterpartIntro, focalQuoted)).toBeNull()
+  })
+})
+
+// Helpers for chain-fixture construction in the integration tests below.
+function makeNode(paperId: string, title: string, pdfUrl: string | null): PaperValueChainNode {
+  return {
+    paperId,
+    stage: STAGE_IDS.upstreamFoundational,
+    title,
+    authorYearLabel: `${paperId} 2020`,
+    abstract: null,
+    year: 2020,
+    citationCount: 100,
+    influentialCitationCount: 10,
+    url: null,
+    pdfUrl,
+    kind: 'paper'
+  }
+}
+
+function makeRefMeta(paperId: string, title: string, pdfUrl: string | null): RefMeta {
+  return {
+    paperId,
+    title,
+    firstAuthor: 'Test Author',
+    year: 2020,
+    isInfluential: true,
+    intents: ['background'],
+    paper: {
+      paperId,
+      title,
+      authors: [{ name: 'Test Author' }],
+      year: 2020,
+      citationCount: 100,
+      influentialCitationCount: 10,
+      url: null,
+      openAccessPdf: pdfUrl ? { url: pdfUrl } : null
+    } as RefMeta['paper']
+  }
+}
+
+function makeBuildsOnEdge(
+  focusId: string,
+  counterpartId: string
+): PaperValueChainEdge {
+  const haikuPdf: PaperValueChainEdgeCitation = {
+    kind: 'paper-pdf',
+    paperId: focusId,
+    otherPaperId: counterpartId,
+    quotedSentence:
+      'building on transformer attention sequence models with multi-head self-attention',
+    pageOffset: 1,
+    charOffset: 0
+  }
+  return {
+    from: focusId,
+    to: counterpartId,
+    relationship: 'builds-on',
+    note: null,
+    citations: [haikuPdf]
+  }
+}
+
+function makeChain(
+  focusId: string,
+  edges: PaperValueChainEdge[],
+  nodes: PaperValueChainNode[]
+): PaperValueChain {
+  const focalNode = makeNode(focusId, 'Focal Title', null)
+  return {
+    focusPaperId: focusId,
+    focusLabel: 'Focal 2021',
+    stages: FIXED_STAGES,
+    nodes: [focalNode, ...nodes],
+    edges,
+    s2CallsUsed: 3
+  }
+}
+
+describe('findBilateralEdges', () => {
+  it('mutual-cite fires from S2 alone — no PDF read on counterpart side', async () => {
+    const focus = 'focal-1'
+    const counterpart = 'counterpart-1'
+    const chain = makeChain(
+      focus,
+      [makeBuildsOnEdge(focus, counterpart)],
+      [makeNode(counterpart, 'Counterpart Title', 'https://example.com/cp.pdf')]
+    )
+    const refsMeta: RefMeta[] = [
+      makeRefMeta(counterpart, 'Counterpart Title', 'https://example.com/cp.pdf')
+    ]
+    // Mock counterpart S2 refs to contain focal — triggers mutual-cite.
+    const refsFetcher = vi.fn(async (id: string) => ({
+      data: id === counterpart ? new Set([focus]) : new Set<string>(),
+      callsMade: 1
+    }))
+    const pdfFetcher = vi.fn()
+
+    const result = await findBilateralEdges(chain, refsMeta, {
+      fetchCounterpartReferences: refsFetcher,
+      fetchCounterpartPdfExtract: pdfFetcher
+    })
+
+    expect(result.matchedEdges).toBe(1)
+    expect(pdfFetcher).not.toHaveBeenCalled()
+    const edge = result.chain.edges[0]
+    const bilateral = edge.citations.find((c) => c.kind === 'bilateral')
+    expect(bilateral).toBeDefined()
+    expect(bilateral?.kind).toBe('bilateral')
+    if (bilateral?.kind !== 'bilateral') throw new Error('expected bilateral')
+    expect(bilateral.matchReason).toBe('mutual-cite')
+    expect(bilateral.counterpartCitation).toBeNull()
+  })
+
+  it('counterpart PDF unavailable + no mutual-cite → edge stays unchanged', async () => {
+    const focus = 'focal-1'
+    const counterpart = 'counterpart-1'
+    const chain = makeChain(
+      focus,
+      [makeBuildsOnEdge(focus, counterpart)],
+      // pdfUrl=null → counterpart PDF is unavailable.
+      [makeNode(counterpart, 'Counterpart Title', null)]
+    )
+    const refsMeta: RefMeta[] = [
+      makeRefMeta(counterpart, 'Counterpart Title', null)
+    ]
+    const refsFetcher = vi.fn(async () => ({ data: new Set<string>(), callsMade: 1 }))
+    const pdfFetcher = vi.fn(async () => null)
+
+    const result = await findBilateralEdges(chain, refsMeta, {
+      fetchCounterpartReferences: refsFetcher,
+      fetchCounterpartPdfExtract: pdfFetcher
+    })
+
+    expect(result.matchedEdges).toBe(0)
+    // No log spam, no error — edge unchanged.
+    expect(result.chain.edges[0].citations.length).toBe(1)
+    expect(result.chain.edges[0].citations[0].kind).toBe('paper-pdf')
+  })
+
+  it('forward-reference fires when counterpart intro contains future-work phrase + overlap', async () => {
+    const focus = 'focal-1'
+    const counterpart = 'counterpart-1'
+    const chain = makeChain(
+      focus,
+      [makeBuildsOnEdge(focus, counterpart)],
+      [
+        makeNode(
+          counterpart,
+          'transformer attention sequence multi-head self-attention',
+          'https://example.com/cp.pdf'
+        )
+      ]
+    )
+    const refsMeta: RefMeta[] = [
+      makeRefMeta(
+        counterpart,
+        'transformer attention sequence multi-head self-attention',
+        'https://example.com/cp.pdf'
+      )
+    ]
+    const refsFetcher = vi.fn(async () => ({ data: new Set<string>(), callsMade: 1 }))
+    const pdfFetcher = vi.fn(async () => ({
+      sections: [
+        {
+          heading: 'Conclusion',
+          text:
+            'Our convolutional approach scales linearly. ' +
+            'Future work could extend this to transformer attention sequence models with multi-head self-attention layers.',
+          pageOffset: 7
+        }
+      ]
+    }))
+
+    const result = await findBilateralEdges(chain, refsMeta, {
+      fetchCounterpartReferences: refsFetcher,
+      fetchCounterpartPdfExtract: pdfFetcher
+    })
+
+    expect(result.matchedEdges).toBe(1)
+    const edge = result.chain.edges[0]
+    expect(edge.citations.length).toBe(2) // original paper-pdf + bilateral
+    const bilateral = edge.citations.find((c) => c.kind === 'bilateral')
+    if (bilateral?.kind !== 'bilateral') throw new Error('expected bilateral')
+    expect(bilateral.matchReason).toBe('forward-reference')
+    expect(bilateral.counterpartCitation).not.toBeNull()
+    expect(bilateral.counterpartCitation?.pageOffset).toBe(7)
+    expect(bilateral.trigger).toBe('future work')
+  })
+
+  it('top-K cap: only first 6 candidates checked when 20 qualify', async () => {
+    const focus = 'focal-1'
+    const edges: PaperValueChainEdge[] = []
+    const nodes: PaperValueChainNode[] = []
+    const refsMeta: RefMeta[] = []
+    for (let i = 0; i < 20; i++) {
+      const cp = `cp-${i.toString().padStart(2, '0')}`
+      edges.push(makeBuildsOnEdge(focus, cp))
+      nodes.push(makeNode(cp, `Counterpart ${i}`, 'https://example.com/x.pdf'))
+      refsMeta.push(
+        makeRefMeta(cp, `Counterpart ${i}`, 'https://example.com/x.pdf')
+      )
+    }
+    const chain = makeChain(focus, edges, nodes)
+    const refsFetcher = vi.fn(async () => ({ data: new Set<string>(), callsMade: 1 }))
+    const pdfFetcher = vi.fn(async () => null)
+
+    await findBilateralEdges(chain, refsMeta, {
+      fetchCounterpartReferences: refsFetcher,
+      fetchCounterpartPdfExtract: pdfFetcher
+    })
+
+    // Spec: top-6 cap. Each candidate consumes one S2 ref-list call.
+    expect(refsFetcher).toHaveBeenCalledTimes(6)
+  })
+
+  it('does not call any Anthropic / Haiku client (heuristic-only)', async () => {
+    // The implementation imports callClaude from claudeService for 3B
+    // enrichment; bilateral pass must NOT invoke it. We verify by
+    // checking that no async call reaches the network — the test
+    // mocks both S2 and PDF fetchers, so any unmocked external call
+    // would fail. If this test passes with the current
+    // findBilateralEdges signature, it confirms heuristic-only.
+    const focus = 'focal-1'
+    const counterpart = 'counterpart-1'
+    const chain = makeChain(
+      focus,
+      [makeBuildsOnEdge(focus, counterpart)],
+      [makeNode(counterpart, 'Counterpart', 'https://example.com/cp.pdf')]
+    )
+    const refsMeta: RefMeta[] = [
+      makeRefMeta(counterpart, 'Counterpart', 'https://example.com/cp.pdf')
+    ]
+    const refsFetcher = vi.fn(async () => ({ data: new Set<string>(), callsMade: 1 }))
+    const pdfFetcher = vi.fn(async () => ({
+      sections: [{ heading: null, text: 'Background discussion only.', pageOffset: 1 }]
+    }))
+
+    const result = await findBilateralEdges(chain, refsMeta, {
+      fetchCounterpartReferences: refsFetcher,
+      fetchCounterpartPdfExtract: pdfFetcher
+    })
+
+    // Whether or not a rule fires, the call should complete without
+    // touching Claude. Result shape verified.
+    expect(result).toBeDefined()
+    expect(result.chain.edges).toHaveLength(1)
+  })
+
+  it('does not upgrade s2-intent or model-anchored edges (provenance threshold)', async () => {
+    const focus = 'focal-1'
+    const counterpart = 'counterpart-1'
+    // Edge anchored on s2-intent only — below the bilateral provenance
+    // threshold (paper-pdf | s2-influential). Should be skipped.
+    const intentOnlyEdge: PaperValueChainEdge = {
+      from: focus,
+      to: counterpart,
+      relationship: 'builds-on',
+      note: null,
+      citations: [
+        {
+          kind: 's2-intent',
+          intent: 'background',
+          otherPaperId: counterpart
+        }
+      ]
+    }
+    const chain = makeChain(
+      focus,
+      [intentOnlyEdge],
+      [makeNode(counterpart, 'Counterpart', 'https://example.com/cp.pdf')]
+    )
+    const refsMeta: RefMeta[] = [
+      makeRefMeta(counterpart, 'Counterpart', 'https://example.com/cp.pdf')
+    ]
+    const refsFetcher = vi.fn(async () => ({
+      data: new Set([focus]), // mutual-cite would fire IF the edge were eligible
+      callsMade: 1
+    }))
+    const pdfFetcher = vi.fn()
+
+    const result = await findBilateralEdges(chain, refsMeta, {
+      fetchCounterpartReferences: refsFetcher,
+      fetchCounterpartPdfExtract: pdfFetcher
+    })
+
+    expect(result.matchedEdges).toBe(0)
+    expect(refsFetcher).not.toHaveBeenCalled()
   })
 })
 

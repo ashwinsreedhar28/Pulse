@@ -28,6 +28,16 @@ interface Props {
   // Phase 3B — open the focal paper's PDF at a specific page in the
   // in-window reader. Triggered by clicking a paper-pdf citation pill.
   onOpenFocalPdfAtPage?: (pageOffset: number) => void
+  // Phase 3C — open an arbitrary counterpart paper's PDF at a specific
+  // page. Used by the bilateral doubled-pill: clicking the
+  // counterpart-side pill opens THAT paper, not the focal. Caller
+  // composes from the {url, title, subtitle, pageOffset} payload.
+  onOpenCounterpartPdf?: (input: {
+    url: string
+    title: string
+    subtitle: string | null
+    pageOffset: number
+  }) => void
 }
 
 // `lastResult` carries the most recent regenerate outcome (badge,
@@ -45,7 +55,8 @@ type ViewState =
 export function PaperValueChainCard({
   paper,
   onOpenPaperById,
-  onOpenFocalPdfAtPage
+  onOpenFocalPdfAtPage,
+  onOpenCounterpartPdf
 }: Props): JSX.Element {
   const [view, setView] = useState<ViewState>({ kind: 'idle' })
 
@@ -105,6 +116,10 @@ export function PaperValueChainCard({
   const paperPdfRows = useMemo(() => {
     if (!chain) return []
     return collectPaperPdfRows(chain)
+  }, [chain])
+  const bilateralRows = useMemo(() => {
+    if (!chain) return []
+    return collectBilateralRows(chain)
   }, [chain])
 
   return (
@@ -179,6 +194,14 @@ export function PaperValueChainCard({
         <PaperPdfQuotesPanel
           rows={paperPdfRows}
           onOpenFocalPdfAtPage={onOpenFocalPdfAtPage}
+        />
+      )}
+
+      {bilateralRows.length > 0 && (
+        <BilateralPanel
+          rows={bilateralRows}
+          onOpenFocalPdfAtPage={onOpenFocalPdfAtPage}
+          onOpenCounterpartPdf={onOpenCounterpartPdf}
         />
       )}
     </section>
@@ -329,4 +352,189 @@ function relationshipLabel(rel: PaperValueChainEdge['relationship']): string {
     case 'refutes':
       return 'refutes'
   }
+}
+
+// ---- Phase 3C: bilateral citation rendering -----------------------------
+
+interface BilateralRow {
+  edge: PaperValueChainEdge
+  citation: Extract<PaperValueChainEdgeCitation, { kind: 'bilateral' }>
+  counterpartNode: PaperValueChainNode | null
+}
+
+function collectBilateralRows(chain: PaperValueChain): BilateralRow[] {
+  const focusId = chain.focusPaperId
+  const nodesById = new Map(chain.nodes.map((n) => [n.paperId, n]))
+  const out: BilateralRow[] = []
+  for (const edge of chain.edges) {
+    for (const citation of edge.citations) {
+      if (citation.kind !== 'bilateral') continue
+      // The "other" side of the edge — counterpart paperId.
+      const counterpartId = edge.from === focusId ? edge.to : edge.from
+      const counterpartNode = nodesById.get(counterpartId) ?? null
+      out.push({ edge, citation, counterpartNode })
+    }
+  }
+  // Order: mutual-cite first (highest confidence), then framing-alignment,
+  // then forward-reference. Matches the spec's confidence hierarchy so
+  // strongest signals are visually surfaced first.
+  const reasonOrder: Record<typeof out[number]['citation']['matchReason'], number> = {
+    'mutual-cite': 0,
+    'framing-alignment': 1,
+    'forward-reference': 2
+  }
+  out.sort(
+    (a, b) =>
+      reasonOrder[a.citation.matchReason] -
+      reasonOrder[b.citation.matchReason]
+  )
+  return out
+}
+
+function bilateralReasonLabel(
+  reason: BilateralRow['citation']['matchReason']
+): string {
+  switch (reason) {
+    case 'mutual-cite':
+      return 'Mutual cite'
+    case 'forward-reference':
+      return 'Forward reference'
+    case 'framing-alignment':
+      return 'Framing alignment'
+  }
+}
+
+function BilateralPanel({
+  rows,
+  onOpenFocalPdfAtPage,
+  onOpenCounterpartPdf
+}: {
+  rows: BilateralRow[]
+  onOpenFocalPdfAtPage?: (pageOffset: number) => void
+  onOpenCounterpartPdf?: (input: {
+    url: string
+    title: string
+    subtitle: string | null
+    pageOffset: number
+  }) => void
+}): JSX.Element {
+  return (
+    <section className="mt-3 pt-3 border-t border-zinc-800/80">
+      <div className="text-[10px] uppercase tracking-[0.22em] text-violet-300/90 font-semibold mb-2">
+        Bilateral reinforcement · {rows.length}
+      </div>
+      <ul className="space-y-2">
+        {rows.map((row, i) => {
+          const focal = row.citation.focalCitation
+          const counterpart = row.citation.counterpartCitation
+          const focalPage = focal.kind === 'paper-pdf' ? focal.pageOffset : null
+          const counterpartPdfUrl = row.counterpartNode?.pdfUrl ?? null
+          const reason = row.citation.matchReason
+          return (
+            <li
+              key={`${row.edge.from}-${row.edge.to}-${reason}-${i}`}
+              className="rounded border border-violet-500/15 bg-violet-500/[0.03] px-3 py-2"
+            >
+              <div className="flex items-start gap-2">
+                {/* Doubled pill: focal page on top, counterpart page (or
+                    "S2" badge for mutual-cite) below. Stacked vertically
+                    so they read as a pair without horizontal crowding. */}
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button
+                    type="button"
+                    disabled={!onOpenFocalPdfAtPage || focalPage === null}
+                    onClick={() =>
+                      focalPage !== null && onOpenFocalPdfAtPage?.(focalPage)
+                    }
+                    className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed tabular-nums"
+                    title="Open focal paper PDF at this page"
+                  >
+                    {focalPage !== null ? `p.${focalPage}` : 'S2'}
+                  </button>
+                  {counterpart ? (
+                    <button
+                      type="button"
+                      disabled={
+                        !onOpenCounterpartPdf || !counterpartPdfUrl
+                      }
+                      onClick={() => {
+                        if (!counterpartPdfUrl || !row.counterpartNode) return
+                        onOpenCounterpartPdf?.({
+                          url: counterpartPdfUrl,
+                          title: row.counterpartNode.title,
+                          subtitle: row.counterpartNode.authorYearLabel,
+                          pageOffset: counterpart.pageOffset
+                        })
+                      }}
+                      className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-200 ring-1 ring-inset ring-violet-500/30 hover:bg-violet-500/25 disabled:opacity-50 disabled:cursor-not-allowed tabular-nums"
+                      title="Open counterpart paper PDF at this page"
+                    >
+                      p.{counterpart.pageOffset}
+                    </button>
+                  ) : (
+                    <span
+                      className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 ring-1 ring-inset ring-zinc-700 tabular-nums"
+                      title="Mutual cite confirmed via Semantic Scholar — counterpart's reference list contains this paper. No PDF read."
+                    >
+                      S2
+                    </span>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] text-zinc-300 truncate">
+                    <span className="text-violet-300/90 uppercase tracking-[0.16em] text-[9px] font-semibold mr-1">
+                      {bilateralReasonLabel(reason)}
+                    </span>
+                    <span className="text-emerald-300/80">
+                      {relationshipLabel(row.edge.relationship)}
+                    </span>
+                    {row.counterpartNode ? (
+                      <>
+                        {' → '}
+                        <span className="text-zinc-100">
+                          {row.counterpartNode.authorYearLabel}
+                        </span>
+                        <span className="text-zinc-500">
+                          {' '}
+                          · {row.counterpartNode.title}
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
+                  {/* Two stacked quotes when both sides have text;
+                      single focal quote for mutual-cite (counterpart
+                      side has no quoted sentence). */}
+                  {focal.kind === 'paper-pdf' && (
+                    <blockquote className="mt-1 text-[11px] text-zinc-400 italic leading-snug border-l border-emerald-500/30 pl-2">
+                      <span className="not-italic text-[9px] uppercase tracking-[0.18em] text-emerald-400/70 mr-1">
+                        focal
+                      </span>
+                      "{focal.quotedSentence}"
+                    </blockquote>
+                  )}
+                  {counterpart && (
+                    <blockquote className="mt-1 text-[11px] text-zinc-400 italic leading-snug border-l border-violet-500/30 pl-2">
+                      <span className="not-italic text-[9px] uppercase tracking-[0.18em] text-violet-400/70 mr-1">
+                        counterpart
+                      </span>
+                      "{counterpart.quotedSentence}"
+                    </blockquote>
+                  )}
+                  {row.citation.trigger && reason !== 'framing-alignment' && (
+                    <div className="mt-1 text-[10px] text-zinc-500">
+                      Trigger:{' '}
+                      <span className="text-zinc-300">
+                        {row.citation.trigger}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
 }

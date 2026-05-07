@@ -507,6 +507,37 @@ async function fetchCitationsBulk(
   }
 }
 
+// Lightweight reference-list lookup — paperId-only. Used by the Phase
+// 3C bilateral check to test whether a counterpart paper's reference
+// list contains the focal (the mutual-cite rule). Cheaper than
+// fetchReferencesBulk because we don't pull intents / paper metadata
+// — just the ID set.
+async function fetchCounterpartReferenceIds(
+  paperId: string
+): Promise<FetchOutcome<Set<string>>> {
+  const url =
+    `${S2_BASE}/paper/${encodeURIComponent(paperId)}/references` +
+    `?limit=200&fields=${encodeURIComponent('citedPaper.paperId')}`
+  try {
+    const result = await fetchJson<{
+      data?: Array<{ citedPaper?: { paperId?: string } }>
+    }>(url)
+    const ids = new Set<string>()
+    for (const row of result.data?.data ?? []) {
+      const id = row.citedPaper?.paperId
+      if (id) ids.add(id)
+    }
+    return { data: ids, callsMade: result.callsMade }
+  } catch (err) {
+    if (err instanceof S2RateLimitError) throw err
+    console.warn(
+      '[paper-chain] counterpart references fetch failed:',
+      err instanceof Error ? err.message : err
+    )
+    return { data: null, callsMade: 1 }
+  }
+}
+
 // ---------- Bucketing logic ------------------------------------------------
 
 // Each bucket is keyed by stageId. Candidate lookups walk these in order
@@ -933,7 +964,44 @@ export async function generatePaperValueChain(
     focal,
     refsMeta: refsForEnrichment
   })
-  const finalChain = enriched.chain
+
+  // Phase 3C — bilateral reinforcement on the post-enrichment chain.
+  // Cache hit ('cache' badge) means we just deserialized a previous
+  // generation that already ran the bilateral pass; don't re-run.
+  // Cold paths run bilateral immediately so the persisted enrichment
+  // row carries it. Failures are silent (graceful degradation per
+  // spec) — the chain still ships, just without bilateral upgrades.
+  let postBilateralChain = enriched.chain
+  if (enriched.badge !== 'cache') {
+    try {
+      const bilateralResult = await findBilateralEdges(
+        enriched.chain,
+        refsForEnrichment
+      )
+      postBilateralChain = bilateralResult.chain
+      if (bilateralResult.matchedEdges > 0) {
+        console.log(
+          `[paper-chain] bilateral upgraded ${bilateralResult.matchedEdges} edge(s) ` +
+            `for ${id} (+${bilateralResult.s2CallsAdded} S2 calls, ` +
+            `+${bilateralResult.pdfFetchesAdded} PDF fetches)`
+        )
+        // Refresh the enrichment cache row with the bilateral-enriched
+        // chain so subsequent reads return the doubled-pill view from
+        // the persistent layer rather than re-running bilateral.
+        upsertPaperChainEnrichment({
+          focusPaperId: id,
+          enrichedGraph: postBilateralChain,
+          haikuCallsUsed: enriched.haikuCallsUsed
+        })
+      }
+    } catch (err) {
+      console.warn(
+        '[paper-chain] bilateral pass failed:',
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
+  const finalChain = postBilateralChain
   setPaperValueChain({ focusPaperId: id, status: 'ready', graph: finalChain })
 
   // Empty-chain telemetry. Spec acceptance requires "given a paper with
@@ -1516,5 +1584,540 @@ function locateSentenceInSections(
   return {
     pageOffset: sections[0]?.pageOffset ?? 1,
     charOffset: 0
+  }
+}
+
+// =====================================================================
+// Phase 3C — bilateral citation reinforcement
+// =====================================================================
+
+// Eligibility: only edges whose relationship suggests an upstream
+// dependency (focal-cites-counterpart) AND which are anchored on a
+// strong-confidence citation. s2-intent and model-only edges are
+// intentionally below the bar — bilateral upgrade is for already-
+// confident edges.
+const BILATERAL_RELATIONSHIPS = new Set<PaperValueChainRelationship>([
+  'builds-on',
+  'extends',
+  'uses-method'
+])
+const BILATERAL_PROVENANCE_KINDS = new Set<PaperValueChainEdgeCitation['kind']>([
+  'paper-pdf',
+  's2-influential'
+])
+// Cap the bilateral check at the top-K edges by isInfluential rank.
+// Keeps the per-chain cost bounded: 6 edges × (1 S2 ref-list + 1 PDF
+// fetch + 1 extract) ≈ ~6s and ≤6 added S2 calls. Picked 6 as the
+// spec value; lower is fine, higher would push past the per-chain
+// budget envelope.
+const BILATERAL_TOP_K = 6
+// Jaccard thresholds for the heuristic rules. Forward-reference is
+// looser (counterpart only needs to mention concepts overlapping with
+// focal); framing-alignment is stricter (counterpart's contribution
+// sentence should largely echo focal's quoted sentence).
+const FORWARD_REFERENCE_JACCARD = 0.3
+const FRAMING_ALIGNMENT_JACCARD = 0.4
+// Phrases that flag a sentence as forward-looking ("future work" /
+// "open question" / etc.). Lowercased, matched as substrings.
+// Conservative to avoid false positives — most papers state their
+// future work explicitly using one of these idioms.
+const FORWARD_REFERENCE_PHRASES = [
+  'future work',
+  'future research',
+  'open question',
+  'open problem',
+  'remains to be',
+  'remains an open',
+  'could be extended',
+  'would be interesting',
+  'left for future',
+  'we leave',
+  'we plan to'
+]
+// Sentence prefixes that flag a "we present / we propose / our
+// contribution" sentence. The framing-alignment rule scans the
+// counterpart's intro for one of these and compares its content to
+// the focal's quoted sentence.
+const CONTRIBUTION_SENTENCE_PHRASES = [
+  'we present',
+  'we propose',
+  'we introduce',
+  'we describe',
+  'in this paper',
+  'in this work',
+  'our contribution',
+  'our approach',
+  'our method',
+  'we show',
+  'this paper presents',
+  'this work presents'
+]
+const STOP_TOKENS = new Set([
+  'the', 'and', 'for', 'with', 'this', 'that', 'these', 'those',
+  'from', 'into', 'are', 'has', 'have', 'had', 'was', 'were',
+  'been', 'being', 'their', 'they', 'them', 'our', 'this',
+  'using', 'used', 'use', 'such', 'paper', 'work', 'show',
+  'shown', 'present', 'propose', 'introduce', 'describe', 'study',
+  'studies', 'method', 'methods', 'approach', 'approaches',
+  'result', 'results', 'find', 'found', 'shows'
+])
+
+// Symmetric Jaccard on content tokens. Lowercase, strip punctuation,
+// drop short tokens (<3 chars) and a small stopword list. Used by both
+// forward-reference and framing-alignment rules.
+//
+// Symmetric (intersection / union) — different from tokenSetSimilarity
+// in 3B which is asymmetric (intersection / min) for short-fragment
+// matching. The bilateral rules want symmetric overlap because both
+// sides are full sentences / abstracts of comparable length.
+//
+// Exported for unit tests.
+export function contentTokenJaccard(a: string, b: string): number {
+  const tokenize = (s: string): Set<string> => {
+    const tokens = s
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]/g, ' ')
+      .split(/\s+/)
+      .filter((t) => t.length >= 3 && !STOP_TOKENS.has(t))
+    return new Set(tokens)
+  }
+  const setA = tokenize(a)
+  const setB = tokenize(b)
+  if (setA.size === 0 || setB.size === 0) return 0
+  let inter = 0
+  for (const t of setA) if (setB.has(t)) inter += 1
+  const union = setA.size + setB.size - inter
+  return inter / union
+}
+
+// Walk an extracted-intro text looking for a sentence that contains
+// one of the forward-reference phrases AND has Jaccard ≥0.3 with the
+// focal paper's content tokens. Returns the matching sentence + the
+// trigger phrase that fired, or null if no sentence qualifies.
+//
+// Sentence segmentation: split on `.!?` followed by whitespace +
+// capital letter or end-of-string. Imperfect (handles e.g. but
+// breaks on "et al.") — fine for this heuristic since false-positive
+// sentences just need to ALSO match the Jaccard threshold to count.
+//
+// Exported for tests.
+export function findForwardReferenceMatch(
+  introText: string,
+  focalContentTokensSource: string,
+  threshold: number = FORWARD_REFERENCE_JACCARD
+): { sentence: string; trigger: string } | null {
+  const sentences = splitIntoSentences(introText)
+  for (const sentence of sentences) {
+    const lower = sentence.toLowerCase()
+    const trigger = FORWARD_REFERENCE_PHRASES.find((p) => lower.includes(p))
+    if (!trigger) continue
+    const overlap = contentTokenJaccard(sentence, focalContentTokensSource)
+    if (overlap >= threshold) {
+      return { sentence: sentence.trim().slice(0, 240), trigger }
+    }
+  }
+  return null
+}
+
+// Walk the counterpart's intro for a "we present / we propose / …"
+// sentence and compare its content overlap with the focal's quoted
+// sentence (from 3B's paper-pdf citation). Returns the matching
+// sentence if Jaccard ≥0.4, else null.
+//
+// Exported for tests.
+export function findFramingAlignmentMatch(
+  counterpartIntroText: string,
+  focalQuotedSentence: string,
+  threshold: number = FRAMING_ALIGNMENT_JACCARD
+): { sentence: string } | null {
+  const sentences = splitIntoSentences(counterpartIntroText)
+  let best: { sentence: string; score: number } | null = null
+  for (const sentence of sentences) {
+    const lower = sentence.toLowerCase()
+    const isContribution = CONTRIBUTION_SENTENCE_PHRASES.some((p) =>
+      lower.includes(p)
+    )
+    if (!isContribution) continue
+    const overlap = contentTokenJaccard(sentence, focalQuotedSentence)
+    if (overlap < threshold) continue
+    if (!best || overlap > best.score) {
+      best = { sentence: sentence.trim().slice(0, 240), score: overlap }
+    }
+  }
+  return best ? { sentence: best.sentence } : null
+}
+
+// Sentence splitter — naive but adequate for intro text. Splits on
+// punctuation-then-whitespace transitions; preserves trailing
+// fragments. Exported for tests so the splitter can be exercised
+// directly without going through the rule helpers.
+export function splitIntoSentences(text: string): string[] {
+  if (!text) return []
+  // Replace pdfjs-extracted line wraps with single spaces so a
+  // sentence broken across lines still compares cleanly.
+  const collapsed = text.replace(/\s+/g, ' ').trim()
+  const out: string[] = []
+  let buf = ''
+  for (let i = 0; i < collapsed.length; i++) {
+    buf += collapsed[i]
+    const ch = collapsed[i]
+    const next = collapsed[i + 1]
+    if ((ch === '.' || ch === '!' || ch === '?') && (next === ' ' || next === undefined)) {
+      const trimmed = buf.trim()
+      if (trimmed.length > 0) out.push(trimmed)
+      buf = ''
+    }
+  }
+  const tail = buf.trim()
+  if (tail.length > 0) out.push(tail)
+  return out
+}
+
+// Aggregate result returned from the bilateral pass. Caller folds
+// these into edge.citations.
+interface BilateralOutcome {
+  chain: PaperValueChain
+  s2CallsAdded: number
+  pdfFetchesAdded: number
+  matchedEdges: number
+}
+
+// Eligible edge candidate plus the pre-computed rank score (used to
+// pick the top-K within budget).
+interface BilateralCandidate {
+  edgeIndex: number
+  edge: PaperValueChainEdge
+  counterpartPaperId: string
+  // Anchor citation that triggered eligibility — passed through into
+  // the bilateral citation's focalCitation slot when a match fires.
+  anchor:
+    | Extract<PaperValueChainEdgeCitation, { kind: 'paper-pdf' }>
+    | Extract<PaperValueChainEdgeCitation, { kind: 's2-influential' }>
+  // True when the anchor was paper-pdf — preferred over s2-influential
+  // for tie-breaking and used to gate framing-alignment (which needs
+  // a quoted sentence from the focal).
+  hasHaikuAnchor: boolean
+  // Counterpart node metadata pulled from chain.nodes — needed for
+  // the PDF URL fallback (openAccessPdf || arxiv).
+  counterpartNode: PaperValueChainNode | null
+  // Rank score for top-K selection. Higher = check first.
+  rankScore: number
+}
+
+function pickBilateralCandidates(
+  chain: PaperValueChain,
+  refsMeta: RefMeta[]
+): BilateralCandidate[] {
+  const focusId = chain.focusPaperId
+  const refsByPaperId = new Map(refsMeta.map((r) => [r.paperId, r]))
+  const nodesByPaperId = new Map(chain.nodes.map((n) => [n.paperId, n]))
+  const out: BilateralCandidate[] = []
+  for (let i = 0; i < chain.edges.length; i++) {
+    const edge = chain.edges[i]
+    if (!BILATERAL_RELATIONSHIPS.has(edge.relationship)) continue
+    // Edges in 3A point focal-as-from for upstream, focal-as-to for
+    // downstream. Bilateral only operates on edges where focal cites
+    // someone — i.e. focal is on the `from` side. Downstream edges
+    // (someone cites focal) are excluded by relationship pre-filter
+    // anyway since 'extends'/'builds-on' don't normally describe
+    // citers, but double-check by direction here.
+    if (edge.from !== focusId) continue
+    const counterpartPaperId = edge.to
+    if (!counterpartPaperId || counterpartPaperId === focusId) continue
+    // Already bilateral? Skip — no double-upgrade.
+    if (edge.citations.some((c) => c.kind === 'bilateral')) continue
+    // Pick the strongest anchor citation. paper-pdf preferred over
+    // s2-influential per the provenance hierarchy.
+    const haikuAnchor = edge.citations.find(
+      (c) => c.kind === 'paper-pdf'
+    ) as Extract<PaperValueChainEdgeCitation, { kind: 'paper-pdf' }> | undefined
+    const influAnchor = edge.citations.find(
+      (c) => c.kind === 's2-influential'
+    ) as
+      | Extract<PaperValueChainEdgeCitation, { kind: 's2-influential' }>
+      | undefined
+    const anchor = haikuAnchor ?? influAnchor
+    if (!anchor) continue
+    if (!BILATERAL_PROVENANCE_KINDS.has(anchor.kind)) continue
+    const refMeta = refsByPaperId.get(counterpartPaperId)
+    out.push({
+      edgeIndex: i,
+      edge,
+      counterpartPaperId,
+      anchor,
+      hasHaikuAnchor: !!haikuAnchor,
+      counterpartNode: nodesByPaperId.get(counterpartPaperId) ?? null,
+      // Rank: isInfluential + influentialCitationCount tier from the
+      // refs metadata, with a small lift for haiku-pdf anchors so
+      // those tip the list (more interesting to verify).
+      rankScore:
+        (refMeta?.isInfluential ? 5 : 0) +
+        (refMeta?.paper.influentialCitationCount ?? 0) * 2 +
+        Math.log10(Math.max(1, refMeta?.paper.citationCount ?? 0)) +
+        (haikuAnchor ? 1 : 0)
+    })
+  }
+  out.sort((a, b) => {
+    if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore
+    return a.counterpartPaperId.localeCompare(b.counterpartPaperId)
+  })
+  return out.slice(0, BILATERAL_TOP_K)
+}
+
+// Build the PDF-fetch URL for a counterpart node. Mirrors the focal
+// fallback: openAccessPdf → arXiv direct → null. We don't have S2's
+// raw paper object on the chain node, so fall back to the existing
+// pdfUrl field that nodeFromS2 pre-populated; if that's null/empty
+// (S2 quirk: sometimes empty-string), we have nothing to fetch.
+function counterpartPdfUrl(node: PaperValueChainNode | null): string | null {
+  if (!node?.pdfUrl) return null
+  return node.pdfUrl
+}
+
+export interface FindBilateralEdgesOptions {
+  // Allow tests to mock S2 + PDF dependencies without spinning up the
+  // full network stack. Both default to the real impls in production.
+  fetchCounterpartReferences?: (
+    paperId: string
+  ) => Promise<FetchOutcome<Set<string>>>
+  fetchCounterpartPdfExtract?: (input: {
+    paperId: string
+    pdfUrl: string | null
+  }) => Promise<{
+    sections: { heading: string | null; text: string; pageOffset: number }[]
+  } | null>
+}
+
+// Phase 3C public entry. Walks the chain looking for edges that
+// qualify for bilateral upgrade, runs the three-rule check on the top
+// 6 by rank, and returns the augmented chain plus call-budget
+// telemetry. Pure function — does not write to the DB; the caller
+// (generatePaperValueChain) folds the result into the persisted
+// enrichment row.
+//
+// Graceful degradation: if a counterpart's PDF is unavailable, only
+// the mutual-cite rule fires (S2-only); the edge stays at its
+// pre-bilateral provenance otherwise. Spec mandates silent — no log
+// spam on degradation.
+export async function findBilateralEdges(
+  chain: PaperValueChain,
+  refsMeta: RefMeta[],
+  options: FindBilateralEdgesOptions = {}
+): Promise<BilateralOutcome> {
+  const focusId = chain.focusPaperId
+  const candidates = pickBilateralCandidates(chain, refsMeta)
+  if (candidates.length === 0) {
+    return {
+      chain,
+      s2CallsAdded: 0,
+      pdfFetchesAdded: 0,
+      matchedEdges: 0
+    }
+  }
+
+  // Real-world fetchers; tests inject mocks.
+  const refsFetcher =
+    options.fetchCounterpartReferences ?? fetchCounterpartReferenceIds
+  const pdfExtractFetcher =
+    options.fetchCounterpartPdfExtract ??
+    (async (input: { paperId: string; pdfUrl: string | null }) => {
+      const result = await extractFocalPaperIntro(input)
+      if (!result.ok || !result.extract) return null
+      return { sections: result.extract.sections }
+    })
+
+  // Clone-on-write so we never mutate the caller's chain.
+  const edges = chain.edges.map((e) => ({ ...e, citations: [...e.citations] }))
+  let s2CallsAdded = 0
+  let pdfFetchesAdded = 0
+  let matchedEdges = 0
+
+  for (const cand of candidates) {
+    const upgrade = await checkBilateralForCandidate({
+      cand,
+      focusId,
+      refsFetcher,
+      pdfExtractFetcher
+    })
+    s2CallsAdded += upgrade.s2CallsAdded
+    pdfFetchesAdded += upgrade.pdfFetchesAdded
+    if (upgrade.citation) {
+      edges[cand.edgeIndex].citations.push(upgrade.citation)
+      matchedEdges += 1
+    }
+  }
+
+  return {
+    chain: { ...chain, edges },
+    s2CallsAdded,
+    pdfFetchesAdded,
+    matchedEdges
+  }
+}
+
+// Per-candidate rule chain. Returns the bilateral citation to append
+// (when a rule matches) plus call-budget telemetry. Encapsulated for
+// readability and to make per-candidate testing straightforward.
+async function checkBilateralForCandidate(input: {
+  cand: BilateralCandidate
+  focusId: string
+  refsFetcher: NonNullable<FindBilateralEdgesOptions['fetchCounterpartReferences']>
+  pdfExtractFetcher: NonNullable<
+    FindBilateralEdgesOptions['fetchCounterpartPdfExtract']
+  >
+}): Promise<{
+  citation: Extract<PaperValueChainEdgeCitation, { kind: 'bilateral' }> | null
+  s2CallsAdded: number
+  pdfFetchesAdded: number
+}> {
+  const { cand, focusId, refsFetcher, pdfExtractFetcher } = input
+  let s2Calls = 0
+  let pdfFetches = 0
+
+  // Rule 1 — mutual-cite. Counterpart's reference list contains focal.
+  // S2-only; doesn't need a PDF. Highest confidence.
+  let counterpartRefIds: Set<string> | null = null
+  try {
+    const refsRes = await refsFetcher(cand.counterpartPaperId)
+    s2Calls += refsRes.callsMade
+    counterpartRefIds = refsRes.data
+  } catch {
+    // Rate-limited or transient — fall through to other rules.
+  }
+  if (counterpartRefIds && counterpartRefIds.has(focusId)) {
+    return {
+      citation: {
+        kind: 'bilateral',
+        matchReason: 'mutual-cite',
+        focalCitation: cand.anchor,
+        counterpartCitation: null,
+        trigger: null
+      },
+      s2CallsAdded: s2Calls,
+      pdfFetchesAdded: pdfFetches
+    }
+  }
+
+  // Rules 2 + 3 require the counterpart's PDF. If unavailable, stay
+  // at current provenance. Silent — no log per spec.
+  const pdfUrl = counterpartPdfUrl(cand.counterpartNode)
+  if (!pdfUrl) {
+    return { citation: null, s2CallsAdded: s2Calls, pdfFetchesAdded: pdfFetches }
+  }
+
+  let extract: {
+    sections: { heading: string | null; text: string; pageOffset: number }[]
+  } | null = null
+  try {
+    extract = await pdfExtractFetcher({
+      paperId: cand.counterpartPaperId,
+      pdfUrl
+    })
+    if (extract) pdfFetches += 1
+  } catch {
+    // Same silent-degradation policy.
+  }
+  if (!extract || extract.sections.length === 0) {
+    return { citation: null, s2CallsAdded: s2Calls, pdfFetchesAdded: pdfFetches }
+  }
+
+  const introBlob = extract.sections.map((s) => s.text).join('\n')
+
+  // Rule 2 — forward-reference. Counterpart's intro mentions a future-
+  // work / open-question phrase AND token-overlaps with focal content.
+  // Focal content tokens come from the focal node title + the anchor
+  // quoted sentence (when available).
+  const focalContentSource = buildFocalContentForJaccard(cand)
+  const forwardMatch = findForwardReferenceMatch(introBlob, focalContentSource)
+  if (forwardMatch) {
+    const counterpartCitation = makeCounterpartCitation({
+      counterpartPaperId: cand.counterpartPaperId,
+      focusId,
+      sentence: forwardMatch.sentence,
+      sections: extract.sections
+    })
+    return {
+      citation: {
+        kind: 'bilateral',
+        matchReason: 'forward-reference',
+        focalCitation: cand.anchor,
+        counterpartCitation,
+        trigger: forwardMatch.trigger
+      },
+      s2CallsAdded: s2Calls,
+      pdfFetchesAdded: pdfFetches
+    }
+  }
+
+  // Rule 3 — framing-alignment. Counterpart's contribution sentence
+  // overlaps focal's anchor sentence. Only meaningful when focal
+  // anchor is paper-pdf (i.e. we have a quoted sentence to compare
+  // against). For s2-influential anchors, fall through.
+  if (cand.hasHaikuAnchor) {
+    const focalQuoted =
+      cand.anchor.kind === 'paper-pdf' ? cand.anchor.quotedSentence : ''
+    if (focalQuoted) {
+      const framingMatch = findFramingAlignmentMatch(introBlob, focalQuoted)
+      if (framingMatch) {
+        const counterpartCitation = makeCounterpartCitation({
+          counterpartPaperId: cand.counterpartPaperId,
+          focusId,
+          sentence: framingMatch.sentence,
+          sections: extract.sections
+        })
+        return {
+          citation: {
+            kind: 'bilateral',
+            matchReason: 'framing-alignment',
+            focalCitation: cand.anchor,
+            counterpartCitation,
+            trigger: framingMatch.sentence.slice(0, 80)
+          },
+          s2CallsAdded: s2Calls,
+          pdfFetchesAdded: pdfFetches
+        }
+      }
+    }
+  }
+
+  // No rule fired. Silent degradation — edge stays as-is.
+  return { citation: null, s2CallsAdded: s2Calls, pdfFetchesAdded: pdfFetches }
+}
+
+// Compose a content blob the Jaccard rules compare against. For
+// paper-pdf anchors we have a quoted sentence; for s2-influential we
+// only have node title. Use the strongest available signal.
+function buildFocalContentForJaccard(cand: BilateralCandidate): string {
+  const parts: string[] = []
+  if (cand.anchor.kind === 'paper-pdf' && cand.anchor.quotedSentence) {
+    parts.push(cand.anchor.quotedSentence)
+  }
+  if (cand.counterpartNode?.title) {
+    // Counterpart title isn't really "focal content," but it boosts
+    // overlap when focal's quoted sentence references the counterpart
+    // by paper title. Harmless on the false-positive side because the
+    // Jaccard threshold still has to clear.
+    parts.push(cand.counterpartNode.title)
+  }
+  return parts.join(' ')
+}
+
+// Build the paper-pdf-shape citation for the counterpart side. Locates
+// the matched sentence's page in the counterpart's extracted sections
+// using the same fuzzy anchor as the 3B path.
+function makeCounterpartCitation(input: {
+  counterpartPaperId: string
+  focusId: string
+  sentence: string
+  sections: { heading: string | null; text: string; pageOffset: number }[]
+}): Extract<PaperValueChainEdgeCitation, { kind: 'paper-pdf' }> {
+  const located = locateSentenceInSections(input.sentence, input.sections)
+  return {
+    kind: 'paper-pdf',
+    paperId: input.counterpartPaperId,
+    otherPaperId: input.focusId,
+    quotedSentence: input.sentence.slice(0, 240),
+    pageOffset: located.pageOffset,
+    charOffset: located.charOffset
   }
 }

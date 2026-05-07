@@ -481,6 +481,12 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
                     pageOffset
                   })
                 }}
+                onOpenCounterpartPdf={(input) => {
+                  // Phase 3C — counterpart pill click. Card composes
+                  // {url, title, subtitle, pageOffset} from chain.nodes
+                  // since the counterpart isn't in view.papers.
+                  setPdfReader(input)
+                }}
               />
             </section>
           )}

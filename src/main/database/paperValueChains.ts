@@ -71,11 +71,48 @@ export type PaperValueChainEdgeCitation =
       otherPaperId: string
     }
   | {
-      // Both papers explicitly cite each other AND the citation directions
-      // align (X is upstream from focal AND focal is downstream from X
-      // in X's own chain). Populated in Phase 3D.
+      // Phase 3C — bilateral reinforcement. Direct analog of the stock
+      // chain's "this edge appears in both 10-Ks" upgrade. Strict
+      // citation reciprocity is rare in papers (papers can't normally
+      // cite each other unless one is a preprint update), so we use
+      // "vibe-bilateral" — three rules in priority order:
+      //   - mutual-cite: counterpart's S2 reference list contains focal
+      //     (rare; only when focal predates counterpart).
+      //   - forward-reference: counterpart's intro mentions a future-
+      //     work / open-question phrase AND token-overlaps with focal
+      //     (Jaccard ≥ 0.3 on content tokens).
+      //   - framing-alignment: counterpart's "we present / propose"
+      //     sentence overlaps focal's quoted sentence (Jaccard ≥ 0.4).
+      //
+      // The bilateral entry carries TWO leaf citations — one from the
+      // focal paper, one from the counterpart — so the renderer can
+      // produce a doubled pill (mirrors the stock UnifiedValueChainCard
+      // double-citation UX where both 10-Ks are linked). counterpart
+      // side is null for mutual-cite (S2 record only, no quoted text).
       kind: 'bilateral'
-      otherPaperId: string
+      matchReason: 'mutual-cite' | 'forward-reference' | 'framing-alignment'
+      // Snapshot of the focal-side anchor citation that triggered the
+      // bilateral check. Restricted to paper-pdf or s2-influential —
+      // s2-intent / model edges don't qualify for bilateral upgrade
+      // per the provenance threshold.
+      focalCitation:
+        | Extract<PaperValueChainEdgeCitation, { kind: 'paper-pdf' }>
+        | Extract<PaperValueChainEdgeCitation, { kind: 's2-influential' }>
+      // Counterpart-side evidence. paper-pdf shape (paperId points at
+      // the counterpart, otherPaperId at the focal) for forward-
+      // reference / framing-alignment. Null for mutual-cite, since
+      // that rule fires from S2 metadata only — no PDF reading on the
+      // counterpart side.
+      counterpartCitation: Extract<
+        PaperValueChainEdgeCitation,
+        { kind: 'paper-pdf' }
+      > | null
+      // Trigger phrase / sentence prefix that fired the rule. Useful
+      // for hover tooltips so the user sees WHY the bilateral upgrade
+      // applied — e.g. "future work" for forward-reference, the
+      // counterpart's "We propose…" prefix for framing-alignment.
+      // Null for mutual-cite (no extracted phrase).
+      trigger: string | null
     }
   | {
       // Claude (Haiku) read the focal paper's intro/related-works and
