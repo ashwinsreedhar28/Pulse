@@ -1224,30 +1224,31 @@ function PaperCard({
         >
           {isBookmarked ? '★' : '☆'}
         </button>
-        {paper.pdfUrl && (
+        {/* Single primary "Source" affordance: opens the PDF in the
+            in-window reader when one is available, otherwise the
+            metadata page (S2 / arXiv abs / DOI) externally. The
+            previous two-button layout had a redundant PDF + Source
+            split where Source always opened the metadata page; the
+            common-case action is reading the paper, so prefer PDF. */}
+        {(paper.pdfUrl || paper.url) && (
           <button
             onClick={(e) => {
               e.stopPropagation()
-              if (onOpenPdfInline) {
-                onOpenPdfInline(paper.pdfUrl!, paper.title, paper.venue)
-              } else {
-                onOpenURL(paper.pdfUrl!, paper.title, paper.venue)
+              if (paper.pdfUrl && onOpenPdfInline) {
+                onOpenPdfInline(paper.pdfUrl, paper.title, paper.venue)
+              } else if (paper.pdfUrl) {
+                onOpenURL(paper.pdfUrl, paper.title, paper.venue)
+              } else if (paper.url) {
+                onOpenURL(paper.url, paper.title, paper.venue)
               }
             }}
-            className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/30 hover:bg-emerald-500/25"
+            className={
+              paper.pdfUrl
+                ? 'text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-500/30 hover:bg-emerald-500/25'
+                : 'text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2'
+            }
           >
-            PDF
-          </button>
-        )}
-        {paper.url && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onOpenURL(paper.url!, paper.title, paper.venue)
-            }}
-            className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2"
-          >
-            Source ↗
+            {paper.pdfUrl ? 'Read PDF' : 'Source ↗'}
           </button>
         )}
         {onOpenChain && (

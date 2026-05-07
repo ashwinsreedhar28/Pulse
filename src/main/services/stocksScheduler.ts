@@ -3,7 +3,7 @@ import { listTickers } from '../database/tickers'
 import { getQuotes as getStooqQuotes, type StockQuote } from './stooqService'
 import { getExtendedQuotes, getYahooQuotes } from './yahooFinanceService'
 import { evaluateStockAlerts } from './tickerAlertsService'
-import { isOnline } from './networkStatus'
+import { shouldDeferOnResume } from './networkStatus'
 
 // Three cadences, picked to match when Stooq data is actually changing:
 //  - Active: weekday 04:00–20:00 ET (pre-market + regular + after-hours)
@@ -61,9 +61,10 @@ async function tick(): Promise<void> {
     broadcast([])
     return
   }
-  // Don't fan out a Yahoo + Stooq cascade when the OS already knows we're
-  // offline. The marquee keeps showing lastQuotes; the next tick retries.
-  if (!isOnline()) return
+  // Defer only inside the post-resume window when the OS still reports
+  // offline — outside that window we always fetch (net.isOnline() lies
+  // during normal operation on macOS and used to blank the marquee).
+  if (shouldDeferOnResume()) return
   try {
     // Yahoo is the primary quote source — one chart request per symbol,
     // bounded-concurrency, returns regular-session OHLCV plus pre/post

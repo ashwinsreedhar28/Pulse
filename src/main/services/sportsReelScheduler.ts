@@ -15,7 +15,7 @@
 
 import { BrowserWindow } from 'electron'
 import { listGames, listLeagues, type Game, type SportsLeague } from './sportsService'
-import { isOnline } from './networkStatus'
+import { shouldDeferOnResume } from './networkStatus'
 
 export interface SportsReelGroup {
   league: SportsLeague
@@ -95,10 +95,11 @@ async function buildGroups(): Promise<SportsReelGroup[]> {
 }
 
 async function tick(): Promise<void> {
-  // OS-level offline gate. Skip the ESPN fan-out entirely; renderer
-  // continues to render the cached groups (or the "no games" terminal
-  // state if this is a cold start).
-  if (!isOnline()) {
+  // Defer only inside the post-resume window when the OS still reports
+  // offline. Outside that window we always fetch — the previous always-
+  // on net.isOnline() check lied during normal macOS operation and left
+  // the sports reel stuck in the "warming" state.
+  if (shouldDeferOnResume()) {
     warmed = true
     broadcast()
     return

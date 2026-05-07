@@ -1157,6 +1157,9 @@ async function maybeEnrichWithFocalPaperReading(input: {
   // we have nothing to read. UI shows the metadata-only badge.
   const pdfUrl = input.focal.openAccessPdf?.url ?? null
   if (!pdfUrl) {
+    console.log(
+      `[paper-chain] enrichment skipped for ${focusId}: no openAccessPdf URL`
+    )
     return {
       chain: input.baseChain,
       badge: 'metadata-only',
@@ -1169,6 +1172,9 @@ async function maybeEnrichWithFocalPaperReading(input: {
     pdfUrl
   })
   if (!extractResult.ok || !extractResult.extract) {
+    console.log(
+      `[paper-chain] enrichment skipped for ${focusId}: PDF extract failed (${extractResult.reason ?? 'unknown'})`
+    )
     return {
       chain: input.baseChain,
       badge: 'metadata-only',
@@ -1235,12 +1241,20 @@ async function maybeEnrichWithFocalPaperReading(input: {
     maxTokens: 4_000
   })
   if (!raw) {
+    console.log(
+      `[paper-chain] enrichment skipped for ${focusId}: Haiku returned null ` +
+        `(check anthropicApiKey in Settings → AI; rate limit; or transient error)`
+    )
     return {
       chain: input.baseChain,
       badge: 'metadata-only',
       haikuCallsUsed: 1
     }
   }
+  console.log(
+    `[paper-chain] enriched ${focusId}: Haiku returned ${raw.length} chars; ` +
+      `parsing claims`
+  )
 
   const claims = parseHaikuClaims(raw)
   if (claims.length === 0) {

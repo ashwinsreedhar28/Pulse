@@ -19,7 +19,7 @@ import { classifyArticleAgainstTickers } from './tickerRelevance'
 import { isVideoGenBusy, onVideoGenSettled } from './videoGenService'
 import { isKokoroBusy, onKokoroSettled } from './kokoroService'
 import { isMediaToolsBusy, onMediaToolsSettled } from './mediaToolsService'
-import { isOnline } from './networkStatus'
+import { markResumed, shouldDeferOnResume } from './networkStatus'
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 const POLL_CONCURRENCY = 6
@@ -79,12 +79,13 @@ export async function pollAllFeeds(options: { force?: boolean } = {}): Promise<P
     }
     return { startedAt: Date.now(), durationMs: 0, feedsPolled: 0, articlesInserted: 0, errors: [] }
   }
-  // Skip when the OS reports no connectivity. Without this gate, a wake
-  // from a long offline period fans out 44 RSS fetches that all wait the
-  // full timeout before failing — the network stack saturates and other
-  // IPC traffic (theme broadcasts, renderer events) starves. The natural
-  // interval will retry on the next tick once the OS sees the network.
-  if (!options.force && !isOnline()) {
+  // Skip ONLY when we're inside the post-resume guard window AND the OS
+  // still reports offline. This covers the wake-from-sleep cascade
+  // (44 RSS fetches all timing out at once would saturate the network
+  // stack and queue behind nativeTheme IPC) without misfiring in
+  // steady state — `net.isOnline()` on macOS reports flakily during
+  // normal operation.
+  if (!options.force && shouldDeferOnResume()) {
     return { startedAt: Date.now(), durationMs: 0, feedsPolled: 0, articlesInserted: 0, errors: [] }
   }
   pollInProgress = true
@@ -297,6 +298,10 @@ function ensurePowerHandlers(): void {
   })
   powerMonitor.on('resume', () => {
     paused = false
+    // Open the 30-second resume-guard window. While it's open,
+    // schedulers will defer if the OS reports offline — protects the
+    // wake-from-sleep cascade. Window auto-closes after 30s.
+    markResumed()
     void pollAllFeeds()
   })
 }

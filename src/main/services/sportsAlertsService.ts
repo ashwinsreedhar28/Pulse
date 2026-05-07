@@ -8,7 +8,7 @@ import {
 } from './sportsService'
 import { getPreferences } from '../database/preferences'
 import { dispatchNotification, setNotificationWindowOpener } from './notificationService'
-import { isOnline } from './networkStatus'
+import { shouldDeferOnResume } from './networkStatus'
 
 const POLL_INTERVAL_MS = 90_000
 // Games only alerted within this window of "now" so stale finals don't spam.
@@ -83,7 +83,7 @@ function fireNotification(
 
 async function tick(): Promise<void> {
   try {
-    if (!isOnline()) return
+    if (shouldDeferOnResume()) return
     const prefs = getPreferences()
     if (!prefs.favoriteTeamAlertsEnabled) return
     const favorites = listFavoriteTeams().filter((f) => f.alertsEnabled)

@@ -1,36 +1,50 @@
 import { net } from 'electron'
 
-// Thin wrapper around Electron's net.isOnline(), which queries the OS
-// network-path monitor (nw_path_monitor on macOS). The check is cheap but
-// not free, and every scheduler tick on the resume path used to fan out
-// dozens of doomed fetches when the OS already knew the network was gone.
-// 5s memo is short enough that a single tick reuses one answer; long
-// enough that polling the OS once per fetch isn't a hot path.
+// Resume-aware network gate. The original v1 of this module was an
+// aggressive `isOnline()` check on every scheduler tick — that misfired
+// in steady state because Electron's `net.isOnline()` on macOS can
+// report false transiently (Chromium's NetworkChangeNotifier lags
+// during dev hot-reloads, brief Wi-Fi blips, and certain interface
+// transitions) even when the user has working internet. The misfire
+// blanked the stocks marquee and other live surfaces because the
+// scheduler skipped its tick and never broadcast.
 //
-// Failure mode: if net.isOnline() throws (extremely unlikely — the API is
-// sync and OS-level), we fall open and let fetches try. Better to attempt
-// and time out fast than to silently freeze the app on a flaky check.
+// The actual problem we wanted to solve was narrow: after a
+// powerMonitor 'resume' from a long sleep, every scheduler tick fires
+// at once and fans out into doomed fetches when the OS hasn't yet
+// re-attached to the network — that cascade is what queued behind the
+// nativeTheme IPC and produced the 10-15s theme-switch lag.
+//
+// New design: gate is ONLY active during a 30-second window after a
+// resume event. Inside that window, if the OS still reports offline,
+// schedulers skip. Outside the window the gate is permanently off and
+// schedulers run normally regardless of net.isOnline()'s answer. This
+// preserves the cascade-prevention behavior without misfiring during
+// steady-state operation.
 
-const CACHE_MS = 5_000
+const RESUME_GUARD_MS = 30_000
 
-let cachedOnline = true
-let lastUpdate = 0
+let resumedAt = 0
 
-export function isOnline(): boolean {
-  const now = Date.now()
-  if (now - lastUpdate < CACHE_MS) return cachedOnline
-  try {
-    cachedOnline = net.isOnline()
-  } catch {
-    cachedOnline = true
-  }
-  lastUpdate = now
-  return cachedOnline
+// Called from feedPoller's powerMonitor.on('resume') handler. Starts
+// the 30-second post-resume guard window during which schedulers will
+// defer if the OS reports offline.
+export function markResumed(): void {
+  resumedAt = Date.now()
 }
 
-// Force the next isOnline() call to re-query the OS. Use this when a fetch
-// completes (success or failure) and you want the next gate decision to
-// reflect reality, not a 5s-old cached answer.
-export function invalidateOnlineCache(): void {
-  lastUpdate = 0
+// True when the caller (a scheduler tick) should skip this round.
+// False outside the guard window — i.e. in steady-state operation,
+// always run.
+export function shouldDeferOnResume(): boolean {
+  if (Date.now() - resumedAt > RESUME_GUARD_MS) return false
+  // We're inside the post-resume window. Check the OS — if it says
+  // online, run. If it says offline, defer (we just woke up and the
+  // network hasn't re-attached yet).
+  try {
+    return !net.isOnline()
+  } catch {
+    // Probe failed for some reason — fail open and let the fetch try.
+    return false
+  }
 }
