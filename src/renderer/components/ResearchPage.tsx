@@ -469,22 +469,11 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
                   const found = view.papers.find((p) => p.paperId === paperId)
                   if (found) setSelectedPaper(found)
                 }}
-                onOpenFocalPdfAtPage={(pageOffset) => {
-                  // Phase 3B — paper-pdf citation pill click. Opens the
-                  // focal paper's PDF in the in-window reader at the
-                  // page where Haiku quoted the grounding sentence.
-                  if (!chainPaper.pdfUrl) return
-                  setPdfReader({
-                    url: chainPaper.pdfUrl,
-                    title: chainPaper.title,
-                    subtitle: chainPaper.venue,
-                    pageOffset
-                  })
-                }}
-                onOpenCounterpartPdf={(input) => {
-                  // Phase 3C — counterpart pill click. Card composes
-                  // {url, title, subtitle, pageOffset} from chain.nodes
-                  // since the counterpart isn't in view.papers.
+                onOpenPdf={(input) => {
+                  // Single PDF opener — card composes the full payload
+                  // from its own chain.nodes (always fresh after regen),
+                  // bypassing the stale-pdfUrl path that used to live
+                  // in this callback.
                   setPdfReader(input)
                 }}
               />
