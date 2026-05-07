@@ -168,9 +168,9 @@ function normalizeTheme(raw: string | undefined): Theme {
 }
 
 // Allowed preference keys, derived from DEFAULTS so this stays in sync as
-// new preferences are added. The `preferences` table is shared with internal
-// counters (e.g. _claudeUsageDate / _claudeUsageCount via getClaudeUsageState)
-// that MUST NOT be writable from the renderer; the whitelist gates that.
+// new preferences are added. The `preferences` table is also used for
+// internal KV state that MUST NOT be writable from the renderer; the
+// whitelist gates that.
 export const PREFERENCE_KEYS: ReadonlySet<keyof Preferences> = new Set(
   Object.keys(DEFAULTS) as Array<keyof Preferences>
 )
@@ -182,49 +182,13 @@ export function isPreferenceKey(key: string): key is keyof Preferences {
 export function setPreference(key: keyof Preferences, value: string | number | boolean): void {
   // Enforce the whitelist at the writer boundary — defense against any
   // caller (renderer-bridged or future internal) that fabricates a key
-  // outside the typed surface. Internal counters use their own bespoke
-  // setters (setClaudeUsageState etc.), not this one.
+  // outside the typed surface.
   if (!isPreferenceKey(key)) {
     throw new Error(`setPreference: unknown key "${key}"`)
   }
   getDb()
     .prepare(`INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)`)
     .run(key, String(value))
-}
-
-// Claude daily-call counter persistence. Kept out of the Preferences interface
-// because it's internal usage-tracking state, not a user-tunable setting.
-// Uses the same key-value `preferences` table so no schema migration is
-// needed. Date format: 'YYYY-MM-DD' (UTC).
-export interface ClaudeUsageState {
-  date: string
-  count: number
-}
-
-export function getClaudeUsageState(): ClaudeUsageState | null {
-  const db = getDb()
-  const rows = db
-    .prepare<[], { key: string; value: string }>(
-      `SELECT key, value FROM preferences WHERE key IN ('_claudeUsageDate', '_claudeUsageCount')`
-    )
-    .all()
-  const map = new Map(rows.map((r) => [r.key, r.value]))
-  const date = map.get('_claudeUsageDate')
-  const countRaw = map.get('_claudeUsageCount')
-  if (!date || countRaw === undefined) return null
-  const count = Number(countRaw)
-  if (!Number.isFinite(count) || count < 0) return null
-  return { date, count: Math.floor(count) }
-}
-
-export function setClaudeUsageState(state: ClaudeUsageState): void {
-  const db = getDb()
-  const stmt = db.prepare(`INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)`)
-  const tx = db.transaction(() => {
-    stmt.run('_claudeUsageDate', state.date)
-    stmt.run('_claudeUsageCount', String(state.count))
-  })
-  tx()
 }
 
 function clamp(n: number, min: number, max: number): number {

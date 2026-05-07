@@ -11,11 +11,7 @@
 //             than fail the user's click.
 // - 'ollama': force local. Useful for privacy-conscious users or offline.
 
-import {
-  getPreferences,
-  getClaudeUsageState,
-  setClaudeUsageState
-} from '../database/preferences'
+import { getPreferences } from '../database/preferences'
 import {
   generateCompanyValueChain as claudeChain,
   classifyTickerSectors as claudeClassify,
@@ -32,155 +28,30 @@ import {
 
 export type AiProviderResolved = 'claude' | 'ollama'
 
-// ---- daily call cap (safety net) -------------------------------------------
+// ---- usage telemetry (no gate) ---------------------------------------------
 //
-// Hard cap on Claude calls per UTC day. Protects against runaway loops
-// (e.g., a chat that retries on every error, a regenerate-all that fires
-// twice). Counts EVERY routed Claude call across all paths — chain
-// generation, classifier, answerQuestion — into one bucket. When
-// exceeded, routed calls fall back to Ollama with a warning.
-//
-// Persisted to the preferences KV store so the cap survives restarts — a
-// crash loop that restarts the app cannot bypass the ceiling by zeroing
-// the counter. Rolls over at UTC midnight.
-//
-// CURRENT STATE: CAP_GATE_DISABLED=true. The user is collecting usage
-// data to set the right monthly budget. The DAILY_CLAUDE_CAP value
-// below is preserved for when the gate goes back on. While disabled,
-// recordClaudeCall does NOT persist increments (so flipping the gate
-// back on later doesn't immediately trip on a poisoned counter), and
-// the per-100-call telemetry log line stays on for visibility.
-//
-// Reference budget math (when re-enabling): at the typical mix of
-// Sonnet (~$0.04/call) and Haiku (~$0.006/call), 50 calls/day averages
-// $0.30-0.45/day = $9-13/month. Leaves room for the daily Morning
-// Brief (1 Sonnet) + 3-4 chain regens (each = 1 Sonnet chain-gen +
-// ~4 Haiku web searches) + 3-4 research searches.
-const DAILY_CLAUDE_CAP = 50
-const CAP_GATE_DISABLED = true
+// Claude calls aren't capped — Pulse's user is willing to pay for quality.
+// Per-minute Anthropic rate limits are still respected via call-site pacing
+// (see companyValueChainService web-search loop), but there's no daily or
+// monthly count ceiling. We keep an in-memory tally purely for the per-100-
+// call log line during heavy runs; nothing reads it for routing decisions.
 
-// Lazy-loaded from DB on first access. Module-level `getDb()` cannot run at
-// import time because the database connection isn't open yet when services
-// are imported during main-process boot.
-let claudeCounter: { date: string; count: number } | null = null
-
-function utcDateKey(): string {
-  const d = new Date()
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
-}
-
-function ensureCounterLoaded(): { date: string; count: number } {
-  if (claudeCounter !== null) return claudeCounter
-  const today = utcDateKey()
-  try {
-    const persisted = getClaudeUsageState()
-    if (persisted && persisted.date === today) {
-      claudeCounter = { date: persisted.date, count: persisted.count }
-    } else {
-      // Either no persisted state yet, or the persisted date is stale —
-      // start a fresh bucket for today. We don't bother to persist the
-      // zero; `recordClaudeCall()` will write on the first real increment.
-      claudeCounter = { date: today, count: 0 }
-    }
-  } catch (err) {
-    console.warn('[aiClient] Failed to load Claude usage counter from DB:', err)
-    claudeCounter = { date: today, count: 0 }
-  }
-  return claudeCounter
-}
-
-function rollCounterIfNewDay(): void {
-  const counter = ensureCounterLoaded()
-  const today = utcDateKey()
-  if (counter.date !== today) {
-    claudeCounter = { date: today, count: 0 }
-    try {
-      setClaudeUsageState(claudeCounter)
-    } catch (err) {
-      console.warn('[aiClient] Failed to persist Claude usage rollover:', err)
-    }
-  }
-}
-
-export function canCallClaude(): boolean {
-  rollCounterIfNewDay()
-  if (CAP_GATE_DISABLED) return true
-  return ensureCounterLoaded().count < DAILY_CLAUDE_CAP
-}
+let claudeCallCount = 0
 
 export function recordClaudeCall(): void {
-  rollCounterIfNewDay()
-  const counter = ensureCounterLoaded()
-  counter.count += 1
-  // Only persist when the cap gate is actually enforced. Otherwise a
-  // one-shot bypass run (regenerate-all, ~250 calls) poisons the
-  // persisted counter and blocks every Claude call for the rest of the
-  // day — exactly the failure mode the cap is supposed to *prevent*.
-  // In-memory increment still happens so the per-100-call telemetry
-  // log line works for visibility during heavy runs.
-  if (!CAP_GATE_DISABLED) {
-    try {
-      setClaudeUsageState(counter)
-    } catch (err) {
-      console.warn('[aiClient] Failed to persist Claude usage increment:', err)
-    }
-  }
-  // Soft warnings only fire when the cap is actually enforced. With
-  // CAP_GATE_DISABLED=true the messages would be misleading ("falling
-  // back to Ollama" while in reality calls keep going to Claude), so
-  // we suppress them entirely in that mode and let the per-100-call
-  // telemetry below do the talking.
-  if (!CAP_GATE_DISABLED) {
-    // Soft warning at 50% of cap so the user has a chance to throttle
-    // their own usage before the hard ceiling kicks in.
-    if (
-      Number.isFinite(DAILY_CLAUDE_CAP) &&
-      counter.count === Math.floor(DAILY_CLAUDE_CAP / 2)
-    ) {
-      console.warn(
-        `[aiClient] Claude usage at ${counter.count}/${DAILY_CLAUDE_CAP} for ${counter.date} — about halfway to today's safety cap.`
-      )
-    }
-    if (
-      Number.isFinite(DAILY_CLAUDE_CAP) &&
-      counter.count === DAILY_CLAUDE_CAP
-    ) {
-      console.warn(
-        `[aiClient] Claude daily cap (${DAILY_CLAUDE_CAP}) reached for ${counter.date}. Subsequent routed calls fall back to Ollama until UTC midnight.`
-      )
-    }
-  }
-  // Periodic telemetry every 100 calls (only fires when the cap is
-  // disabled for testing). Helps spot runaway spend during heavy
-  // sessions like regenerate-all.
-  if (CAP_GATE_DISABLED && counter.count % 100 === 0) {
-    console.log(
-      `[aiClient] Claude usage at ${counter.count} call(s) today (${counter.date}) — cap gate DISABLED for testing.`
-    )
+  claudeCallCount += 1
+  if (claudeCallCount % 100 === 0) {
+    console.log(`[aiClient] Claude call count: ${claudeCallCount} (uncapped).`)
   }
 }
 
-// Manually clear today's counter. Use after a one-shot bypass run that
-// inflated the count (e.g. regenerate-all on the watchlist) — without
-// this, every subsequent Claude call within the same UTC day gets
-// blocked by the cap because count > cap. Exposed via IPC so the user
-// can call it from DevTools when needed.
-export function resetClaudeUsage(): { date: string; count: number; cap: number } {
-  const today = utcDateKey()
-  claudeCounter = { date: today, count: 0 }
-  try {
-    setClaudeUsageState(claudeCounter)
-  } catch (err) {
-    console.warn('[aiClient] Failed to persist Claude usage reset:', err)
-  }
-  console.log(`[aiClient] Claude usage counter manually reset for ${today}.`)
-  return { date: today, count: 0, cap: DAILY_CLAUDE_CAP }
+export function getClaudeUsage(): { count: number } {
+  return { count: claudeCallCount }
 }
 
-export function getClaudeUsage(): { date: string; count: number; cap: number } {
-  rollCounterIfNewDay()
-  const counter = ensureCounterLoaded()
-  return { date: counter.date, count: counter.count, cap: DAILY_CLAUDE_CAP }
+export function resetClaudeUsage(): { count: number } {
+  claudeCallCount = 0
+  return { count: 0 }
 }
 
 export function resolveProvider(): AiProviderResolved {
@@ -193,16 +64,14 @@ export function resolveProvider(): AiProviderResolved {
   return isClaudeConfigured() ? 'claude' : 'ollama'
 }
 
-// Single chokepoint for "should this call go to Claude". Combines the
-// provider preference with the daily safety cap. Routed callers consult
-// this instead of resolveProvider() directly so cap exhaustion silently
-// degrades to Ollama rather than producing weird "no Claude available"
-// states downstream.
+// Single chokepoint for "should this call go to Claude". Today this just
+// reflects the user's provider preference; kept as a separate function
+// because callers used to consult an additional cap gate here, and the
+// indirection makes it cheap to reintroduce a gate later if a per-feature
+// rate-limit ever needs one. (Don't reintroduce a *cost* gate without
+// re-reading the no-claude-caps memory.)
 function pickProviderForCall(): AiProviderResolved {
-  const provider = resolveProvider()
-  if (provider !== 'claude') return 'ollama'
-  if (!canCallClaude()) return 'ollama'
-  return 'claude'
+  return resolveProvider()
 }
 
 export async function generateCompanyValueChain(

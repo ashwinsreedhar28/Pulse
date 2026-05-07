@@ -1949,19 +1949,22 @@ function matchesPrimaryPress(url: string): { ok: true; host: string } | { ok: fa
 // rarely lands on canonical Archives URLs reliably, so accepting trade
 // press as a backup unlocks the path for the bulk of cite-less edges.
 //
-// Bounded by `maxSearches` to keep cost predictable: each search is one
-// Haiku call (~$0.01) plus the per-search cost from Anthropic's web tool.
+// `maxSearches` exists as a knob, not a cost ceiling. The default is
+// effectively uncapped — every cite-less edge gets a search attempt —
+// because the user is willing to pay for citation quality. Per-minute
+// Anthropic rate limits are still respected via the 14s pacing below.
 async function webSearchAugmentCitations(
   edges: import('../database/companyValueChains').CompanyValueChainEdge[],
   focusSymbol: string,
   focusCompanyName: string,
-  // Bounded to 4 cite-less edges per regen to fit the app's
-  // $15/month spend budget. Anthropic web search bills per call;
-  // 8 was the citation-quality sweet spot but doubled the per-
-  // regen cost. The first 4 cite-less edges are the model's
-  // highest-priority claims (they emit edges in priority order),
-  // so capping here doesn't drop the most material relationships.
-  maxSearches = 4
+  // Default to "search every cite-less edge". The `cap = Math.min(
+  // maxSearches, targets.length)` line below means in practice we run
+  // one Haiku web-search per cite-less edge, paced 14s apart. A long
+  // chain (~25 edges, half cite-less) takes ~3 min and ~$0.30 to fully
+  // augment — accepted as the cost of citation hit-rate (~85% vs ~75%
+  // when we capped at 4). Override with a smaller number only if a
+  // specific call site has a separate latency budget to honor.
+  maxSearches = Number.MAX_SAFE_INTEGER
 ): Promise<import('../database/companyValueChains').CompanyValueChainEdge[]> {
   const focus = focusSymbol.toUpperCase()
   // Find edges still missing a primary cite. Order by edge index so the

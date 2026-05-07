@@ -19,7 +19,7 @@ import {
 } from '../database/morningBriefs'
 import { getRecentFilingsForSymbols, type SecFiling } from '../database/secFilings'
 import { listTickers } from '../database/tickers'
-import { canCallClaude, recordClaudeCall, resolveProvider } from './aiClient'
+import { recordClaudeCall, resolveProvider } from './aiClient'
 import { generateMorningBrief } from './claudeService'
 import { getEarnings } from './yahooFinanceService'
 import { INTERESTING_FORMS, buildPrimaryDocUrl } from './secService'
@@ -194,10 +194,6 @@ export async function refreshMorningBrief(opts: { force?: boolean } = {}): Promi
       const provider = resolveProvider()
       if (provider !== 'claude') {
         console.log('[brief] skip — Claude not configured (provider=' + provider + ')')
-        return existing?.payload ?? null
-      }
-      if (!canCallClaude()) {
-        console.log('[brief] skip — daily Claude cap reached')
         return existing?.payload ?? null
       }
       const watchlist = listTickers().filter((t) => t.isActive).map((t) => t.symbol.toUpperCase())
