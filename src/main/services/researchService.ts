@@ -104,8 +104,20 @@ function fromS2Paper(p: S2Paper): ResearchPaper | null {
   const doi = p.externalIds?.DOI ?? null
   // Prefer openAccessPdf, then arXiv direct PDF, then null. Renderer
   // shows a "Read PDF" affordance only when one of these is non-null.
+  //
+  // S2 quirk: openAccessPdf is sometimes returned as
+  // {url:"", status:null, license:null} — an object with empty-string
+  // url rather than a null field — for papers like "Attention Is All
+  // You Need" that aren't formally OA but ARE on arXiv. Nullish-coalesce
+  // would let the empty string through; explicitly normalize empty/
+  // whitespace urls to null so the arXiv fallback fires.
+  const openAccessRaw = p.openAccessPdf?.url
+  const openAccessUrl =
+    typeof openAccessRaw === 'string' && openAccessRaw.trim().length > 0
+      ? openAccessRaw
+      : null
   const pdfUrl =
-    p.openAccessPdf?.url ?? (arxivId ? `https://arxiv.org/pdf/${arxivId}` : null)
+    openAccessUrl ?? (arxivId ? `https://arxiv.org/pdf/${arxivId}` : null)
   // Best landing URL: explicit url field, then arXiv abstract page,
   // then DOI resolver, then S2 paper page.
   const url =

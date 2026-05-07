@@ -1155,17 +1155,24 @@ async function maybeEnrichWithFocalPaperReading(input: {
 
   // PDF availability gate. Prefer S2's openAccessPdf; fall back to a
   // constructed arXiv PDF URL when the paper has an ArXiv externalId.
-  // Mirrors fromS2Paper in researchService — landmark papers like
-  // "Attention is All You Need" frequently come back from S2 with
-  // openAccessPdf=null but externalIds.ArXiv set, so checking only
-  // openAccessPdf misses the most-readable papers in the corpus.
+  // S2 quirk: many landmark papers (e.g. "Attention Is All You Need")
+  // come back as openAccessPdf={url:"", status:null, license:null}
+  // — an OBJECT with an empty-string url rather than a null/missing
+  // field. `??` is nullish-only and would let the empty string through;
+  // we explicitly null it out so the arXiv fallback can fire.
   const arxivId = input.focal.externalIds?.ArXiv ?? null
+  const openAccessRaw = input.focal.openAccessPdf?.url
+  const openAccessUrl =
+    typeof openAccessRaw === 'string' && openAccessRaw.trim().length > 0
+      ? openAccessRaw
+      : null
   const pdfUrl =
-    input.focal.openAccessPdf?.url ??
-    (arxivId ? `https://arxiv.org/pdf/${arxivId}` : null)
+    openAccessUrl ?? (arxivId ? `https://arxiv.org/pdf/${arxivId}` : null)
   if (!pdfUrl) {
     console.log(
-      `[paper-chain] enrichment skipped for ${focusId}: no openAccessPdf and no ArXiv id`
+      `[paper-chain] enrichment skipped for ${focusId}: ` +
+        `openAccessPdf=${openAccessUrl ? 'present' : 'empty/null'}, ` +
+        `arxivId=${arxivId ?? 'null'}`
     )
     return {
       chain: input.baseChain,
