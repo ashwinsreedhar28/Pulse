@@ -18,6 +18,8 @@ import type {
   ResearchBriefPayload,
   ResearchBriefSection,
   ResearchPaper,
+  SimilarPaper,
+  PaperTickerLink,
   ResearchTopic
 } from '../../preload'
 import { CollapseChevron, useCollapsedSection } from './collapseUI'
@@ -1334,6 +1336,10 @@ function PaperDetailPanel({
   const [foundationalFor, setFoundationalFor] = useState<ResearchPaper[] | null>(null)
   const [taggedTopics, setTaggedTopics] = useState<ResearchTopic[]>([])
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
+  // Semantic neighbours (SPECTER2) and the research/finance bridge.
+  const [similar, setSimilar] = useState<SimilarPaper[] | null>(null)
+  const [tickerLinks, setTickerLinks] = useState<PaperTickerLink[] | null>(null)
+  const [linking, setLinking] = useState(false)
   useEffect(() => {
     let cancelled = false
     setCiting(null)
@@ -1357,6 +1363,28 @@ function PaperDetailPanel({
     void window.api.research.getFoundationalFor(paper.paperId).then((list) => {
       if (!cancelled) setFoundationalFor(list)
     })
+    // Semantic neighbours. First call for a paper pays one S2 batch request
+    // to fetch missing vectors; afterwards it is a local scan.
+    setSimilar(null)
+    void window.api.research
+      .similar(paper.paperId, 6)
+      .then((list) => {
+        if (!cancelled) setSimilar(list)
+      })
+      .catch(() => {
+        if (!cancelled) setSimilar([])
+      })
+    // Existing company links only — generating them costs a Claude call, so
+    // that stays behind an explicit button.
+    setTickerLinks(null)
+    void window.api.research
+      .linksForPaper(paper.paperId)
+      .then((list) => {
+        if (!cancelled) setTickerLinks(list)
+      })
+      .catch(() => {
+        if (!cancelled) setTickerLinks([])
+      })
     return (): void => {
       cancelled = true
     }
@@ -1584,6 +1612,81 @@ function PaperDetailPanel({
           papers={refs}
           onSelectPaper={onSelectPaper}
         />
+        {/* Semantic neighbours. Distinct from the citation lists above:
+            SPECTER2 finds papers doing the same work that may never have
+            cited each other — exactly what a citation graph cannot show. */}
+        {similar && similar.length > 0 && (
+          <section className="mt-4">
+            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-sky-300">
+              Semantically similar
+            </h4>
+            <p className="mt-0.5 text-[10px] text-zinc-500">
+              Nearest SPECTER2 neighbours in your library — related work, not citations
+            </p>
+            <ul className="mt-1.5 space-y-1">
+              {similar.map((s) => (
+                <li key={s.paperId} className="flex items-center gap-2 text-[11px]">
+                  <span className="shrink-0 tabular-nums text-zinc-500">
+                    {(s.score * 100).toFixed(0)}%
+                  </span>
+                  <span className="truncate text-zinc-300">{s.paperId}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Research -> finance bridge. Generation costs a Claude call, so it
+            is explicit rather than automatic on panel open. */}
+        <section className="mt-4">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
+              Related companies
+            </h4>
+            <button
+              onClick={async () => {
+                setLinking(true)
+                try {
+                  const links = await window.api.research.linkTickers({
+                    paperId: paper.paperId,
+                    title: paper.title,
+                    abstract: paper.abstract
+                  })
+                  setTickerLinks(links)
+                } catch (err) {
+                  console.warn('[research] linkTickers failed:', err)
+                } finally {
+                  setLinking(false)
+                }
+              }}
+              disabled={linking}
+              className="rounded px-1.5 py-0.5 text-[10px] text-emerald-300 ring-1 ring-emerald-500/30 hover:bg-emerald-500/10 disabled:opacity-50"
+            >
+              {linking ? 'Linking…' : tickerLinks && tickerLinks.length > 0 ? 'Regenerate' : 'Find'}
+            </button>
+          </div>
+          {tickerLinks && tickerLinks.length > 0 ? (
+            <ul className="mt-1.5 space-y-1">
+              {tickerLinks.map((l) => (
+                <li key={l.symbol} className="text-[11px]">
+                  <span className="font-semibold text-zinc-200">{l.symbol}</span>
+                  <span className="ml-1 tabular-nums text-zinc-500">
+                    {(l.confidence * 100).toFixed(0)}%
+                  </span>
+                  {l.rationale && (
+                    <span className="ml-1 text-zinc-400">— {l.rationale}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-0.5 text-[10px] text-zinc-500">
+              {tickerLinks === null
+                ? 'Loading…'
+                : 'No links yet — Find asks Claude which tracked companies this bears on.'}
+            </p>
+          )}
+        </section>
       </div>
     </aside>
   )
