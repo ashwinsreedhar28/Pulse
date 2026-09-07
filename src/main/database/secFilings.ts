@@ -273,3 +273,28 @@ export function listFormerNamesJoinedToSymbols(): Array<{
     )
     .all()
 }
+
+// High-volume boilerplate forms. Retained only briefly: nothing in the app
+// reads a filing older than the ticker detail page's top-25, and these
+// dominate the table by an order of magnitude. Measured on a live DB:
+// Form 4 alone was 179,873 of 411,101 rows, with 424B2 at 63,041 and
+// Form 144 at 20,562. Together with 3/5/FWP that is ~68% of the table.
+//
+// Deliberately excludes 6-K: it is a foreign private issuer's material
+// report, not boilerplate, and belongs with 8-K.
+const ROUTINE_FORMS = ['4', '3', '5', '144', '424B2', '424B5', 'FWP']
+
+// Drop routine filings older than the cutoff. Material forms (8-K, 10-K,
+// 10-Q, DEF 14A, SC 13D, S-1, 6-K...) are never purged — those are the
+// event history the research and event-study paths depend on, and unlike
+// the boilerplate they are low-volume enough to keep indefinitely.
+export function purgeRoutineFilings(cutoffMs: number): number {
+  const placeholders = ROUTINE_FORMS.map(() => '?').join(',')
+  const info = getDb()
+    .prepare(
+      `DELETE FROM sec_filings
+        WHERE filedAt < ? AND formType IN (${placeholders})`
+    )
+    .run(cutoffMs, ...ROUTINE_FORMS)
+  return info.changes
+}

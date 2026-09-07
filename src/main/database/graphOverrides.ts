@@ -74,6 +74,20 @@ export function upsertEdgeOverride(input: GraphEdgeOverride): void {
     )
 }
 
+// Evidence class for an edge source tag. Consensus is measured across these,
+// not across raw tags, because every per-ticker chain emits its own
+// `chain_gen_<FOCUS>` tag from the same underlying model.
+//   'llm'  — chain_gen_* (any focus ticker): one Claude prompt, one prior
+//   'news' — news_cooccurrence, incl. the refresh: variant
+//   '10k'  — sec_10k_concentration: a disclosed revenue dependency
+function sourceClass(source: string): string {
+  const s = source.trim()
+  if (s.startsWith('chain_gen_')) return 'llm'
+  if (s === 'sec_10k_concentration') return '10k'
+  if (s.endsWith('news_cooccurrence')) return 'news'
+  return s
+}
+
 // Multi-source consensus upsert. When a pair is already present from a
 // different source, we don't overwrite — we merge. The source column
 // becomes a comma-separated list of contributing sources (e.g.
@@ -115,17 +129,35 @@ export function upsertEdgeOverrideWithConsensus(input: GraphEdgeOverride): {
   }
 
   const priorSources = new Set(existing.source.split(',').map((s) => s.trim()).filter(Boolean))
-  const wasAlreadyMultiSource = priorSources.size > 1
   priorSources.add(input.source)
   const mergedSources = [...priorSources]
-  const consensus = mergedSources.length > 1
+
+  // Consensus requires independent *kinds* of evidence, not merely more
+  // source tags. Every per-ticker chain writes `chain_gen_<FOCUS>`, so an
+  // edge asserted by NVDA's chain and again by AMD's chain accumulated two
+  // tags — and the old `mergedSources.length > 1` test read that as
+  // corroboration, compounding the weight bonus each time. It is one Claude
+  // prompt run repeatedly against one model prior: correlated, not
+  // independent. A live edge had reached nine such "confirmations" and was
+  // pinned at the 1.0 cap.
+  //
+  // Weight feeds edge ranking and is a candidate feature in the
+  // supply-chain event study, so inflating it on self-agreement is not
+  // cosmetic.
+  const classes = new Set(mergedSources.map(sourceClass))
+  const consensus = classes.size > 1
+  const priorClasses = new Set(
+    existing.source.split(',').map((s) => s.trim()).filter(Boolean).map(sourceClass)
+  )
+  const wasAlreadyMultiClass = priorClasses.size > 1
+
   const priorWeight = existing.weight ?? 0
   const newWeight = input.weight ?? 0
   // Consensus bonus: the average of the two scores plus a 0.15 bump, capped
-  // at 1.0. If we were already multi-source, keep the prior weight as the
-  // floor so repeated confirmations never *lower* an edge's weight.
+  // at 1.0. If we already had cross-class agreement, keep the prior weight as
+  // the floor so repeated confirmations never *lower* an edge's weight.
   const combined = consensus ? Math.min(1, (priorWeight + newWeight) / 2 + 0.15) : newWeight
-  const finalWeight = wasAlreadyMultiSource ? Math.max(priorWeight, combined) : combined
+  const finalWeight = wasAlreadyMultiClass ? Math.max(priorWeight, combined) : combined
 
   // Prefer the 10-K note when available, even if news arrived second.
   const isTenK = (s: string): boolean => s === 'sec_10k_concentration'

@@ -1,12 +1,21 @@
 import { getDb } from '../database/connection'
 import { purgeOlderThan } from '../database/articles'
 import { purgeOldNotifications } from '../database/notificationLog'
+import { purgeRoutineFilings } from '../database/secFilings'
 import { purgeStaleReaderCache } from './readerService'
 import { purgeStaleSmartLookups } from './smartLookupService'
 
 // Retention: keep 30 days of non-bookmarked articles. Matches the product spec
 // ("purge articles older than 30 days unless bookmarked").
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+
+// SEC boilerplate (Form 4/3/5/144/424B2/424B5/FWP) is kept only 90 days.
+// refreshFilings upserts SEC's whole "recent" page per symbol per day and
+// nothing ever deleted, so the table grew unbounded — 411k rows and ~65 MB
+// of a 113 MB database on the live copy, 55% of it more than three years
+// old, against an app that never reads past the top 25 per ticker.
+// Material forms are exempt and kept indefinitely.
+const FILINGS_RETENTION_MS = 90 * 24 * 60 * 60 * 1000
 
 // Run daily after the first initial delay, not immediately at boot — the
 // startup path is already busy with feed polls, stock refresh, and model warm.
@@ -43,7 +52,17 @@ export function runMaintenance(): void {
       err instanceof Error ? err.message : err
     )
   }
-  const totalDeleted = deleted + readerDeleted + lookupDeleted + notificationsDeleted
+  let filingsDeleted = 0
+  try {
+    filingsDeleted = purgeRoutineFilings(Date.now() - FILINGS_RETENTION_MS)
+  } catch (err) {
+    console.warn(
+      '[maintenance] purgeRoutineFilings failed:',
+      err instanceof Error ? err.message : err
+    )
+  }
+  const totalDeleted =
+    deleted + readerDeleted + lookupDeleted + notificationsDeleted + filingsDeleted
   if (totalDeleted >= VACUUM_THRESHOLD) {
     try {
       // VACUUM can't run inside a transaction and takes an exclusive lock, but
@@ -69,7 +88,8 @@ export function runMaintenance(): void {
   }
   console.log(
     `[maintenance] purged ${deleted} articles, ${readerDeleted} reader cache, ` +
-      `${lookupDeleted} smart lookups, ${notificationsDeleted} notifications` +
+      `${lookupDeleted} smart lookups, ${notificationsDeleted} notifications, ` +
+      `${filingsDeleted} routine filings` +
       (totalDeleted >= VACUUM_THRESHOLD ? ' (vacuumed)' : '') +
       ` — articles_archive holds ${archived}`
   )

@@ -30,7 +30,7 @@ import {
   buildFilingUrl,
   fetchSubmissions,
   fetchTickerMap,
-  INTERESTING_FORMS
+  MATERIAL_FORMS
 } from './secService'
 import { processRecentTenKs } from './tenKConcentrationService'
 import { dispatchNotification } from './notificationService'
@@ -213,7 +213,11 @@ const NOTIFY_FILING_WINDOW_MS = 24 * 60 * 60 * 1000
 
 function notifyRecentInterestingFilings(symbol: string): void {
   const sym = symbol.toUpperCase()
-  const recent = getFilingsForSymbol(sym, 8, INTERESTING_FORMS)
+  // MATERIAL_FORMS, not INTERESTING_FORMS. This is a LIMIT-8 filedAt-DESC
+  // scan, and for an active filer the eight newest "interesting" rows are
+  // all Form 4 / 424B2 — so the 8-K we actually care about never made it
+  // into the 24h window below.
+  const recent = getFilingsForSymbol(sym, 8, MATERIAL_FORMS)
   if (recent.length === 0) return
   const cutoff = Date.now() - NOTIFY_FILING_WINDOW_MS
   for (const f of recent) {

@@ -22,6 +22,30 @@ const FETCH_TIMEOUT_MS = 15_000
 // filings, insider Forms 3/5 outside of txn history) is stored too but we
 // don't highlight it in the default view — see secFilings.getRecentFilings
 // which filters by form at read time.
+// Forms worth interrupting the user for. Strict subset of INTERESTING_FORMS
+// below, which governs what we *store* and display.
+//
+// The distinction matters because the notify query is a LIMIT-8,
+// filedAt-DESC scan. Filtering it by INTERESTING_FORMS meant that for any
+// active filer the eight most recent rows were all Form 4 and 424B2 —
+// JPM alone has ~28k filings, overwhelmingly those — so a same-day 8-K
+// never entered the 24h window and no filing notification ever fired
+// (notification_log had zero). Form 4/424B2/SC 13G are routine and, against
+// a shared 5/day notification cap, would crowd out everything else anyway.
+export const MATERIAL_FORMS = new Set([
+  '8-K',
+  '8-K/A',
+  '10-Q',
+  '10-Q/A',
+  '10-K',
+  '10-K/A',
+  'DEF 14A',
+  'SC 13D',
+  'SC 13D/A',
+  'S-1',
+  'S-1/A'
+])
+
 export const INTERESTING_FORMS = new Set([
   '8-K',
   '8-K/A',
