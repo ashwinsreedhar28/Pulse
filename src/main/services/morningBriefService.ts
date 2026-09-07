@@ -180,6 +180,8 @@ let inFlight: Promise<BriefPayload | null> | null = null
 export async function refreshMorningBrief(opts: { force?: boolean } = {}): Promise<BriefPayload | null> {
   // Single-flight: a manual click while the boot run is in progress just
   // returns the in-flight promise instead of starting a parallel call.
+  // A forced (user-initiated) refresh still joins rather than duplicating
+  // work — the in-flight run will produce a fresh brief either way.
   if (inFlight) return inFlight
   inFlight = (async (): Promise<BriefPayload | null> => {
     try {
@@ -271,10 +273,38 @@ function broadcastUpdated(): void {
 // Boot scheduler. Fires once per launch BOOT_DELAY_MS after startup; the
 // staleness gate inside refreshMorningBrief decides whether the call
 // actually hits Claude or just returns the cached row.
+// Boot trigger plus a recurring check. This used to be a bare setTimeout,
+// so the brief regenerated exactly once per launch: BRIEF_STALE_AFTER_MS is
+// only consulted when something calls refreshMorningBrief, and nothing did.
+// Leave Pulse open for a week and the "morning brief" was a week old — and
+// morning_briefs is a singleton row, so there was no history to notice it
+// from. The interval is deliberately shorter than the 4h staleness window;
+// refreshMorningBrief no-ops cheaply when the brief is still fresh.
+const REFRESH_CHECK_MS = 30 * 60 * 1000
+
+let briefBootTimer: ReturnType<typeof setTimeout> | null = null
+let briefInterval: ReturnType<typeof setInterval> | null = null
+
 export function scheduleMorningBriefRefresh(): void {
-  setTimeout(() => {
+  stopMorningBriefRefresh()
+  const run = (): void => {
     void refreshMorningBrief().catch((err) => {
-      console.warn('[brief] boot refresh failed:', err instanceof Error ? err.message : err)
+      console.warn('[brief] scheduled refresh failed:', err instanceof Error ? err.message : err)
     })
+  }
+  briefBootTimer = setTimeout(() => {
+    run()
+    briefInterval = setInterval(run, REFRESH_CHECK_MS)
   }, BOOT_DELAY_MS)
+}
+
+export function stopMorningBriefRefresh(): void {
+  if (briefBootTimer) {
+    clearTimeout(briefBootTimer)
+    briefBootTimer = null
+  }
+  if (briefInterval) {
+    clearInterval(briefInterval)
+    briefInterval = null
+  }
 }

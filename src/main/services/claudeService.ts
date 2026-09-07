@@ -1201,3 +1201,72 @@ export async function generateMorningBrief(
     }
   }
 }
+
+// Per-ticker investor brief. Mirrors ollamaService.summarizeTickerNews —
+// same strict prompt, same post-parse guardrails — so the two providers
+// produce interchangeable output.
+//
+// This route exists because tickerSummaryService was hardcoded to Ollama.
+// With aiProvider='claude' and no local model running, its health check
+// failed on every cycle and it wrote a summary=null row each time: 150 rows
+// in the live DB and not one summary. The feature looked populated while
+// being entirely dead.
+export async function summarizeTickerNews(input: {
+  symbol: string
+  companyName: string
+  companyDescription?: string | null
+  headlines: { title: string; summary: string | null; source: string }[]
+}): Promise<{ summary: string | null; relevantCount: number } | null> {
+  if (input.headlines.length === 0) return { summary: null, relevantCount: 0 }
+
+  const bullets = input.headlines
+    .slice(0, 10)
+    .map((h, i) => {
+      const snippet = (h.summary ?? '').replace(/\s+/g, ' ').slice(0, 260)
+      return `${i + 1}. [${h.source}] ${h.title}${snippet ? ` — ${snippet}` : ''}`
+    })
+    .join('\n')
+
+  const profileLine = input.companyDescription
+    ? `\nCompany context (what ${input.symbol} actually does): ${input.companyDescription}`
+    : ''
+
+  const system =
+    `You write an investor brief for a single stock, grounded only in the supplied headlines.${profileLine}\n\n` +
+    `Rules (strict):\n` +
+    `- Only mention facts explicitly stated in the headlines/snippets. Never speculate about what the company "may", "might", "could", or "potentially" do or benefit from.\n` +
+    `- A headline is "relevant" only if it directly concerns ${input.companyName}'s business — its products, customers, suppliers, earnings, regulators, or executives. Generic industry news or articles that merely namecheck "${input.symbol}" are NOT relevant.\n` +
+    `- If relevantCount is 0, return summary as an empty string. Do not write a summary from irrelevant headlines.\n` +
+    `- If relevantCount >= 1, write 2-3 tight sentences (max 70 words) covering the most material news. No preamble, no "here is a summary", no hedging words.\n` +
+    `- Do NOT name specific unrelated companies, products, or events from the headlines that don't concern ${input.symbol}.\n\n` +
+    `Respond in JSON only: {"relevantCount": <integer>, "summary": "<string>"}`
+
+  const raw = await callClaude({
+    model: MODELS.classifier,
+    system,
+    maxTokens: 400,
+    user: `Headlines for ${input.symbol} (${input.companyName}):\n${bullets}`
+  })
+  if (!raw) return null
+
+  try {
+    // Claude may wrap JSON in prose or a fenced block despite the instruction.
+    const start = raw.indexOf('{')
+    const end = raw.lastIndexOf('}')
+    if (start === -1 || end <= start) return null
+    const parsed = JSON.parse(raw.slice(start, end + 1)) as {
+      summary?: unknown
+      relevantCount?: unknown
+    }
+    const summaryStr = typeof parsed.summary === 'string' ? parsed.summary.trim() : ''
+    const relevantCountRaw =
+      typeof parsed.relevantCount === 'number' ? parsed.relevantCount : 0
+    const relevantCount = Math.max(0, Math.min(relevantCountRaw, input.headlines.length))
+    // Same belt-and-braces as the Ollama path: if the model reports nothing
+    // relevant but still wrote prose, trust the count and drop the prose.
+    if (relevantCount === 0) return { summary: null, relevantCount: 0 }
+    return { summary: summaryStr.length > 0 ? summaryStr : null, relevantCount }
+  } catch {
+    return null
+  }
+}

@@ -153,8 +153,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export async function refreshAllFredSeries(): Promise<void> {
-  if (inFlight) return inFlight
+export async function refreshAllFredSeries(force = false): Promise<void> {
+  // A forced (user-initiated) refresh must not silently join an in-flight
+  // scheduled pass that is skipping every series on freshness.
+  if (inFlight && !force) return inFlight
   if (!getPreferences().fredApiKey) {
     console.log('[fred] skip refresh — no API key configured')
     return
@@ -164,12 +166,15 @@ export async function refreshAllFredSeries(): Promise<void> {
       let updated = 0
       let failed = 0
       for (const series of FRED_SERIES) {
-        // Skip if last fetch was within the refresh interval — a manual
-        // restart shouldn't burn fresh API calls. (Caller can pass
-        // force=true via clearing the meta row, but that's an admin path
-        // we don't surface yet.)
+        // Skip if last fetch was within the refresh interval — a scheduled
+        // tick or a restart shouldn't burn fresh API calls.
+        //
+        // `force` exists because the Settings "Refresh" button routes here
+        // and previously hit this skip for up to 3 hours, returning
+        // {ok:true} while doing absolutely nothing. A user-initiated
+        // refresh must actually refresh.
         const meta = getSeriesMeta(series.id)
-        if (meta && Date.now() - meta.lastFetchedAt < REFRESH_INTERVAL_MS / 2) {
+        if (!force && meta && Date.now() - meta.lastFetchedAt < REFRESH_INTERVAL_MS / 2) {
           continue
         }
         // Fetch observations first; if that succeeds and we don't already

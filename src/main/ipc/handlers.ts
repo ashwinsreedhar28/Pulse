@@ -925,7 +925,7 @@ export function registerDbIpc(): void {
   })
   ipcMain.handle('fred:refresh', async () => {
     const { refreshAllFredSeries } = await import('../services/fredService')
-    void refreshAllFredSeries()
+    void refreshAllFredSeries(true)
     return { ok: true }
   })
 

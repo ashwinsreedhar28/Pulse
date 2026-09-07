@@ -1,8 +1,9 @@
 // Thin router between Ollama (local) and Claude (cloud) for the two AI
-// calls that benefit most from model quality: value-chain generation and
-// sector classification. The rest of the Ollama calls (summaries, edge
-// classification, hyper-intelligence, etc.) stay Ollama-only for now —
-// they're cheaper to get wrong and the quality gap is smaller.
+// calls that benefit most from model quality: value-chain generation,
+// sector classification, hyper-intelligence Q&A, and per-ticker news
+// summaries. The remaining Ollama calls (edge classification, etc.) stay
+// Ollama-only for now — they're cheaper to get wrong and the quality gap
+// is smaller.
 //
 // Provider selection per Pulse preferences:
 // - 'auto'  : use Claude when configured, else Ollama. Default.
@@ -16,12 +17,14 @@ import {
   generateCompanyValueChain as claudeChain,
   classifyTickerSectors as claudeClassify,
   answerQuestion as claudeAnswer,
+  summarizeTickerNews as claudeSummarize,
   isClaudeConfigured
 } from './claudeService'
 import {
   generateCompanyValueChain as ollamaChain,
   classifyTickerSectors as ollamaClassify,
   answerQuestion as ollamaAnswer,
+  summarizeTickerNews as ollamaSummarize,
   type GeneratedValueChain,
   type TickerSectorClassification
 } from './ollamaService'
@@ -158,5 +161,34 @@ export async function answerQuestion(
     return { result: viaOllama, provider: 'ollama' }
   }
   const viaOllama = await ollamaAnswer(question, context)
+  return { result: viaOllama, provider: 'ollama' }
+}
+
+// Per-ticker investor brief. Same provider/fallback pattern as the routes
+// above.
+//
+// tickerSummaryService previously called ollamaService.summarizeTickerNews
+// directly and gated on checkOllamaHealth(). With aiProvider='claude' and no
+// local model running, that gate failed every cycle and the service wrote a
+// summary=null row each time — 150 rows in the live DB, zero summaries, and
+// no signal anywhere that the feature was dead.
+export async function summarizeTickerNews(
+  input: Parameters<typeof ollamaSummarize>[0]
+): Promise<{
+  result: { summary: string | null; relevantCount: number } | null
+  provider: AiProviderResolved
+}> {
+  const primary = pickProviderForCall()
+  if (primary === 'claude') {
+    recordClaudeCall()
+    const viaClaude = await claudeSummarize(input)
+    if (viaClaude) return { result: viaClaude, provider: 'claude' }
+    console.warn(
+      `[aiClient] Claude summarizeTickerNews returned null for ${input.symbol}, falling back to Ollama`
+    )
+    const viaOllama = await ollamaSummarize(input)
+    return { result: viaOllama, provider: 'ollama' }
+  }
+  const viaOllama = await ollamaSummarize(input)
   return { result: viaOllama, provider: 'ollama' }
 }

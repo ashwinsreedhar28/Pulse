@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron'
 import { listArticlesForTicker } from '../database/articles'
 import { listTickers } from '../database/tickers'
 import { getTickerSummary, upsertTickerSummary } from '../database/tickerSummaries'
-import { checkOllamaHealth, summarizeTickerNews } from './ollamaService'
+import { summarizeTickerNews } from './aiClient'
 import { getCompanyProfile } from './companyProfileService'
 
 const WINDOW_MS = 24 * 60 * 60 * 1000
@@ -55,28 +55,19 @@ async function refreshOne(tickerId: number, force: boolean): Promise<void> {
     return
   }
 
-  const online = await checkOllamaHealth()
-  if (!online) {
-    // Record the article count so the UI can show "N articles" even when the
-    // LLM is offline — but leave prev.summary intact if we had one.
-    upsertTickerSummary({
-      tickerId,
-      summary: prev?.summary ?? null,
-      articleCount: recent.length,
-      relevantCount: prev?.relevantCount ?? null,
-      generatedAt: Date.now(),
-      lastArticleAt
-    })
-    broadcast(tickerId)
-    return
-  }
+  // Routed through aiClient so this honours the user's aiProvider
+  // preference. It used to call ollamaService directly behind a
+  // checkOllamaHealth() gate — so with aiProvider='claude' and no local
+  // model running, the gate failed every cycle and the branch below wrote a
+  // summary=null row each time. The live DB had 150 such rows and zero
+  // summaries: the table looked populated while the feature was dead.
 
   // Feed the summarizer the company's own description so the model knows what
   // the ticker actually does — shields against hallucinations that extrapolate
   // "may benefit from" claims by anchoring every sentence to the company's
   // real business.
   const profile = getCompanyProfile(ticker.symbol)
-  const result = await summarizeTickerNews({
+  const { result } = await summarizeTickerNews({
     symbol: ticker.symbol,
     companyName: ticker.companyName ?? ticker.symbol,
     companyDescription: profile?.description ?? null,
@@ -87,7 +78,8 @@ async function refreshOne(tickerId: number, force: boolean): Promise<void> {
     }))
   })
 
-  // `result === null` is a hard failure (Ollama crashed / HTTP error) — keep
+  // `result === null` is a hard failure from both providers (no key, model
+  // down, HTTP error) — keep
   // any previous summary so we don't wipe a valid brief on transient trouble.
   // `result.summary === null` with a valid relevantCount=0 is the "nothing
   // material" signal; we store null to show the empty state in the UI.
