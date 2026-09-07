@@ -201,11 +201,69 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
   }, [visible.nodes, effectiveSizeBy, degree])
 
   // The expensive part, and the only part that must not run on camera moves.
+  //
+  // Split by connectivity. The graph now includes every symbol with a sector
+  // assignment (~1,300) so the sector filter reflects the tracked universe,
+  // but only ~286 of those have edges. Feeding all of them to an O(n^2)
+  // simulation would be ~20x the pair work for no benefit: an isolated node
+  // has nothing pulling it anywhere, so the sim would only push it outward
+  // until the trimmed scaling squashed the connected core back into the
+  // middle — the same failure mode FIT_TRIM exists to prevent.
+  //
+  // So connected symbols get the real simulation, and isolated ones are
+  // placed on a shell around it, grouped by sector. That keeps the layout at
+  // its measured ~85ms and reads correctly: a structured core surrounded by
+  // the wider universe.
   const layout = useMemo(() => {
-    const ids = visible.nodes.map((n) => n.symbol)
+    const connectedIds = new Set<string>()
+    for (const e of visible.edges) {
+      connectedIds.add(e.from)
+      connectedIds.add(e.to)
+    }
+    const connected = visible.nodes.filter((n) => connectedIds.has(n.symbol))
+    const isolated = visible.nodes.filter((n) => !connectedIds.has(n.symbol))
+
     const edges: LayoutEdge[] = visible.edges.map((e) => ({ from: e.from, to: e.to }))
-    const pos = runForceLayout3D(ids, edges)
-    return new Map(pos.map((p) => [p.id, p]))
+    const pos = runForceLayout3D(
+      connected.map((n) => n.symbol),
+      edges
+    )
+    const map = new Map(pos.map((p) => [p.id, p]))
+
+    if (isolated.length > 0) {
+      // Group isolated nodes by sector so the outer shell is legible rather
+      // than a uniform haze — same-sector companies sit together.
+      const bySector = new Map<string, MarketGraphNode[]>()
+      for (const n of isolated) {
+        const key = n.topSectorId ?? 'unknown'
+        const arr = bySector.get(key)
+        if (arr) arr.push(n)
+        else bySector.set(key, [n])
+      }
+      const sectorKeys = [...bySector.keys()].sort()
+      // Shell radius sits outside the connected core, which the 3D layout
+      // normalizes to roughly unit radius.
+      const SHELL = 1.9
+      sectorKeys.forEach((key, si) => {
+        const group = bySector.get(key)!
+        // Each sector gets its own band of latitude, and members spread
+        // around it — a coarse spherical bucketing, cheap and stable.
+        const lat = ((si + 0.5) / sectorKeys.length - 0.5) * Math.PI * 0.85
+        group.forEach((n, i) => {
+          const lon = (i / Math.max(group.length, 1)) * Math.PI * 2
+          // Slight radial jitter so members of a large sector don't land on a
+          // perfect ring, which reads as an artefact rather than data.
+          const r = SHELL + ((i % 5) - 2) * 0.06
+          map.set(n.symbol, {
+            id: n.symbol,
+            x: Math.cos(lat) * Math.cos(lon) * r,
+            y: Math.sin(lat) * r,
+            z: Math.cos(lat) * Math.sin(lon) * r
+          })
+        })
+      })
+    }
+    return map
   }, [visible.nodes, visible.edges])
 
   const matches = useMemo(() => {

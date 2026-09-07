@@ -683,6 +683,45 @@ export function registerDbIpc(): void {
   })
 
   // ---- Research (academia search + multi-paper synthesis) -----------------
+  // Papers only — no synthesis. research:search below blocks on a Sonnet
+  // call at maxTokens 4000 before returning ANYTHING, which is 30-60s of
+  // empty UI and reads as "search is broken". The renderer now fetches
+  // papers first and the brief separately, so cards appear in ~2s.
+  ipcMain.handle('research:searchPapersOnly', async (_e, query: string) => {
+    const { searchPapers } = await import('../services/researchService')
+    try {
+      return await searchPapers(query)
+    } catch (err) {
+      console.warn(
+        '[research] searchPapersOnly failed:',
+        err instanceof Error ? err.message : err
+      )
+      return []
+    }
+  })
+
+  // Synthesis for an already-fetched paper set. Returns null rather than
+  // throwing when Claude is unavailable, so a failed brief never costs the
+  // user their search results.
+  ipcMain.handle(
+    'research:synthesize',
+    async (_e, query: string, papers: unknown) => {
+      const { synthesizeResearchBrief } = await import('../services/researchService')
+      try {
+        return await synthesizeResearchBrief(
+          query,
+          Array.isArray(papers) ? papers : []
+        )
+      } catch (err) {
+        console.warn(
+          '[research] synthesize failed:',
+          err instanceof Error ? err.message : err
+        )
+        return null
+      }
+    }
+  )
+
   ipcMain.handle('research:search', async (_e, query: string) => {
     const { searchAndSynthesize } = await import('../services/researchService')
     return searchAndSynthesize(query)

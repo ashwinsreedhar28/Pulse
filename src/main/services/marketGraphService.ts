@@ -69,14 +69,35 @@ export function getMarketGraph(): MarketGraphPayload {
   const nodeRows = listNodeOverrides()
   const edgeRows = listEdgeOverrides()
 
-  // Union of tagged nodes and every edge endpoint: an edge can reference a
-  // symbol that was never given a node override, and dropping those would
-  // silently delete edges from the picture.
+  // Node set is the union of three things:
+  //   1. symbols with a node override (the curated chain nodes)
+  //   2. every edge endpoint — an edge can reference a symbol that was never
+  //      given an override, and dropping those would delete edges from the
+  //      picture
+  //   3. every symbol with a sector assignment
+  //
+  // (3) is what makes the sector filter meaningful. Without it the graph only
+  // ever showed the ~286 symbols reachable from the curated chains, so the
+  // per-sector counts in the UI described the chain graph rather than the
+  // tracked universe — Information Technology 146, everything else under 25,
+  // even after the sector universe seed added 1,100+ assignments.
+  //
+  // Most of (3) has no edges yet. The renderer lays those out separately
+  // rather than feeding them to the O(n^2) force simulation.
   const symbols = new Set<string>()
   for (const n of nodeRows) symbols.add(n.symbol.toUpperCase())
   for (const e of edgeRows) {
     symbols.add(e.fromSymbol.toUpperCase())
     symbols.add(e.toSymbol.toUpperCase())
+  }
+  try {
+    for (const r of getDb()
+      .prepare<[], { symbol: string }>(`SELECT DISTINCT symbol FROM ticker_sectors`)
+      .all()) {
+      symbols.add(r.symbol.toUpperCase())
+    }
+  } catch {
+    // ticker_sectors missing — fall back to the chain-only universe.
   }
   const symbolList = [...symbols]
 

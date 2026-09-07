@@ -327,14 +327,18 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
         /* silent — recents are nice-to-have */
       })
     try {
-      const result = await window.api.research.search(q)
-      setView({
-        kind: 'results',
-        query: q,
-        brief: result.brief,
-        papers: result.papers,
-        topicId: null
-      })
+      // Two phases. research:search did the S2 lookup AND a Sonnet synthesis
+      // at maxTokens 4000 before returning anything, so the results list sat
+      // empty for 30-60s and looked like a broken search. Papers now render
+      // as soon as S2 answers (~2s) and the brief fills in behind them.
+      const papers = await window.api.research.searchPapersOnly(q)
+      setView({ kind: 'results', query: q, brief: null, papers, topicId: null })
+      if (papers.length === 0) return
+
+      const brief = await window.api.research.synthesize(q, papers)
+      // Only apply the brief if the user is still looking at this query —
+      // a slow synthesis must not overwrite a newer search's results.
+      setView((prev) => (prev.query === q && prev.kind === 'results' ? { ...prev, brief } : prev))
     } catch (err) {
       console.warn('[research] search failed:', err)
       setView({ kind: 'idle', query: q, brief: null, papers: [], topicId: null })
@@ -549,7 +553,15 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
           )}
           {view.kind === 'loading' && (
             <div className="mt-12 text-center text-[12px] text-zinc-500">
-              Searching Semantic Scholar + synthesizing brief… (typically 5-15s)
+              Searching Semantic Scholar…
+            </div>
+          )}
+
+          {/* Papers are already on screen at this point; the brief arrives
+              behind them. Say so rather than leaving a silent gap. */}
+          {view.kind === 'results' && !view.brief && view.papers.length > 0 && (
+            <div className="mb-3 rounded border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-400">
+              Synthesizing brief across {view.papers.length} papers… (~20-40s)
             </div>
           )}
 

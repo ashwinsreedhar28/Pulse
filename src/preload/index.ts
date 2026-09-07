@@ -1935,6 +1935,12 @@ const api = {
     // synthesis. One S2 batch call.
     hydratePapers: (paperIds: string[]): Promise<ResearchPaper[]> =>
       invoke<ResearchPaper[]>('research:hydratePapers', paperIds),
+    // Papers without synthesis — returns in ~2s instead of 30-60s.
+    searchPapersOnly: (query: string): Promise<ResearchPaper[]> =>
+      invoke<ResearchPaper[]>('research:searchPapersOnly', query),
+    // Brief for an already-fetched paper set. Null when unavailable.
+    synthesize: (query: string, papers: ResearchPaper[]): Promise<ResearchBriefPayload | null> =>
+      invoke<ResearchBriefPayload | null>('research:synthesize', query, papers),
     // SPECTER2 nearest neighbours over the local library.
     similar: (paperId: string, limit?: number): Promise<SimilarPaper[]> =>
       invoke<SimilarPaper[]>('research:similar', paperId, limit),
