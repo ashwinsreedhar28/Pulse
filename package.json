@@ -15,7 +15,8 @@
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
     "lint": "tsc --noEmit",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.2",
@@ -38,7 +39,7 @@
   "build": {
     "appId": "com.ashwin.pulse",
     "productName": "Pulse",
-    "copyright": "© 2026 Ashwin Sreedhar",
+    "copyright": "\u00a9 2026 Ashwin Sreedhar",
     "directories": {
       "buildResources": "resources",
       "output": "dist"
