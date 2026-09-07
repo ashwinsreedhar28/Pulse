@@ -1730,5 +1730,71 @@ export const migrations: Migration[] = [
           ON ticker_fundamentals(symbol, tsMs DESC);
       `)
     }
+  },
+  {
+    version: 56,
+    name: 'article_url_dedup',
+    // Cross-feed deduplication.
+    //
+    // The dedup index has always been (feedId, COALESCE(guid, url)), which
+    // only prevents a *single feed* re-inserting the same item. Pulse now
+    // carries ~150 per-ticker Yahoo/Nasdaq feeds, so one syndicated story
+    // lands once per feed that carries it: measured on the live DB, 813 of
+    // 4,153 rows (19.6%) shared a URL with another row, and one Nasdaq
+    // market-wrap was stored 8 times.
+    //
+    // The cost is not just storage. Every copy is scored independently
+    // (burning the same LLM budget repeatedly), and graphCandidatesService's
+    // co-occurrence pass counts each copy as separate evidence — so a single
+    // market-wrap mentioning two tickers can on its own clear
+    // MIN_COOCCURRENCE and manufacture a graph edge. It would equally
+    // inflate every event-study N.
+    //
+    // normalizedUrl is the dedup key going forward. Existing rows backfill
+    // to their raw url — good enough, since exact-duplicate URLs are what
+    // the measurement found, and anything older churns out within 30 days.
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE articles ADD COLUMN normalizedUrl TEXT;
+        ALTER TABLE articles_archive ADD COLUMN normalizedUrl TEXT;
+
+        UPDATE articles SET normalizedUrl = url WHERE normalizedUrl IS NULL;
+        UPDATE articles_archive SET normalizedUrl = url WHERE normalizedUrl IS NULL;
+
+        -- Collapse existing duplicates, keeping the earliest row (the first
+        -- feed to carry the story). Cascades clean up article_ticker_matches
+        -- and the FTS delete trigger fires normally.
+        DELETE FROM articles
+         WHERE id NOT IN (SELECT MIN(id) FROM articles GROUP BY normalizedUrl);
+
+        -- The archive has no cascade by design, so it needs the same pass.
+        DELETE FROM articles_archive
+         WHERE id NOT IN (SELECT MIN(id) FROM articles_archive GROUP BY normalizedUrl);
+
+        DELETE FROM article_ticker_matches_archive
+         WHERE articleId NOT IN (SELECT id FROM articles_archive);
+
+        -- Enforced from here on, so INSERT OR IGNORE in upsertArticles drops
+        -- a cross-feed repeat without any extra query.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_normalized_url
+          ON articles(normalizedUrl);
+        CREATE INDEX IF NOT EXISTS idx_articles_archive_normalized_url
+          ON articles_archive(normalizedUrl);
+
+        -- The v54 archive trigger predates this column, so it would leave
+        -- normalizedUrl NULL on every future archived row. Recreate it.
+        DROP TRIGGER IF EXISTS articles_archive_ai;
+        CREATE TRIGGER articles_archive_ai
+        AFTER INSERT ON articles BEGIN
+          INSERT OR IGNORE INTO articles_archive
+            (id, feedId, guid, title, summary, url, normalizedUrl, publishedAt,
+             urgencyScore, urgencyReason, scoredAt, domain, imageURL, archivedAt)
+          VALUES (new.id, new.feedId, new.guid, new.title, new.summary, new.url,
+                  new.normalizedUrl, new.publishedAt, new.urgencyScore,
+                  new.urgencyReason, new.scoredAt, new.domain, new.imageURL,
+                  CAST(strftime('%s','now') AS INTEGER) * 1000);
+        END;
+      `)
+    }
   }
 ]

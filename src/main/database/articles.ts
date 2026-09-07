@@ -1,4 +1,5 @@
 import { getDb } from './connection'
+import { normalizeArticleUrl } from '../services/urlNormalize'
 import type { Domain } from './categories'
 
 export interface Article {
@@ -185,10 +186,14 @@ export interface InsertedArticle {
 export function upsertArticles(rows: UpsertArticleInput[]): InsertedArticle[] {
   if (rows.length === 0) return []
   const db = getDb()
+  // normalizedUrl carries a UNIQUE index (v56), so INSERT OR IGNORE now also
+  // drops a story already ingested from a different feed — previously only
+  // (feedId, COALESCE(guid,url)) was enforced, which let one syndicated
+  // article in once per feed carrying it.
   const stmt = db.prepare<unknown[], InsertedArticle>(
     `INSERT OR IGNORE INTO articles
-       (feedId, guid, title, summary, url, publishedAt, domain, imageURL, urgencyScore, urgencyReason, scoredAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (feedId, guid, title, summary, url, normalizedUrl, publishedAt, domain, imageURL, urgencyScore, urgencyReason, scoredAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING id, feedId, title, summary, url, urgencyScore, urgencyReason`
   )
   const txn = db.transaction((batch: UpsertArticleInput[]) => {
@@ -200,6 +205,7 @@ export function upsertArticles(rows: UpsertArticleInput[]): InsertedArticle[] {
         r.title,
         r.summary,
         r.url,
+        normalizeArticleUrl(r.url),
         r.publishedAt,
         r.domain,
         r.imageURL ?? null,
