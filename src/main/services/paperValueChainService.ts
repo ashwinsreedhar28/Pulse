@@ -42,14 +42,14 @@ import {
   type PaperValueChainEdgeCitation,
   type PaperValueChainNode,
   type PaperValueChainRelationship,
-  type PaperValueChainStage
+  type PaperValueChainStage,
+  setPaperValueChainStatus
 } from '../database/paperValueChains'
 import { getPreferences } from '../database/preferences'
 import { extractFocalPaperIntro } from './paperPdfExtractor'
 import {
   getPaperChainEnrichment,
-  upsertPaperChainEnrichment,
-  deletePaperChainEnrichment
+  upsertPaperChainEnrichment
 } from '../database/paperChainEnrichments'
 import { callClaude, CLAUDE_MODELS } from './claudeService'
 import { recordClaudeCall } from './aiClient'
@@ -790,7 +790,8 @@ export interface GeneratePaperValueChainResult {
 }
 
 export async function generatePaperValueChain(
-  paperId: string
+  paperId: string,
+  opts: { forceEnrichment?: boolean } = {}
 ): Promise<GeneratePaperValueChainResult> {
   const id = paperId.trim()
   if (!id) {
@@ -799,7 +800,11 @@ export async function generatePaperValueChain(
 
   // Mark pending so the renderer can show a working state without
   // polling — it can subscribe to the chain row + see status flip.
-  setPaperValueChain({ focusPaperId: id, status: 'pending', graph: null })
+  // Status-only: the previous graph must survive a failed regen. This used
+  // to call setPaperValueChain with graph:null, which nulled graphJson and
+  // deleted every edge row *before* the first network call, so any S2 rate
+  // limit below destroyed a perfectly good cached chain.
+  setPaperValueChainStatus(id, 'pending')
 
   let totalCalls = 0
   let focal: S2Paper | null = null
@@ -810,7 +815,7 @@ export async function generatePaperValueChain(
     totalCalls += focalRes.callsMade
     focal = focalRes.data
     if (!focal?.paperId || !focal.title) {
-      setPaperValueChain({ focusPaperId: id, status: 'error', graph: null })
+      setPaperValueChainStatus(id, 'error')
       return {
         ok: false,
         chain: null,
@@ -828,7 +833,7 @@ export async function generatePaperValueChain(
     citations = citationsRes.data ?? []
   } catch (err) {
     if (err instanceof S2RateLimitError) {
-      setPaperValueChain({ focusPaperId: id, status: 'error', graph: null })
+      setPaperValueChainStatus(id, 'error')
       return {
         ok: false,
         chain: null,
@@ -836,7 +841,7 @@ export async function generatePaperValueChain(
         reason: 'rate_limited'
       }
     }
-    setPaperValueChain({ focusPaperId: id, status: 'error', graph: null })
+    setPaperValueChainStatus(id, 'error')
     return { ok: false, chain: null, s2CallsUsed: totalCalls, reason: 'empty' }
   }
 
@@ -876,7 +881,7 @@ export async function generatePaperValueChain(
   // Focal node always first.
   const focalNode = nodeFromS2(focal, STAGE_IDS.focal)
   if (!focalNode) {
-    setPaperValueChain({ focusPaperId: id, status: 'error', graph: null })
+    setPaperValueChainStatus(id, 'error')
     return {
       ok: false,
       chain: null,
@@ -974,7 +979,8 @@ export async function generatePaperValueChain(
   const enriched = await maybeEnrichWithFocalPaperReading({
     baseChain,
     focal,
-    refsMeta: refsForEnrichment
+    refsMeta: refsForEnrichment,
+    force: opts.forceEnrichment === true
   })
 
   // Phase 3C — bilateral reinforcement on the post-enrichment chain.
@@ -1051,13 +1057,18 @@ export function getCachedPaperValueChain(
 export async function regeneratePaperValueChain(
   paperId: string
 ): Promise<GeneratePaperValueChainResult> {
-  // Invalidate the Haiku enrichment cache so a regen always re-runs the
-  // PDF read + Haiku call against the current S2 data. Generate path
-  // does NOT delete this on its own — that's why getCachedPaperValueChain
-  // can return an enriched chain instantly without paying the Haiku
-  // cost on every renderer mount.
-  deletePaperChainEnrichment(paperId.trim())
-  return generatePaperValueChain(paperId)
+  // A regen must re-run the PDF read + Haiku call against current S2 data,
+  // so it bypasses the 90-day enrichment cache. The normal generate path
+  // still reads that cache, which is what lets getCachedPaperValueChain
+  // return an enriched chain instantly without re-paying the Haiku cost.
+  //
+  // This used to call deletePaperChainEnrichment() first. That made a failed
+  // regen strictly destructive: S2 rate-limiting is the common failure, and
+  // the user lost the paid enrichment merely for having clicked. Forcing
+  // instead of deleting is equivalent on success — the enrichment row is
+  // upserted — and leaves the prior enrichment intact on failure, where it
+  // still pairs with the prior graph that setPaperValueChainStatus preserves.
+  return generatePaperValueChain(paperId.trim(), { forceEnrichment: true })
 }
 
 // =====================================================================
@@ -1219,12 +1230,16 @@ async function maybeEnrichWithFocalPaperReading(input: {
   baseChain: PaperValueChain
   focal: S2Paper
   refsMeta: RefMeta[]
+  // Set by an explicit regen: skip the cache read so the Haiku pass runs
+  // against current S2 data. The row is upserted on success, so forcing
+  // overwrites it — no pre-emptive delete, and therefore nothing lost if
+  // the regen fails before it gets here.
+  force?: boolean
 }): Promise<EnrichmentOutcome> {
   const focusId = input.baseChain.focusPaperId
 
-  // Cache check — 90-day TTL. A regen path deletes this row before
-  // calling generate, so a hit here means "no regen since enrichment."
-  const cached = getPaperChainEnrichment(focusId)
+  // Cache check — 90-day TTL, bypassed on a forced regen.
+  const cached = input.force === true ? null : getPaperChainEnrichment(focusId)
   if (cached && Date.now() - cached.enrichedAt < ENRICHMENT_CACHE_TTL_MS) {
     return {
       chain: cached.enrichedGraph,

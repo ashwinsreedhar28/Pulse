@@ -217,6 +217,35 @@ function hydrate(row: RawRow): PaperValueChainRow {
   }
 }
 
+// Status-only transition that PRESERVES any existing graph and edges.
+//
+// setPaperValueChain below is a full replace: passing graph:null nulls
+// graphJson and deletes every denormalized edge row. Generation used it to
+// flag 'pending' before making any network call, so a regen that then hit an
+// S2 rate limit destroyed the previously-good chain — a single click while
+// throttled lost work that had already been paid for.
+//
+// The INSERT half seeds a genuinely new row; the ON CONFLICT half touches
+// only status/updatedAt, leaving graphJson, generatedAt and the edge rows
+// exactly as they were.
+export function setPaperValueChainStatus(
+  focusPaperId: string,
+  status: PaperValueChainStatus
+): void {
+  const focus = focusPaperId.trim()
+  if (!focus) throw new Error('setPaperValueChainStatus: empty focusPaperId')
+  getDb()
+    .prepare(
+      `INSERT INTO paper_value_chains
+         (focusPaperId, status, graphJson, generatedAt, updatedAt)
+       VALUES (?, ?, NULL, NULL, ?)
+       ON CONFLICT(focusPaperId) DO UPDATE SET
+         status = excluded.status,
+         updatedAt = excluded.updatedAt`
+    )
+    .run(focus, status, Date.now())
+}
+
 export function setPaperValueChain(input: {
   focusPaperId: string
   status: PaperValueChainStatus

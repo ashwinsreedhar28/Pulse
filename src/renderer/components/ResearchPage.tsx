@@ -265,20 +265,44 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
     setTopics(list)
   }, [])
 
+  // The onTopicUpdated subscription below is registered once (deps are
+  // [reloadTopics], which is stable). Reading `view` directly inside its
+  // callback captured the mount-time value forever — always
+  // {kind:'idle', topicId:null} — so the match never succeeded and the
+  // brief never arrived. Since refreshCurrent sets kind:'loading' and then
+  // waits for exactly this callback, every topic refresh spun indefinitely.
+  // The eslint-disable on the old effect is what kept that hidden.
+  const viewRef = useRef(view)
+  useEffect(() => {
+    viewRef.current = view
+  }, [view])
+
   useEffect(() => {
     void reloadTopics()
     const unsub = window.api.research.onTopicUpdated((topicId) => {
       void reloadTopics()
-      // If we're viewing this topic, refresh the brief automatically.
-      if (view.kind === 'topic' && view.topicId === topicId) {
-        void window.api.research.getBrief(topicId).then((row) => {
-          if (!row) return
-          setView((prev) => ({ ...prev, brief: row.payload }))
+      // Match on topicId alone, not kind. refreshCurrent has already moved
+      // us to kind:'loading' by the time this fires, so a `kind === 'topic'`
+      // test would still miss — and clearing 'loading' is the whole point.
+      if (viewRef.current.topicId !== topicId) return
+      void window.api.research
+        .getBrief(topicId)
+        .then((row) => {
+          if (!row) {
+            // Nothing came back; drop out of 'loading' rather than hang.
+            setView((prev) => (prev.topicId === topicId ? { ...prev, kind: 'topic' } : prev))
+            return
+          }
+          setView((prev) =>
+            prev.topicId === topicId ? { ...prev, kind: 'topic', brief: row.payload } : prev
+          )
         })
-      }
+        .catch((err) => {
+          console.warn('[research] getBrief after topic update failed:', err)
+          setView((prev) => (prev.topicId === topicId ? { ...prev, kind: 'topic' } : prev))
+        })
     })
     return unsub
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadTopics])
 
   useEffect(() => {
@@ -386,9 +410,17 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
 
   const refreshCurrent = async (): Promise<void> => {
     if (view.topicId !== null) {
+      const topicId = view.topicId
       setView((prev) => ({ ...prev, kind: 'loading' }))
-      await window.api.research.refreshTopic(view.topicId)
-      // Brief lands via onTopicUpdated.
+      try {
+        await window.api.research.refreshTopic(topicId)
+        // Brief lands via onTopicUpdated, which clears 'loading'.
+      } catch (err) {
+        // Without this the spinner is permanent: nothing else clears
+        // 'loading' when the refresh itself fails.
+        console.warn('[research] refreshTopic failed:', err)
+        setView((prev) => (prev.topicId === topicId ? { ...prev, kind: 'topic' } : prev))
+      }
     } else {
       await runSearch(view.query)
     }
