@@ -36,15 +36,26 @@ def db_path() -> Path:
     return p
 
 
-def connect() -> sqlite3.Connection:
+def connect(read_only: bool = False) -> sqlite3.Connection:
     """Open a connection with the trading-system tables bootstrapped.
 
-    `detect_types` enables sqlite3 to parse INTEGER timestamps as ints rather
-    than promoting to int64-safe Python types automatically; we leave it
-    default since Pulse stores Unix-ms epochs as plain INTEGER.
+    Pulse runs this same file in WAL mode from the Electron main process, so
+    a busy_timeout is required: without it any write that overlaps a Pulse
+    checkpoint fails immediately with "database is locked" rather than
+    waiting. 30s is generous but these are batch scripts, not interactive.
+
+    read_only=True opens via URI mode and skips the bootstrap. Use it for
+    pure analysis passes so a buggy script cannot corrupt the live database.
     """
+    if read_only:
+        conn = sqlite3.connect(f"file:{db_path()}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 30000")
+        return conn
+
     conn = sqlite3.connect(str(db_path()))
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
     _bootstrap_trading_tables(conn)
     return conn
@@ -74,8 +85,12 @@ def _bootstrap_trading_tables(conn: sqlite3.Connection) -> None:
     # A1.2 — event-study output. One row per (article, ticker, horizon).
     cur.execute(
         """
+        -- FK targets articles_archive, NOT articles. Pulse purges `articles`
+        -- at 30 days; pointing at it would silently delete every result row
+        -- computed more than a month ago, which is precisely the history an
+        -- event study needs. articles_archive is never purged (migration v54).
         CREATE TABLE IF NOT EXISTS trading_event_study_results (
-            articleId INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+            articleId INTEGER NOT NULL REFERENCES articles_archive(id) ON DELETE CASCADE,
             symbol TEXT NOT NULL,
             horizon TEXT NOT NULL CHECK (horizon IN ('1h', '4h', '1d', '5d')),
             t0Ms INTEGER NOT NULL,
@@ -145,8 +160,10 @@ def _bootstrap_trading_tables(conn: sqlite3.Connection) -> None:
     # incrementally extend coverage instead of re-scraping.
     cur.execute(
         """
+        -- Same reasoning as above: audit results must outlive the 30-day
+        -- purge of `articles`.
         CREATE TABLE IF NOT EXISTS trading_article_pubdate_audit (
-            articleId INTEGER PRIMARY KEY REFERENCES articles(id) ON DELETE CASCADE,
+            articleId INTEGER PRIMARY KEY REFERENCES articles_archive(id) ON DELETE CASCADE,
             scrapedPubDateMs INTEGER,
             scrapeMethod TEXT,
             scrapeOk INTEGER NOT NULL CHECK (scrapeOk IN (0, 1)),
@@ -157,3 +174,74 @@ def _bootstrap_trading_tables(conn: sqlite3.Connection) -> None:
     )
 
     conn.commit()
+
+
+# --- Pulse data readers -----------------------------------------------------
+#
+# Read from articles_archive rather than articles. `articles` is purged at 30
+# days, so any longitudinal query against it silently sees only the last
+# month; the archive (migration v54) keeps everything and carries the same
+# columns plus normalizedUrl.
+
+
+def load_events(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """(article, ticker) pairs eligible for an event study.
+
+    Excludes the `__none__` sentinel, which marks "classified, no ticker
+    matched" and is roughly half of the matches table.
+    """
+    return conn.execute(
+        """
+        SELECT a.id            AS articleId,
+               a.feedId        AS feedId,
+               a.title         AS title,
+               a.publishedAt   AS publishedAt,
+               a.scoredAt      AS scoredAt,
+               a.urgencyScore  AS urgencyScore,
+               a.domain        AS domain,
+               m.symbol        AS symbol,
+               m.strength      AS strength
+          FROM articles_archive a
+          JOIN article_ticker_matches_archive m ON m.articleId = a.id
+         WHERE m.symbol <> '__none__'
+           AND a.publishedAt IS NOT NULL
+         ORDER BY a.publishedAt
+        """
+    ).fetchall()
+
+
+def load_bars(
+    conn: sqlite3.Connection, symbol: str, interval: str = "1d"
+) -> list[sqlite3.Row]:
+    """OHLCV from Pulse's own market_bars (migration v55).
+
+    Preferred over yfinance where coverage allows: the rows are already local,
+    cost no request, and for 1-minute data they are the only copy that will
+    ever exist (Yahoo serves roughly 30 days of 1m history).
+    """
+    try:
+        return conn.execute(
+            """
+            SELECT tsMs, open, high, low, close, volume
+              FROM market_bars
+             WHERE symbol = ? AND intervalLabel = ?
+             ORDER BY tsMs
+            """,
+            (symbol.upper(), interval),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+
+
+def bar_coverage(conn: sqlite3.Connection) -> dict[str, int]:
+    """Row and symbol counts per interval, for reporting what is runnable."""
+    try:
+        rows = conn.execute(
+            """
+            SELECT intervalLabel, COUNT(*) AS rows, COUNT(DISTINCT symbol) AS symbols
+              FROM market_bars GROUP BY intervalLabel
+            """
+        ).fetchall()
+        return {r["intervalLabel"]: {"rows": r["rows"], "symbols": r["symbols"]} for r in rows}
+    except sqlite3.OperationalError:
+        return {}
