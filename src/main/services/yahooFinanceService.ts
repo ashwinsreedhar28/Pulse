@@ -2,6 +2,9 @@
 // Doc (unofficial): GET /v8/finance/chart/{SYMBOL}?interval=...&range=...
 // Returns timestamp[] + indicators.quote[0].close[] — we map those to {t, v} points.
 
+import { persistNewBars, upsertBars, type BarInterval, type MarketBar } from '../database/marketBars'
+import { insertFundamentalsSnapshot } from '../database/tickerFundamentals'
+
 const YAHOO_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart/'
 const YAHOO_QUOTE_SUMMARY = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary/'
 const YAHOO_OPTIONS_BASE = 'https://query1.finance.yahoo.com/v7/finance/options/'
@@ -156,6 +159,71 @@ export async function getHistory(symbol: string, range: HistoryRange): Promise<H
   return points
 }
 
+// Full-OHLCV history fetch, for backfilling market_bars.
+//
+// Distinct from getHistory() above, which extracts only `close` and picks
+// chart-friendly intervals (MAX gives monthly bars). Backfill needs real
+// open/high/low/volume at a fixed interval.
+//
+// Writes through upsertBars rather than persistNewBars on purpose: backfill
+// lands bars *older* than the live high-water mark, which persistNewBars
+// exists precisely to filter out.
+//
+// Yahoo's retention by interval is the constraint that shapes callers:
+//   1d  — effectively unlimited
+//   1h  — ~730 days
+//   1m  — ~30 days (which is why the live poll persists them minute by minute)
+export async function backfillBars(
+  symbol: string,
+  intervalLabel: BarInterval,
+  range: string
+): Promise<number> {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return 0
+  const url = `${YAHOO_BASE}${encodeURIComponent(sym)}?interval=${intervalLabel}&range=${range}`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+      signal: controller.signal
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const json = (await res.json()) as QuoteChartResponse
+    const result = json.chart.result?.[0]
+    const ts = result?.timestamp ?? []
+    const q = result?.indicators?.quote?.[0]
+    if (ts.length === 0 || !q) return 0
+
+    const num = (v: number | null | undefined): number | null =>
+      typeof v === 'number' && Number.isFinite(v) ? v : null
+    const bars: MarketBar[] = []
+    for (let i = 0; i < ts.length; i++) {
+      const c = num(q.close?.[i])
+      if (c === null) continue // no trades that period — a stored null would fake a gap
+      bars.push({
+        symbol: sym,
+        intervalLabel,
+        tsMs: ts[i] * 1000,
+        open: num(q.open?.[i]),
+        high: num(q.high?.[i]),
+        low: num(q.low?.[i]),
+        close: c,
+        volume: num(q.volume?.[i])
+      })
+    }
+    return upsertBars(bars)
+  } catch (err) {
+    console.warn(
+      `[yahoo] backfill ${sym} ${intervalLabel}/${range} failed:`,
+      err instanceof Error ? err.message : err
+    )
+    return 0
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export interface Fundamentals {
   peRatio: number | null
   forwardPE: number | null
@@ -300,6 +368,19 @@ export async function getFundamentals(symbol: string): Promise<Fundamentals | nu
     fetchedAt: Date.now()
   }
   fundamentalsCache.set(sym, { value })
+
+  // Snapshot to disk alongside the RAM cache. marketCap is what sizes nodes
+  // in the market graph and buckets symbols by size in the event study, and
+  // a 30-minute in-memory cache gives neither of those anything to read.
+  // Best-effort: a write failure must not cost the caller its fundamentals.
+  try {
+    insertFundamentalsSnapshot(sym, value)
+  } catch (err) {
+    console.warn(
+      '[yahoo] fundamentals persist failed:',
+      err instanceof Error ? err.message : err
+    )
+  }
   return value
 }
 
@@ -1621,6 +1702,43 @@ async function fetchQuoteOne(symbol: string): Promise<StockQuote> {
       }
     }
     void postTimeSec // kept for symmetry with fetchExtendedOne; not surfaced.
+
+    // Persist the minute bars we just paid for. Yahoo hands us a full day of
+    // OHLCV on every poll and this function historically kept two numbers
+    // from it; 1-minute history is only retrievable for ~30 days, so a bar
+    // not written here is gone for good. persistNewBars filters against a
+    // per-symbol high-water mark, so steady state is ~1 row per symbol per
+    // poll rather than all ~390.
+    //
+    // Never allowed to break the quote path: a DB error here should cost a
+    // bar, not a price tick.
+    try {
+      const highs = quote?.high ?? []
+      const lows = quote?.low ?? []
+      const vols = quote?.volume ?? []
+      const bars: MarketBar[] = []
+      for (let i = 0; i < ts.length; i++) {
+        const c = closes[i]
+        // A null close means Yahoo emitted a placeholder for a minute with
+        // no trades. Storing it would create fake gaps in any return series.
+        if (c === null || c === undefined || !Number.isFinite(c)) continue
+        const num = (v: number | null | undefined): number | null =>
+          typeof v === 'number' && Number.isFinite(v) ? v : null
+        bars.push({
+          symbol: sym,
+          intervalLabel: '1m',
+          tsMs: ts[i] * 1000,
+          open: num(opens[i]),
+          high: num(highs[i]),
+          low: num(lows[i]),
+          close: c,
+          volume: num(vols[i])
+        })
+      }
+      persistNewBars(sym, '1m', bars)
+    } catch (err) {
+      console.warn('[yahoo] bar persist failed:', err instanceof Error ? err.message : err)
+    }
 
     // Fall back to previousClose for `open` before the regular session has
     // started (so pre-market deltas measure vs yesterday's close, matching

@@ -111,6 +111,7 @@ import {
 } from './services/videoGenService'
 import { ensureMediaTools, getMediaToolsStatus } from './services/mediaToolsService'
 import { startMaintenanceSchedule, stopMaintenanceSchedule } from './services/maintenanceService'
+import { startMarketBackfill, stopMarketBackfill } from './services/marketBackfillService'
 import {
   applySettingsChange as commitSettingsChange,
   type SettingsChange
@@ -698,6 +699,13 @@ app.whenReady().then(async () => {
   }
   startMaintenanceSchedule()
 
+  // Daily-bar backfill. Trickles one symbol per 30s, and only while the
+  // market is closed, so it never competes with the live quote poll for
+  // Yahoo's per-IP budget (which 429s more readily than the poll cadence
+  // suggests — see BUGS.md). Intraday 1m bars are captured by the quote
+  // path itself, since Yahoo only retains ~30 days of those.
+  startMarketBackfill()
+
   // Auto-regenerate value chains on boot, throttled so back-to-back
   // restarts during active development don't re-burn the Claude daily
   // cap. Fires 3 min after startup (once the feed poll + financials
@@ -807,6 +815,7 @@ app.on('will-quit', () => {
   stopSportsAlerts()
   stopReelScheduler()
   stopMaintenanceSchedule()
+  stopMarketBackfill()
   stopKokoro()
   stopVideoGen()
   closeDatabase()

@@ -1671,5 +1671,64 @@ export const migrations: Migration[] = [
         END;
       `)
     }
+  },
+  {
+    version: 55,
+    name: 'market_bars_and_fundamentals',
+    // Price history. Pulse had none: every quote lived in an in-memory Map
+    // and was discarded, so no return could ever be computed — which is why
+    // no event study, backtest or market-cap-sized graph was possible.
+    //
+    // The waste was severe. fetchQuoteOne requests
+    // `interval=1m&range=1d&includePrePost=true` for all ~500 tickers every
+    // 60s and keeps two numbers out of a full trading day of OHLCV. We were
+    // already paying for the data and throwing it away.
+    //
+    // Daily and hourly bars can be backfilled from Yahoo at any time, but
+    // 1-minute history cannot — Yahoo only serves ~30 days of it, so every
+    // day not persisted is permanently lost. That asymmetry is why this
+    // lands now rather than alongside the analysis that consumes it.
+    //
+    // Column names deliberately match trading/lib/db.py's
+    // trading_yfinance_bars_cache so the Python research scripts and the
+    // TypeScript app read one table instead of maintaining two copies.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS market_bars (
+          symbol TEXT NOT NULL,
+          intervalLabel TEXT NOT NULL CHECK (intervalLabel IN ('1m', '5m', '1h', '1d')),
+          tsMs INTEGER NOT NULL,
+          open REAL,
+          high REAL,
+          low REAL,
+          close REAL,
+          volume REAL,
+          PRIMARY KEY (symbol, intervalLabel, tsMs)
+        );
+        CREATE INDEX IF NOT EXISTS idx_market_bars_symbol_interval_ts
+          ON market_bars(symbol, intervalLabel, tsMs DESC);
+
+        -- Point-in-time fundamentals. getFundamentals() already computes all
+        -- of this and caches it in RAM for 30 minutes. Persisting it gives
+        -- the market graph its node-sizing metric (marketCap), the event
+        -- study its size buckets, and un-breaks the 52-week-touch alert,
+        -- which today can only fire for tickers opened in the current session.
+        CREATE TABLE IF NOT EXISTS ticker_fundamentals (
+          symbol TEXT NOT NULL,
+          tsMs INTEGER NOT NULL,
+          marketCap REAL,
+          peRatio REAL,
+          forwardPE REAL,
+          eps REAL,
+          dividendYield REAL,
+          weekHigh52 REAL,
+          weekLow52 REAL,
+          currency TEXT,
+          PRIMARY KEY (symbol, tsMs)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ticker_fundamentals_symbol
+          ON ticker_fundamentals(symbol, tsMs DESC);
+      `)
+    }
   }
 ]
