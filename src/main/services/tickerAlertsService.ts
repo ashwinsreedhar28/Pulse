@@ -43,7 +43,18 @@ function formatSignedPct(pct: number): string {
 }
 
 function evaluateDailyMove(quote: StockQuote, threshold: number, dayKey: string): void {
-  const move = quote.changePct
+  // "Daily move" means close-to-close, so this measures against the prior
+  // close rather than `changePct`. `changePct` is open-to-now (the Stooq
+  // semantic the marquee has always displayed), which silently misses the
+  // case that matters most: a stock that gaps -9% overnight and then trades
+  // flat has a ~0% changePct and would never alert.
+  //
+  // Falls back to changePct only when no prior close is available, so the
+  // alert degrades rather than disappearing.
+  const move =
+    quote.previousClose !== null && quote.previousClose > 0 && quote.price !== null
+      ? ((quote.price - quote.previousClose) / quote.previousClose) * 100
+      : quote.changePct
   if (move === null || !Number.isFinite(move)) return
   if (Math.abs(move) < threshold) return
   const dir = move >= 0 ? '↑' : '↓'
@@ -52,7 +63,7 @@ function evaluateDailyMove(quote: StockQuote, threshold: number, dayKey: string)
     category: 'stock',
     identityKey: `stock-daily:${quote.symbol}:${dayKey}`,
     title: `${quote.symbol} ${dir} ${formatSignedPct(move)}${priceStr}`,
-    body: `Daily move crossed ±${threshold.toFixed(1)}%.`,
+    body: `Move from prior close crossed ±${threshold.toFixed(1)}%.`,
     importance: 'normal',
     clickAction: { kind: 'symbol', symbol: quote.symbol }
   })
@@ -63,11 +74,17 @@ function evaluateGapAtOpen(quote: StockQuote, threshold: number, dayKey: string)
   // between today's open and yesterday's close. Outside RTH the open
   // value is stale or zero.
   if (quote.marketState !== 'regular') return
-  if (quote.open === null || quote.price === null || quote.change === null) return
-  // prevClose = price - change. (Equivalent to yahooQuote.previousClose
-  // which we don't directly carry on StockQuote.)
-  const prevClose = quote.price - quote.change
-  if (prevClose <= 0) return
+  if (quote.open === null) return
+  // Uses the real prior close, which StockQuote now carries.
+  //
+  // This previously computed `prevClose = price - change`, described as
+  // "equivalent to yahooQuote.previousClose". It is not: `change` is the
+  // intraday move (price - open), so the expression reduces to `open`, and
+  // the gap below reduces to (open - open) / open — identically zero. This
+  // alert could never fire, for any ticker, on any day. Consistent with
+  // notification_log, which contains no gap alerts.
+  const prevClose = quote.previousClose
+  if (prevClose === null || prevClose <= 0) return
   const gap = ((quote.open - prevClose) / prevClose) * 100
   if (Math.abs(gap) < threshold) return
   const dir = gap >= 0 ? '↑' : '↓'

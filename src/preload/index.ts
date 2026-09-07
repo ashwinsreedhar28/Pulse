@@ -330,6 +330,7 @@ export interface StockQuote {
   open: number | null
   high: number | null
   low: number | null
+  previousClose: number | null
   change: number | null
   changePct: number | null
   volume: number | null

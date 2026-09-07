@@ -54,25 +54,38 @@ export async function fetchFeed(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 
+  // The timer must stay armed across `response.text()`, not just the header
+  // exchange. It previously lived in a `finally` on the fetch alone, which
+  // fires the moment headers arrive — so a feed that stalled mid-body read
+  // hung with the abort signal already disarmed and no timeout left.
+  //
+  // That failure is not local: pollOne never settles, the enclosing
+  // Promise.allSettled batch in pollAllFeeds never resolves, `pollInProgress`
+  // stays true, and every later 5-minute tick early-returns. News ingestion
+  // dies silently until restart. probeFeed and quickValidateFeed already
+  // scope the timer correctly; this now matches them.
   let response: Response
+  let body: string
+  let etag: string | null
+  let lastModified: string | null
   try {
     response = await fetch(url, { headers, signal: controller.signal, redirect: 'follow' })
+
+    if (response.status === 304) {
+      return { status: 'not-modified', etag: prevEtag, lastModified: prevLastModified }
+    }
+    if (!response.ok) {
+      return { status: 'error', error: `HTTP ${response.status}` }
+    }
+
+    etag = response.headers.get('etag')
+    lastModified = response.headers.get('last-modified')
+    body = await response.text()
   } catch (err) {
     return { status: 'error', error: err instanceof Error ? err.message : String(err) }
   } finally {
     clearTimeout(timer)
   }
-
-  if (response.status === 304) {
-    return { status: 'not-modified', etag: prevEtag, lastModified: prevLastModified }
-  }
-  if (!response.ok) {
-    return { status: 'error', error: `HTTP ${response.status}` }
-  }
-
-  const etag = response.headers.get('etag')
-  const lastModified = response.headers.get('last-modified')
-  const body = await response.text()
 
   let parsed: Awaited<ReturnType<typeof parser.parseString>>
   try {

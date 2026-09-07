@@ -232,25 +232,44 @@ export function dispatchNotification(candidate: NotificationCandidate): Dispatch
   // a 'failed' event. Skip the log row in that case so dedup + daily-cap
   // accounting reflect what the user actually saw — and a buffered
   // breaking event can re-fire if the user later re-grants permission.
-  let delivered = true
+  // 'show' and 'failed' are both async Electron events, so the outcome is
+  // not knowable on this tick. The previous shape — `let delivered = true`,
+  // a 'failed' listener that set it false, then a synchronous
+  // `if (delivered)` — could therefore never skip anything: the check always
+  // ran before the event fired. With permission revoked, every suppressed
+  // notification still burned a log row, still counted against the daily cap,
+  // and was permanently deduped by identityKey.
+  //
+  // Logging from the 'show' handler restores the documented behaviour: dedup
+  // and cap accounting now reflect what the user actually saw, and a dropped
+  // breaking event can re-fire if permission is later re-granted.
+  const payloadJson = JSON.stringify({
+    title: candidate.title,
+    body: candidate.body,
+    subtitle: candidate.subtitle,
+    importance,
+    clickAction: candidate.clickAction ?? null
+  })
+  notif.once('show', () => {
+    try {
+      recordLogEntry({
+        category: candidate.category,
+        identityKey: candidate.identityKey,
+        payloadJson
+      })
+    } catch (err) {
+      console.warn(
+        '[notification] log write failed:',
+        err instanceof Error ? err.message : err
+      )
+    }
+  })
   notif.once('failed', (_event, error) => {
-    delivered = false
     console.warn('[notification] OS dropped notification:', error)
   })
   notif.show()
 
-  if (delivered) {
-    recordLogEntry({
-      category: candidate.category,
-      identityKey: candidate.identityKey,
-      payloadJson: JSON.stringify({
-        title: candidate.title,
-        body: candidate.body,
-        subtitle: candidate.subtitle,
-        importance,
-        clickAction: candidate.clickAction ?? null
-      })
-    })
-  }
-  return delivered ? { ok: true } : { ok: false, reason: 'failed' }
+  // Optimistic by necessity — the caller is synchronous and the real outcome
+  // arrives later. 'ok' here means "handed to the OS", not "displayed".
+  return { ok: true }
 }

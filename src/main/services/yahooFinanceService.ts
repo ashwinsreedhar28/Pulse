@@ -1585,6 +1585,11 @@ export interface StockQuote {
   open: number | null
   high: number | null
   low: number | null
+  // Yesterday's official close. Distinct from `open`, and NOT derivable from
+  // `price - change`: `change` is intraday (price - open), so that expression
+  // just returns `open` again. Carried explicitly because gap-at-open and any
+  // close-to-close return are meaningless without it.
+  previousClose: number | null
   change: number | null
   changePct: number | null
   volume: number | null
@@ -1605,6 +1610,7 @@ function emptyQuote(symbol: string): StockQuote {
     open: null,
     high: null,
     low: null,
+    previousClose: null,
     change: null,
     changePct: null,
     volume: null,
@@ -1797,6 +1803,7 @@ async function fetchQuoteOne(symbol: string): Promise<StockQuote> {
       open,
       high,
       low,
+      previousClose,
       change,
       changePct,
       volume,

@@ -18,6 +18,9 @@ export interface StockQuote {
   open: number | null
   high: number | null
   low: number | null
+  // Stooq's sd2t2ohlcv CSV carries no prior close, so this is always null
+  // from this provider. See yahooFinanceService for why it can't be derived.
+  previousClose: number | null
   change: number | null
   changePct: number | null
   volume: number | null
@@ -112,6 +115,7 @@ function nullQuote(symbol: string): StockQuote {
     open: null,
     high: null,
     low: null,
+    previousClose: null,
     change: null,
     changePct: null,
     volume: null,
@@ -150,6 +154,7 @@ function parseCsv(body: string, requested: string[]): StockQuote[] {
       open,
       high,
       low,
+      previousClose: null, // not present in the sd2t2ohlcv CSV
       change,
       changePct,
       volume,
