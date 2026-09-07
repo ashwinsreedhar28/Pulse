@@ -1,6 +1,8 @@
 # Pulse
 
-A private news and intelligence dashboard for macOS that lives in your menu bar. Everything runs on your machine — no accounts, no cloud sync, no telemetry.
+A private news and intelligence dashboard for macOS that lives in your menu bar. No accounts, no cloud sync, no telemetry — your data is stored only on your machine and is never synced anywhere.
+
+Note that "private" means storage and identity, not network isolation. Pulse fetches from the public sources it aggregates (Yahoo Finance, SEC EDGAR, FRED, Semantic Scholar, OpenAlex, arXiv, ESPN, Nasdaq, Wikipedia, and your RSS feeds), and when the Claude provider is enabled it sends article and paper text to `api.anthropic.com` for summarization. Set `aiProvider` to `ollama` in Settings to keep all inference local.
 
 I built Pulse because every reader I tried either treated my stock portfolio and my regular news habit as two different apps, or threw it all into one firehose with no sense of what actually mattered. Pulse does both at once and tries to tell you when something's worth your attention.
 
@@ -45,11 +47,13 @@ The app seeds default feeds, tickers, and locations on first launch. Close the w
 ```
 npm run dev        # hot-reload dev
 npm run build      # production build
-npm run package    # distributable .app / .dmg
+npm run package    # electron-builder -> dist/mac-arm64/Pulse.app (target is `dir`; no .dmg)
 npm run lint
 npm test
 ```
 
 ## Status
 
-Stages 1–12 done (see `CLAUDE.md` for the blow-by-blow). Stage 13 — proper packaging and polish — is next.
+Stages 1–13 done, including packaging. Since then: the stock value-chain graph, a 3D market graph, the research/paper subsystem with a semantic layer, SEC and FRED ingestion, and the Phase A1 trading research under `trading/`.
+
+See `CLAUDE.md` for the architecture map, `BUGS.md` for known issues, and `trading/PHASE_A1_RESULT.md` for where the signal research stands.
