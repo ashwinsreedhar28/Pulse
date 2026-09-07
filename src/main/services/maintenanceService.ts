@@ -53,12 +53,26 @@ export function runMaintenance(): void {
       console.warn('[maintenance] VACUUM failed:', err instanceof Error ? err.message : err)
     }
   }
-  if (totalDeleted > 0) {
-    console.log(
-      `[maintenance] purged ${deleted} articles, ${readerDeleted} reader cache, ${lookupDeleted} smart lookups, ${notificationsDeleted} notifications` +
-        (totalDeleted >= VACUUM_THRESHOLD ? ' (vacuumed)' : '')
-    )
+  // Always log, even on a no-op run. This purge silently destroys the news
+  // corpus by design (articles are unrecoverable once gone — RSS only serves
+  // a recent window), so "did maintenance run, and what did it take" needs to
+  // be answerable from the log rather than inferred from row counts after the
+  // fact. The archived count confirms articles_archive (v54) is keeping up.
+  let archived = 0
+  try {
+    archived =
+      getDb()
+        .prepare<[], { n: number }>(`SELECT COUNT(*) AS n FROM articles_archive`)
+        .get()?.n ?? 0
+  } catch {
+    // Pre-v54 databases won't have the table; not worth failing maintenance over.
   }
+  console.log(
+    `[maintenance] purged ${deleted} articles, ${readerDeleted} reader cache, ` +
+      `${lookupDeleted} smart lookups, ${notificationsDeleted} notifications` +
+      (totalDeleted >= VACUUM_THRESHOLD ? ' (vacuumed)' : '') +
+      ` — articles_archive holds ${archived}`
+  )
 }
 
 export function startMaintenanceSchedule(): void {

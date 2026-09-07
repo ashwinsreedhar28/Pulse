@@ -1555,5 +1555,121 @@ export const migrations: Migration[] = [
         );
       `)
     }
+  },
+  {
+    version: 54,
+    name: 'articles_archive',
+    // Durable news corpus, split off from the live working set.
+    //
+    // WHY: maintenanceService purges `articles` at 30 days (retention is
+    // working correctly — this is not a bug). But RSS only ever serves a
+    // recent window, so a purged article is gone for good: unlike prices,
+    // news history cannot be backfilled from any source. That makes the
+    // 30-day purge permanently destructive to any longitudinal analysis
+    // (event studies, co-occurrence graphs, urgency calibration).
+    //
+    // The fix is a split: `articles` stays lean and keeps its FTS +
+    // cascade behaviour, while `articles_archive` accumulates forever.
+    // Deliberately NO foreign key to articles(id) and NO cascade — the
+    // whole point is to survive the parent row's deletion.
+    //
+    // Maintained by triggers rather than dual-write calls, mirroring how
+    // articles_fts is already kept in sync (v1). Triggers cannot be
+    // bypassed by a code path that forgets to call the archive helper,
+    // which matters because ingest happens from feedPoller, the backfill
+    // path, and rescoreArticles independently.
+    //
+    // Growth: ~370 articles/day at current feed count ≈ 7 MB/month. The
+    // archive is never purged by design; revisit if it outgrows its value.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS articles_archive (
+          id INTEGER PRIMARY KEY,
+          feedId INTEGER NOT NULL,
+          guid TEXT,
+          title TEXT NOT NULL,
+          summary TEXT,
+          url TEXT NOT NULL,
+          publishedAt INTEGER,
+          urgencyScore INTEGER,
+          urgencyReason TEXT,
+          scoredAt INTEGER,
+          domain TEXT NOT NULL,
+          imageURL TEXT,
+          archivedAt INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_articles_archive_published
+          ON articles_archive(publishedAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_articles_archive_feed
+          ON articles_archive(feedId);
+        CREATE INDEX IF NOT EXISTS idx_articles_archive_url
+          ON articles_archive(url);
+
+        CREATE TABLE IF NOT EXISTS article_ticker_matches_archive (
+          articleId INTEGER NOT NULL,
+          symbol TEXT NOT NULL,
+          strength TEXT NOT NULL,
+          PRIMARY KEY (articleId, symbol)
+        );
+        CREATE INDEX IF NOT EXISTS idx_atma_symbol
+          ON article_ticker_matches_archive(symbol);
+
+        -- Backfill whatever survived the most recent purge.
+        INSERT OR IGNORE INTO articles_archive
+          (id, feedId, guid, title, summary, url, publishedAt,
+           urgencyScore, urgencyReason, scoredAt, domain, imageURL, archivedAt)
+        SELECT id, feedId, guid, title, summary, url, publishedAt,
+               urgencyScore, urgencyReason, scoredAt, domain, imageURL,
+               CAST(strftime('%s','now') AS INTEGER) * 1000
+        FROM articles;
+
+        INSERT OR IGNORE INTO article_ticker_matches_archive (articleId, symbol, strength)
+        SELECT articleId, symbol, strength FROM article_ticker_matches;
+
+        -- Mirror every future insert.
+        CREATE TRIGGER IF NOT EXISTS articles_archive_ai
+        AFTER INSERT ON articles BEGIN
+          INSERT OR IGNORE INTO articles_archive
+            (id, feedId, guid, title, summary, url, publishedAt,
+             urgencyScore, urgencyReason, scoredAt, domain, imageURL, archivedAt)
+          VALUES (new.id, new.feedId, new.guid, new.title, new.summary, new.url,
+                  new.publishedAt, new.urgencyScore, new.urgencyReason, new.scoredAt,
+                  new.domain, new.imageURL,
+                  CAST(strftime('%s','now') AS INTEGER) * 1000);
+        END;
+
+        -- Urgency is written at insert but revised later by the Ollama/Claude
+        -- promotion path and by rescoreArticles. Keep the archive's copy in
+        -- step so it reflects the final score, not the keyword-only first pass.
+        CREATE TRIGGER IF NOT EXISTS articles_archive_au
+        AFTER UPDATE OF urgencyScore, urgencyReason, scoredAt, summary, imageURL
+        ON articles BEGIN
+          UPDATE articles_archive
+             SET urgencyScore = new.urgencyScore,
+                 urgencyReason = new.urgencyReason,
+                 scoredAt = new.scoredAt,
+                 summary = new.summary,
+                 imageURL = new.imageURL
+           WHERE id = new.id;
+        END;
+
+        -- Matches are rewritten wholesale by replaceMatchesForArticle; the
+        -- DELETE half is intentionally not mirrored so the archive keeps the
+        -- union of everything ever classified.
+        CREATE TRIGGER IF NOT EXISTS atm_archive_ai
+        AFTER INSERT ON article_ticker_matches BEGIN
+          INSERT INTO article_ticker_matches_archive (articleId, symbol, strength)
+          VALUES (new.articleId, new.symbol, new.strength)
+          ON CONFLICT(articleId, symbol) DO UPDATE SET strength = excluded.strength;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS atm_archive_au
+        AFTER UPDATE ON article_ticker_matches BEGIN
+          INSERT INTO article_ticker_matches_archive (articleId, symbol, strength)
+          VALUES (new.articleId, new.symbol, new.strength)
+          ON CONFLICT(articleId, symbol) DO UPDATE SET strength = excluded.strength;
+        END;
+      `)
+    }
   }
 ]

@@ -390,10 +390,17 @@ export function updateArticleScore(id: number, score: number, reason: string): v
     .run(score, reason, Date.now(), id)
 }
 
+// Retention purge. Falls back to scoredAt when the feed gave us no pubDate:
+// COALESCE(publishedAt, 0) would make every undated item look infinitely old
+// and delete it on the very next maintenance run, however fresh it actually is.
+// scoredAt is written within seconds of insertion, so it's a sound proxy for
+// "when did we first see this". Only if both are missing does the row fall
+// through to 0 and get purged.
 export function purgeOlderThan(cutoffMs: number): number {
   const info = getDb()
     .prepare(
-      `DELETE FROM articles WHERE isBookmarked = 0 AND COALESCE(publishedAt, 0) < ?`
+      `DELETE FROM articles
+       WHERE isBookmarked = 0 AND COALESCE(publishedAt, scoredAt, 0) < ?`
     )
     .run(cutoffMs)
   return info.changes
