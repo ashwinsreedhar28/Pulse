@@ -717,6 +717,77 @@ export function registerDbIpc(): void {
     return hydratePapersByIds(Array.isArray(paperIds) ? paperIds : [])
   })
 
+  // ---- research: semantic layer, unified graph, corpus, finance bridge ----
+
+  // SPECTER2 nearest neighbours. Fetches any missing vectors first, so the
+  // first call on a paper pays one S2 batch request and later ones are local.
+  ipcMain.handle('research:similar', async (_e, paperId: string, limit?: number) => {
+    const { ensureEmbeddings, findSimilar } = await import(
+      '../services/paperSimilarityService'
+    )
+    const { getBookmarkedPaperIds } = await import('../database/researchBookmarks')
+    await ensureEmbeddings([paperId, ...getBookmarkedPaperIds()])
+    return findSimilar(paperId, limit ?? 10)
+  })
+
+  // Rank candidates against the centroid of the saved library — a
+  // recommendation that needs no query at all.
+  ipcMain.handle('research:recommend', async (_e, candidateIds: string[], limit?: number) => {
+    const { ensureEmbeddings, recommendFromLibrary } = await import(
+      '../services/paperSimilarityService'
+    )
+    const { getBookmarkedPaperIds } = await import('../database/researchBookmarks')
+    const ids = Array.isArray(candidateIds) ? candidateIds : []
+    await ensureEmbeddings([...ids, ...getBookmarkedPaperIds()])
+    return recommendFromLibrary(ids, limit ?? 10)
+  })
+
+  // Union of every paper chain — the "universe view" over
+  // paper_value_chain_edges, which was populated but never read.
+  ipcMain.handle('research:graph', async () => {
+    const { getResearchGraph } = await import('../services/researchGraphService')
+    return getResearchGraph()
+  })
+
+  ipcMain.handle('research:coCited', async (_e, paperId: string, limit?: number) => {
+    const { findCoCited } = await import('../services/researchGraphService')
+    return findCoCited(paperId, limit ?? 15)
+  })
+
+  // Multi-source search. S2 first so its richer metadata wins the merge.
+  ipcMain.handle('research:searchAll', async (_e, query: string) => {
+    const { searchPapers } = await import('../services/researchService')
+    const { searchOpenAlex, searchArxiv, mergePaperSources } = await import(
+      '../services/corpusService'
+    )
+    const [s2, openalex, arxiv] = await Promise.all([
+      searchPapers(query).catch(() => []),
+      searchOpenAlex(query).catch(() => ({ papers: [], concepts: [] })),
+      searchArxiv(query).catch(() => [])
+    ])
+    return {
+      papers: mergePaperSources(s2, openalex.papers, arxiv),
+      concepts: openalex.concepts
+    }
+  })
+
+  // Research <-> finance bridge.
+  ipcMain.handle(
+    'research:linkTickers',
+    async (_e, input: { paperId: string; title: string; abstract?: string | null }) => {
+      const { linkPaperToTickers } = await import('../services/researchFinanceBridge')
+      return linkPaperToTickers(input)
+    }
+  )
+  ipcMain.handle('research:linksForPaper', async (_e, paperId: string) => {
+    const { listLinksForPaper } = await import('../database/paperTickerLinks')
+    return listLinksForPaper(paperId)
+  })
+  ipcMain.handle('research:linksForSymbol', async (_e, symbol: string) => {
+    const { listLinksForSymbol } = await import('../database/paperTickerLinks')
+    return listLinksForSymbol(symbol)
+  })
+
   ipcMain.handle('research:getBrief', async (_e, topicId: number) => {
     const { getResearchBrief } = await import('../database/researchBriefs')
     return getResearchBrief(topicId)

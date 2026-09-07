@@ -1226,6 +1226,46 @@ export interface MorningBriefRow {
 // flat (no nested authors object) so React can render lists without
 // re-mapping. ID is Semantic Scholar's `paperId`; arXivId / doi are
 // optional external refs the renderer uses to deep-link to PDFs.
+
+// ---- Research: semantic layer, unified graph, finance bridge ---------------
+export interface SimilarPaper {
+  paperId: string
+  score: number
+}
+export interface ResearchGraphNode {
+  paperId: string
+  title: string | null
+  year: number | null
+  citationCount: number | null
+  influentialCitationCount: number | null
+  bookmarked: boolean
+  chainCount: number
+  cluster: number | null
+}
+export interface ResearchGraphEdge {
+  from: string
+  to: string
+  relationship: string
+  support: number
+}
+export interface ResearchGraphPayload {
+  nodes: ResearchGraphNode[]
+  edges: ResearchGraphEdge[]
+  hubs: Array<{ paperId: string; title: string | null; chainCount: number }>
+}
+export interface PaperTickerLink {
+  paperId: string
+  symbol: string
+  confidence: number
+  rationale: string | null
+  source: string
+  createdAt: number
+}
+export interface MultiSourceSearchResult {
+  papers: ResearchPaper[]
+  concepts: Array<{ name: string; score: number }>
+}
+
 export interface ResearchPaper {
   paperId: string
   title: string
@@ -1895,6 +1935,29 @@ const api = {
     // synthesis. One S2 batch call.
     hydratePapers: (paperIds: string[]): Promise<ResearchPaper[]> =>
       invoke<ResearchPaper[]>('research:hydratePapers', paperIds),
+    // SPECTER2 nearest neighbours over the local library.
+    similar: (paperId: string, limit?: number): Promise<SimilarPaper[]> =>
+      invoke<SimilarPaper[]>('research:similar', paperId, limit),
+    // Rank candidates against the centroid of saved papers — no query needed.
+    recommend: (candidateIds: string[], limit?: number): Promise<SimilarPaper[]> =>
+      invoke<SimilarPaper[]>('research:recommend', candidateIds, limit),
+    // Union of every paper chain into one graph.
+    graph: (): Promise<ResearchGraphPayload> =>
+      invoke<ResearchGraphPayload>('research:graph'),
+    coCited: (paperId: string, limit?: number): Promise<Array<{ paperId: string; shared: number }>> =>
+      invoke<Array<{ paperId: string; shared: number }>>('research:coCited', paperId, limit),
+    // S2 + OpenAlex + arXiv, merged and deduped on title.
+    searchAll: (query: string): Promise<MultiSourceSearchResult> =>
+      invoke<MultiSourceSearchResult>('research:searchAll', query),
+    linkTickers: (input: {
+      paperId: string
+      title: string
+      abstract?: string | null
+    }): Promise<PaperTickerLink[]> => invoke<PaperTickerLink[]>('research:linkTickers', input),
+    linksForPaper: (paperId: string): Promise<PaperTickerLink[]> =>
+      invoke<PaperTickerLink[]>('research:linksForPaper', paperId),
+    linksForSymbol: (symbol: string): Promise<PaperTickerLink[]> =>
+      invoke<PaperTickerLink[]>('research:linksForSymbol', symbol),
     refreshTopic: (topicId: number): Promise<{ ok: boolean }> =>
       invoke<{ ok: boolean }>('research:refreshTopic', topicId),
     onTopicUpdated: (cb: (topicId: number) => void): (() => void) => {
