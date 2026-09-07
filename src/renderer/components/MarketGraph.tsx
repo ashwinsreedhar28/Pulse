@@ -1,32 +1,36 @@
-// Whole-market relationship graph — the Bloomberg-terminal-style view over
-// everything Pulse already knows about how companies connect.
+// Whole-market relationship graph — an orbitable 3D view over everything
+// Pulse knows about how companies connect. Companies are stars; supplier,
+// competitor and partner links are the structure between them.
 //
 // Complements ValueChainDiagram rather than replacing it: that renders one
-// focus company's chain as staged columns (upstream -> downstream), which is
-// the right shape for "who supplies NVDA". This renders the entire universe
-// at once — ~290 symbols, ~880 typed edges — where the interesting structure
-// is clustering and cross-sector bridges, not tiers.
+// focus company's chain as staged columns, which is right for "who supplies
+// NVDA". This shows the whole universe at once, where the interesting
+// structure is clustering and cross-sector bridges rather than tiers.
 //
-// Depth is faked, deliberately. A real 3D projection needs a camera, per-frame
-// z-sorting and continuous re-render on rotate. Instead each node takes a
-// stable pseudo-depth from its own magnitude, and that one number drives
-// radius, sphere shading, blur, opacity and paint order together. Reads as
-// dimensional while staying a static scene.
+// Canvas, not SVG. The first version drew ~290 nodes and ~880 edges as React
+// elements, which meant every hover recomputed the neighbour set and
+// re-rendered all 880 paths — that reconciliation was the hover jitter. Under
+// rotation it would be far worse, since every element moves each frame.
+// Canvas draws the same scene in one imperative pass, and hover lives in a
+// ref so pointer movement triggers a repaint without any React render at all.
 //
-// Performance contract (CLAUDE.md): the layout runs ONCE per topology change
-// and never again. Live quote ticks only recolour. No rAF loop, no perpetual
-// CSS animation — an idle graph costs zero CPU and captures cleanly on a
-// screen share.
+// Layout runs once in 3D and is never re-run for camera changes: rotation and
+// zoom are pure projection, O(n) per frame. Redraws are event-driven — drag,
+// wheel, hover, new quotes — so an untouched graph costs nothing. Auto-orbit
+// is available but off by default, because CLAUDE.md bans perpetual animation
+// by default (it jitters under screen capture).
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { MarketGraphPayload, StockQuote } from '../../preload'
-import { runForceLayout, DENSE_GRAPH_PRESET, type LayoutEdge } from './forceLayout'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { MarketGraphNode, MarketGraphPayload, StockQuote } from '../../preload'
+import { runForceLayout3D, type LayoutEdge, type LayoutPosition3D } from './forceLayout'
 
-const WIDTH = 1600
-const HEIGHT = 1000
+const R_MIN = 2.5
+const R_MAX = 15
 
-const R_MIN = 5
-const R_MAX = 30
+// Camera distance in layout units. The structure is normalized to roughly a
+// unit sphere, so ~3.2 frames it with visible perspective without extreme
+// foreshortening at the near edge.
+const FOV = 3.2
 
 export type SizeMetric = 'marketCap' | 'news' | 'degree' | 'uniform'
 
@@ -37,51 +41,32 @@ const SIZE_LABELS: Record<SizeMetric, string> = {
   uniform: 'Uniform'
 }
 
-// Edge tone by relationship. Supplier links are directional structure,
-// competitor links lateral, partner links weaker — dashed so a dense graph
-// stays legible.
-const EDGE_STYLE: Record<string, { stroke: string; dash?: string }> = {
-  supplier: { stroke: '#38bdf8' },
-  customer: { stroke: '#38bdf8' },
-  competitor: { stroke: '#fb7185' },
-  partner: { stroke: '#c084fc', dash: '5 4' }
+const EDGE_COLOR: Record<string, string> = {
+  supplier: '56,189,248',
+  customer: '56,189,248',
+  competitor: '251,113,133',
+  partner: '192,132,252'
 }
-const EDGE_FALLBACK = { stroke: '#64748b' }
+const EDGE_FALLBACK = '100,116,139'
 
-// Deterministic sector palette, indexed by sorted position so a sector keeps
-// its colour across renders and reloads.
 const SECTOR_PALETTE = [
-  '#38bdf8', '#4ade80', '#fbbf24', '#e879f9', '#fb7185',
-  '#818cf8', '#fb923c', '#2dd4bf', '#a78bfa', '#a3e635',
-  '#22d3ee', '#f472b6'
+  '56,189,248', '74,222,128', '251,191,36', '232,121,249', '251,113,133',
+  '129,140,248', '251,146,60', '45,212,191', '167,139,250', '163,230,53',
+  '34,211,238', '244,114,182'
 ]
-const NEUTRAL = '#71717a'
+const NEUTRAL_RGB = '113,113,122'
 
-// Lighten/darken a #rrggbb, for the sphere gradient stops.
-function shade(hex: string, factor: number): string {
-  const n = parseInt(hex.slice(1), 16)
-  const clamp = (v: number): number => Math.max(0, Math.min(255, Math.round(v)))
-  const r = clamp(((n >> 16) & 255) * factor)
-  const g = clamp(((n >> 8) & 255) * factor)
-  const b = clamp((n & 255) * factor)
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
-}
-
-// Gentle arc between two points. The control point sits perpendicular to the
-// chord by a fraction of its length, so short links stay near-straight and
-// long ones bow away from the centre where crossings pile up.
-function curve(a: { x: number; y: number }, b: { x: number; y: number }): string {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  const bow = Math.min(len * 0.14, 90)
-  const cx = (a.x + b.x) / 2 + (-dy / len) * bow
-  const cy = (a.y + b.y) / 2 + (dx / len) * bow
-  return `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`
+interface Projected {
+  node: MarketGraphNode
+  sx: number
+  sy: number
+  /** Camera-space depth; larger is nearer. */
+  depth: number
+  r: number
+  rgb: string
 }
 
 interface Props {
-  /** Live quotes as the scheduler broadcasts them (array, not keyed). */
   quotes: StockQuote[] | null
   onSelectSymbol?: (symbol: string) => void
 }
@@ -94,29 +79,32 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
   const [sectorFilter, setSectorFilter] = useState<string>('all')
   const [showCoMentions, setShowCoMentions] = useState(false)
   const [showEdges, setShowEdges] = useState(true)
+  const [autoOrbit, setAutoOrbit] = useState(false)
   const [query, setQuery] = useState('')
-  const [hover, setHover] = useState<string | null>(null)
+  const [selected, setSelected] = useState<MarketGraphNode | null>(null)
 
-  // Pan/zoom over the viewBox. Essential at ~290 nodes: the overview carries
-  // structure, and you zoom in to read any individual cluster.
-  const [zoom, setZoom] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
-  const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
-  const [dragging, setDragging] = useState(false)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  // Camera and hover live in refs, not state: they change on every pointer
+  // move and must never trigger a React render.
+  const camRef = useRef({ yaw: 0.5, pitch: -0.25, zoom: 1 })
+  const hoverRef = useRef<string | null>(null)
+  const projectedRef = useRef<Projected[]>([])
+  const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
+  const rafRef = useRef<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     window.api.graph
       .getMarketGraph()
-      .then((payload) => {
-        if (cancelled) return
-        setData(payload)
-        setError(null)
+      .then((p) => {
+        if (!cancelled) {
+          setData(p)
+          setError(null)
+        }
       })
       .catch((err: unknown) => {
-        if (cancelled) return
-        setError(err instanceof Error ? err.message : String(err))
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -148,12 +136,12 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
       .sort((a, b) => b.count - a.count)
   }, [data])
 
-  const sectorColor = useMemo(() => {
+  const sectorRgb = useMemo(() => {
     const order = sectorOptions.map((s) => s.id).sort()
-    return (sectorId: string | null): string => {
-      if (!sectorId) return NEUTRAL
-      const i = order.indexOf(sectorId)
-      return i === -1 ? NEUTRAL : SECTOR_PALETTE[i % SECTOR_PALETTE.length]
+    return (id: string | null): string => {
+      if (!id) return NEUTRAL_RGB
+      const i = order.indexOf(id)
+      return i === -1 ? NEUTRAL_RGB : SECTOR_PALETTE[i % SECTOR_PALETTE.length]
     }
   }, [sectorOptions])
 
@@ -180,10 +168,9 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
     return d
   }, [visible.edges])
 
-  // Market cap only exists once ticker_fundamentals has filled in, which
-  // happens lazily as tickers are opened. With sparse coverage every node
-  // collapses to R_MIN and the graph reads as uniform dots — so fall back to
-  // degree until enough of the field actually has a cap.
+  // ticker_fundamentals fills in lazily as tickers are opened. With sparse
+  // coverage every node lands at R_MIN and the field reads as uniform dust,
+  // so fall back to degree until enough of it actually has a cap.
   const capCoverage = useMemo(() => {
     if (visible.nodes.length === 0) return 0
     return visible.nodes.filter((n) => (n.marketCap ?? 0) > 0).length / visible.nodes.length
@@ -191,7 +178,6 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
   const effectiveSizeBy: SizeMetric =
     sizeBy === 'marketCap' && capCoverage < 0.25 ? 'degree' : sizeBy
 
-  // Normalized 0..1 magnitude per node — drives radius AND pseudo-depth.
   const magnitude = useMemo(() => {
     const raw = new Map<string, number>()
     for (const n of visible.nodes) {
@@ -210,21 +196,15 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
     const hi = nums.length ? Math.max(...nums) : 1
     const span = hi - lo || 1
     const out = new Map<string, number>()
-    for (const [k, v] of raw) {
-      out.set(k, effectiveSizeBy === 'uniform' ? 0.5 : (v - lo) / span)
-    }
+    for (const [k, v] of raw) out.set(k, effectiveSizeBy === 'uniform' ? 0.5 : (v - lo) / span)
     return out
   }, [visible.nodes, effectiveSizeBy, degree])
 
-  const positions = useMemo(() => {
+  // The expensive part, and the only part that must not run on camera moves.
+  const layout = useMemo(() => {
     const ids = visible.nodes.map((n) => n.symbol)
-    const layoutEdges: LayoutEdge[] = visible.edges.map((e) => ({ from: e.from, to: e.to }))
-    const pos = runForceLayout(ids, layoutEdges, {
-      width: WIDTH,
-      height: HEIGHT,
-      padding: R_MAX + 24,
-      ...DENSE_GRAPH_PRESET
-    })
+    const edges: LayoutEdge[] = visible.edges.map((e) => ({ from: e.from, to: e.to }))
+    const pos = runForceLayout3D(ids, edges)
     return new Map(pos.map((p) => [p.id, p]))
   }, [visible.nodes, visible.edges])
 
@@ -238,34 +218,277 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
     )
   }, [query, visible.nodes])
 
-  const neighbours = useMemo(() => {
-    if (!hover) return null
-    const set = new Set<string>([hover])
+  const adjacency = useMemo(() => {
+    const m = new Map<string, Set<string>>()
     for (const e of visible.edges) {
-      if (e.from === hover) set.add(e.to)
-      if (e.to === hover) set.add(e.from)
+      if (!m.has(e.from)) m.set(e.from, new Set())
+      if (!m.has(e.to)) m.set(e.to, new Set())
+      m.get(e.from)!.add(e.to)
+      m.get(e.to)!.add(e.from)
     }
-    return set
-  }, [hover, visible.edges])
+    return m
+  }, [visible.edges])
 
-  // Paint order is depth order: low-magnitude nodes render first and so sit
-  // visually behind the large ones. That ordering is most of what sells the
-  // dimensional read.
-  const drawOrder = useMemo(
-    () =>
-      [...visible.nodes].sort(
-        (a, b) => (magnitude.get(a.symbol) ?? 0) - (magnitude.get(b.symbol) ?? 0)
-      ),
-    [visible.nodes, magnitude]
+  // ---- rendering ----------------------------------------------------------
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const dpr = window.devicePixelRatio || 1
+    const w = canvas.clientWidth
+    const h = canvas.clientHeight
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+      canvas.width = w * dpr
+      canvas.height = h * dpr
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+    // Deep-space ground.
+    const bg = ctx.createRadialGradient(w / 2, h * 0.45, 0, w / 2, h * 0.45, Math.max(w, h) * 0.75)
+    bg.addColorStop(0, '#0d1018')
+    bg.addColorStop(1, '#05060a')
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, w, h)
+
+    const { yaw, pitch, zoom } = camRef.current
+    const cy = Math.cos(yaw)
+    const sy = Math.sin(yaw)
+    const cp = Math.cos(pitch)
+    const sp = Math.sin(pitch)
+    const cxp = w / 2
+    const cyp = h / 2
+    const baseScale = Math.min(w, h) * 0.42 * zoom
+
+    // Yaw about Y, then pitch about X, then perspective divide.
+    const project = (p: LayoutPosition3D): { sx: number; sy: number; depth: number; k: number } => {
+      const x1 = p.x * cy + p.z * sy
+      const z1 = -p.x * sy + p.z * cy
+      const y2 = p.y * cp - z1 * sp
+      const z2 = p.y * sp + z1 * cp
+      const k = FOV / (FOV + z2)
+      return { sx: cxp + x1 * k * baseScale, sy: cyp + y2 * k * baseScale, depth: -z2, k }
+    }
+
+    const proj = new Map<string, { sx: number; sy: number; depth: number; k: number }>()
+    for (const n of visible.nodes) {
+      const p = layout.get(n.symbol)
+      if (p) proj.set(n.symbol, project(p))
+    }
+
+    const hover = hoverRef.current
+    const focusSet = hover ? new Set([hover, ...(adjacency.get(hover) ?? [])]) : null
+
+    // Edges first, behind the stars.
+    if (showEdges) {
+      ctx.lineCap = 'round'
+      for (const e of visible.edges) {
+        const a = proj.get(e.from)
+        const b = proj.get(e.to)
+        if (!a || !b) continue
+        const focused = focusSet ? focusSet.has(e.from) && focusSet.has(e.to) : null
+        if (focused === false) continue // hidden while isolating a hover
+        const rgb = EDGE_COLOR[e.relationship] ?? EDGE_FALLBACK
+        // Nearer edges are brighter, which is most of the depth cue for the
+        // link structure.
+        const depthA = (a.k + b.k) / 2
+        const alpha = focused ? 0.85 : 0.05 + depthA * 0.1
+        ctx.strokeStyle = `rgba(${rgb},${alpha})`
+        ctx.lineWidth = focused ? 1.5 : 0.35 + (e.weight ?? 0.5) * 0.5
+        ctx.beginPath()
+        ctx.moveTo(a.sx, a.sy)
+        ctx.lineTo(b.sx, b.sy)
+        ctx.stroke()
+      }
+    }
+
+    if (showCoMentions) {
+      for (const c of visible.coMentions) {
+        const a = proj.get(c.from)
+        const b = proj.get(c.to)
+        if (!a || !b) continue
+        if (focusSet && !(focusSet.has(c.from) && focusSet.has(c.to))) continue
+        ctx.strokeStyle = `rgba(251,191,36,${focusSet ? 0.5 : 0.1})`
+        ctx.lineWidth = Math.min(0.5 + c.count / 18, 2.2)
+        ctx.beginPath()
+        ctx.moveTo(a.sx, a.sy)
+        ctx.lineTo(b.sx, b.sy)
+        ctx.stroke()
+      }
+    }
+
+    // Painter's algorithm: far to near, so near stars occlude far ones.
+    const items: Projected[] = []
+    for (const n of visible.nodes) {
+      const p = proj.get(n.symbol)
+      if (!p) continue
+      const m = magnitude.get(n.symbol) ?? 0
+      items.push({
+        node: n,
+        sx: p.sx,
+        sy: p.sy,
+        depth: p.depth,
+        // Perspective scaling on the radius is what makes near stars read as
+        // near rather than merely brighter.
+        r: (R_MIN + m * (R_MAX - R_MIN)) * p.k * zoom,
+        rgb: sectorRgb(n.topSectorId)
+      })
+    }
+    items.sort((a, b) => a.depth - b.depth)
+    projectedRef.current = items
+
+    for (const it of items) {
+      const dimmed =
+        (focusSet && !focusSet.has(it.node.symbol)) ||
+        (matches && !matches.has(it.node.symbol))
+      const isSelected = selected?.symbol === it.node.symbol
+      const alpha = dimmed ? 0.08 : 1
+
+      // Corona. A radial gradient per star is what gives the galaxy read.
+      const glowR = Math.max(it.r * 3.2, 6)
+      const g = ctx.createRadialGradient(it.sx, it.sy, 0, it.sx, it.sy, glowR)
+      g.addColorStop(0, `rgba(${it.rgb},${0.55 * alpha})`)
+      g.addColorStop(0.35, `rgba(${it.rgb},${0.16 * alpha})`)
+      g.addColorStop(1, `rgba(${it.rgb},0)`)
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(it.sx, it.sy, glowR, 0, Math.PI * 2)
+      ctx.fill()
+
+      // Core, with a hot centre offset toward the light.
+      const core = ctx.createRadialGradient(
+        it.sx - it.r * 0.3,
+        it.sy - it.r * 0.3,
+        it.r * 0.1,
+        it.sx,
+        it.sy,
+        Math.max(it.r, 0.6)
+      )
+      core.addColorStop(0, `rgba(255,255,255,${0.95 * alpha})`)
+      core.addColorStop(0.4, `rgba(${it.rgb},${alpha})`)
+      core.addColorStop(1, `rgba(${it.rgb},${0.65 * alpha})`)
+      ctx.fillStyle = core
+      ctx.beginPath()
+      ctx.arc(it.sx, it.sy, Math.max(it.r, 0.6), 0, Math.PI * 2)
+      ctx.fill()
+
+      // Live quote ring — the only thing a 60s tick changes.
+      const pct = quoteBySymbol.get(it.node.symbol)?.changePct ?? null
+      if (pct !== null && !dimmed && it.r > 2) {
+        ctx.strokeStyle = pct >= 0 ? 'rgba(52,211,153,0.9)' : 'rgba(248,113,113,0.9)'
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.arc(it.sx, it.sy, it.r + 2.4, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+
+      if (isSelected) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+        ctx.lineWidth = 1.6
+        ctx.beginPath()
+        ctx.arc(it.sx, it.sy, it.r + 5, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+
+      const labelled =
+        !dimmed &&
+        (it.r > 6 ||
+          hover === it.node.symbol ||
+          isSelected ||
+          (matches?.has(it.node.symbol) ?? false))
+      if (labelled) {
+        ctx.font = `${Math.max(9, Math.min(13, it.r * 0.9))}px ui-sans-serif, system-ui`
+        ctx.textAlign = 'center'
+        ctx.lineWidth = 3
+        ctx.strokeStyle = 'rgba(5,6,10,0.9)'
+        ctx.strokeText(it.node.symbol, it.sx, it.sy + it.r + 11)
+        ctx.fillStyle = 'rgba(228,228,231,0.95)'
+        ctx.fillText(it.node.symbol, it.sx, it.sy + it.r + 11)
+      }
+    }
+  }, [
+    visible,
+    layout,
+    magnitude,
+    sectorRgb,
+    quoteBySymbol,
+    matches,
+    adjacency,
+    showEdges,
+    showCoMentions,
+    selected
+  ])
+
+  // Single scheduling point. Every interaction asks for a frame rather than
+  // drawing inline, so a burst of pointer events coalesces into one paint.
+  const requestDraw = useCallback(() => {
+    if (rafRef.current !== null) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      draw()
+    })
+  }, [draw])
+
+  useEffect(() => {
+    requestDraw()
+  }, [requestDraw])
+
+  useEffect(() => {
+    const onResize = (): void => requestDraw()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [requestDraw])
+
+  // Opt-in continuous orbit. Off by default: CLAUDE.md bans perpetual
+  // animation because it visibly jitters under macOS screen capture, and an
+  // idle graph should cost no CPU. The loop is fully torn down when disabled.
+  useEffect(() => {
+    if (!autoOrbit) return
+    let alive = true
+    let handle = 0
+    const step = (): void => {
+      if (!alive) return
+      camRef.current.yaw += 0.0022
+      draw()
+      handle = requestAnimationFrame(step)
+    }
+    handle = requestAnimationFrame(step)
+    return () => {
+      alive = false
+      cancelAnimationFrame(handle)
+    }
+  }, [autoOrbit, draw])
+
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    },
+    []
   )
 
-  const hovered = hover ? visible.nodes.find((n) => n.symbol === hover) : null
-
-  const viewBox = useMemo(() => {
-    const w = WIDTH / zoom
-    const h = HEIGHT / zoom
-    return `${(WIDTH - w) / 2 + pan.x} ${(HEIGHT - h) / 2 + pan.y} ${w} ${h}`
-  }, [zoom, pan])
+  // Nearest projected star under the cursor. Uses the same array the draw
+  // pass produced, so hit-testing always matches what is on screen.
+  const pick = (clientX: number, clientY: number): MarketGraphNode | null => {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const rect = canvas.getBoundingClientRect()
+    const x = clientX - rect.left
+    const y = clientY - rect.top
+    let best: MarketGraphNode | null = null
+    let bestD = Infinity
+    // Reverse order = nearest first, so an occluding star wins the pick.
+    for (let i = projectedRef.current.length - 1; i >= 0; i--) {
+      const it = projectedRef.current[i]
+      const d = Math.hypot(it.sx - x, it.sy - y)
+      if (d <= Math.max(it.r + 5, 7) && d < bestD) {
+        bestD = d
+        best = it.node
+      }
+    }
+    return best
+  }
 
   if (loading) return <div className="p-8 text-sm text-zinc-400">Building market graph…</div>
   if (error)
@@ -279,8 +502,7 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
     )
   }
 
-  const usedPalette = sectorOptions.map((s) => ({ ...s, color: sectorColor(s.id) }))
-  const gradientColors = [...new Set([...usedPalette.map((p) => p.color), NEUTRAL])]
+  const palette = sectorOptions.map((s) => ({ ...s, rgb: sectorRgb(s.id) }))
 
   return (
     <div className="flex h-full flex-col">
@@ -306,10 +528,7 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
           </select>
         </label>
         {sizeBy === 'marketCap' && effectiveSizeBy !== 'marketCap' && (
-          <span
-            className="text-[10px] text-amber-400/80"
-            title="ticker_fundamentals fills in as tickers are opened"
-          >
+          <span className="text-[10px] text-amber-400/80">
             using connections — market caps not cached yet
           </span>
         )}
@@ -318,7 +537,7 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
           <select
             value={sectorFilter}
             onChange={(e) => setSectorFilter(e.target.value)}
-            className="max-w-[14rem] rounded bg-zinc-900 px-1 py-1 text-xs text-zinc-200 ring-1 ring-zinc-800"
+            className="max-w-[13rem] rounded bg-zinc-900 px-1 py-1 text-xs text-zinc-200 ring-1 ring-zinc-800"
           >
             <option value="all">All ({data.nodes.length})</option>
             {sectorOptions.map((s) => (
@@ -342,259 +561,172 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
             checked={showCoMentions}
             onChange={(e) => setShowCoMentions(e.target.checked)}
           />
-          Co-mentions ({visible.coMentions.length})
+          Co-mentions
         </label>
-        <div className="flex items-center gap-1 text-xs text-zinc-400">
-          <button
-            onClick={() => setZoom((z) => Math.min(z * 1.3, 8))}
-            className="rounded bg-zinc-900 px-2 py-0.5 ring-1 ring-zinc-800 hover:bg-zinc-800"
-          >
-            +
-          </button>
-          <button
-            onClick={() => setZoom((z) => Math.max(z / 1.3, 0.6))}
-            className="rounded bg-zinc-900 px-2 py-0.5 ring-1 ring-zinc-800 hover:bg-zinc-800"
-          >
-            −
-          </button>
-          <button
-            onClick={() => {
-              setZoom(1)
-              setPan({ x: 0, y: 0 })
-            }}
-            className="rounded bg-zinc-900 px-2 py-0.5 ring-1 ring-zinc-800 hover:bg-zinc-800"
-          >
-            reset
-          </button>
-        </div>
+        <label className="flex items-center gap-1 text-xs text-zinc-400">
+          <input
+            type="checkbox"
+            checked={autoOrbit}
+            onChange={(e) => setAutoOrbit(e.target.checked)}
+          />
+          Orbit
+        </label>
+        <button
+          onClick={() => {
+            camRef.current = { yaw: 0.5, pitch: -0.25, zoom: 1 }
+            requestDraw()
+          }}
+          className="rounded bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300 ring-1 ring-zinc-800 hover:bg-zinc-800"
+        >
+          reset view
+        </button>
         <span className="ml-auto text-xs text-zinc-500">
           {visible.nodes.length} nodes · {visible.edges.length} links
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden bg-[#07080c]">
-        <svg
-          viewBox={viewBox}
+      <div className="relative min-h-0 flex-1">
+        <canvas
+          ref={canvasRef}
           className="h-full w-full"
-          role="img"
-          aria-label="Market relationship graph"
-          style={{ cursor: dragging ? 'grabbing' : 'grab' }}
-          onWheel={(e) => {
-            setZoom((z) => Math.max(0.6, Math.min(8, z * (e.deltaY > 0 ? 1 / 1.12 : 1.12))))
-          }}
+          style={{ cursor: dragRef.current ? 'grabbing' : 'grab', display: 'block' }}
           onPointerDown={(e) => {
-            dragRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
-            setDragging(true)
+            const { yaw, pitch } = camRef.current
+            dragRef.current = { x: e.clientX, y: e.clientY, yaw, pitch }
             e.currentTarget.setPointerCapture(e.pointerId)
           }}
           onPointerMove={(e) => {
             const d = dragRef.current
-            if (!d) return
-            // Screen delta -> viewBox units, so drag tracks the cursor 1:1 at
-            // any zoom level.
-            const rect = e.currentTarget.getBoundingClientRect()
-            const unitsPerPx = WIDTH / zoom / rect.width
-            setPan({
-              x: d.panX - (e.clientX - d.x) * unitsPerPx,
-              y: d.panY - (e.clientY - d.y) * unitsPerPx
-            })
+            if (d) {
+              // Drag to orbit. Pitch is clamped just shy of the poles so the
+              // scene never flips through vertical.
+              camRef.current.yaw = d.yaw + (e.clientX - d.x) * 0.006
+              camRef.current.pitch = Math.max(
+                -Math.PI / 2 + 0.05,
+                Math.min(Math.PI / 2 - 0.05, d.pitch + (e.clientY - d.y) * 0.006)
+              )
+              requestDraw()
+              return
+            }
+            // Hover updates a ref and repaints directly — no setState, so
+            // there is no React reconciliation on pointer move. That is what
+            // removes the jitter the SVG version had.
+            const hit = pick(e.clientX, e.clientY)
+            const next = hit?.symbol ?? null
+            if (next !== hoverRef.current) {
+              hoverRef.current = next
+              requestDraw()
+            }
           }}
           onPointerUp={(e) => {
+            const d = dragRef.current
             dragRef.current = null
-            setDragging(false)
             e.currentTarget.releasePointerCapture(e.pointerId)
+            // Treat a near-stationary press as a click, so orbiting never
+            // selects by accident.
+            if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) {
+              setSelected(pick(e.clientX, e.clientY))
+            }
+            requestDraw()
           }}
-        >
-          <defs>
-            {/* One sphere gradient per sector colour: offset highlight, base
-                mid-tone, darkened rim. This is what makes a flat circle read
-                as a lit ball. */}
-            {gradientColors.map((c) => (
-              <radialGradient key={c} id={`sphere-${c.slice(1)}`} cx="35%" cy="30%" r="75%">
-                <stop offset="0%" stopColor={shade(c, 1.75)} />
-                <stop offset="45%" stopColor={c} />
-                <stop offset="100%" stopColor={shade(c, 0.42)} />
-              </radialGradient>
-            ))}
-            {/* Depth of field: distant (small) nodes soften. */}
-            <filter id="farBlur" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="1.1" />
-            </filter>
-            <filter id="nearGlow" x="-80%" y="-80%" width="260%" height="260%">
-              <feGaussianBlur stdDeviation="5" result="b" />
-              <feMerge>
-                <feMergeNode in="b" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-            <radialGradient id="vignette" cx="50%" cy="45%" r="75%">
-              <stop offset="0%" stopColor="#11151f" />
-              <stop offset="100%" stopColor="#07080c" />
-            </radialGradient>
-          </defs>
-
-          {/* Ground plane — oversized so it still covers when panned. */}
-          <rect
-            x={-WIDTH}
-            y={-HEIGHT}
-            width={WIDTH * 3}
-            height={HEIGHT * 3}
-            fill="url(#vignette)"
-          />
-
-          {showCoMentions &&
-            visible.coMentions.map((c) => {
-              const a = positions.get(c.from)
-              const b = positions.get(c.to)
-              if (!a || !b) return null
-              return (
-                <path
-                  key={`cm-${c.from}-${c.to}`}
-                  d={curve(a, b)}
-                  fill="none"
-                  stroke="#fbbf24"
-                  strokeWidth={Math.min(0.8 + c.count / 14, 3)}
-                  strokeOpacity={neighbours ? 0.05 : 0.14}
-                />
-              )
-            })}
-
-          {showEdges &&
-            visible.edges.map((e, i) => {
-              const a = positions.get(e.from)
-              const b = positions.get(e.to)
-              if (!a || !b) return null
-              const style = EDGE_STYLE[e.relationship] ?? EDGE_FALLBACK
-              const focused = neighbours ? neighbours.has(e.from) && neighbours.has(e.to) : null
-              // Curved, not straight. With ~880 links every straight chord
-              // crosses the middle and the result mats into a solid block;
-              // arcs separate them so a single connection stays followable.
-              return (
-                <path
-                  key={`e-${e.from}-${e.to}-${e.relationship}-${i}`}
-                  d={curve(a, b)}
-                  fill="none"
-                  stroke={style.stroke}
-                  strokeDasharray={style.dash}
-                  strokeWidth={focused ? 1.6 : 0.45 + (e.weight ?? 0.5) * 0.9}
-                  strokeOpacity={focused === null ? 0.16 : focused ? 0.75 : 0.03}
-                  strokeLinecap="round"
-                />
-              )
-            })}
-
-          {drawOrder.map((n) => {
-            const p = positions.get(n.symbol)
-            if (!p) return null
-            const m = magnitude.get(n.symbol) ?? 0
-            const r = R_MIN + m * (R_MAX - R_MIN)
-            const color = sectorColor(n.topSectorId)
-            const pct = quoteBySymbol.get(n.symbol)?.changePct ?? null
-            const dimmed =
-              (neighbours && !neighbours.has(n.symbol)) ||
-              (matches && !matches.has(n.symbol))
-            const isFar = m < 0.28
-            const isNear = m > 0.72
-            const labelled =
-              !dimmed && (m > 0.45 || hover === n.symbol || (matches?.has(n.symbol) ?? false))
-
-            return (
-              <g
-                key={n.symbol}
-                transform={`translate(${p.x} ${p.y})`}
-                opacity={dimmed ? 0.1 : isFar ? 0.72 : 1}
-                filter={isFar ? 'url(#farBlur)' : isNear ? 'url(#nearGlow)' : undefined}
-                onMouseEnter={() => setHover(n.symbol)}
-                onMouseLeave={() => setHover(null)}
-                onClick={() => onSelectSymbol?.(n.symbol)}
-                style={{ cursor: onSelectSymbol ? 'pointer' : 'default' }}
-              >
-                {/* Contact shadow, offset away from the light source. */}
-                <ellipse
-                  cx={r * 0.22}
-                  cy={r * 0.34}
-                  rx={r * 0.95}
-                  ry={r * 0.72}
-                  fill="#000"
-                  opacity={0.42}
-                />
-                <circle r={r} fill={`url(#sphere-${color.slice(1)})`} />
-                {/* Rim light — the second half of the sphere read, separating
-                    the ball from its own shadow. */}
-                <circle
-                  r={r}
-                  fill="none"
-                  stroke={shade(color, 1.5)}
-                  strokeOpacity={0.35}
-                  strokeWidth={0.8}
-                />
-                {/* Live quote ring. The only thing that changes on a tick. */}
-                {pct !== null && (
-                  <circle
-                    r={r + 2.6}
-                    fill="none"
-                    stroke={pct >= 0 ? '#34d399' : '#f87171'}
-                    strokeOpacity={0.85}
-                    strokeWidth={1.6}
-                  />
-                )}
-                {/* Specular highlight. */}
-                <ellipse
-                  cx={-r * 0.3}
-                  cy={-r * 0.36}
-                  rx={r * 0.26}
-                  ry={r * 0.19}
-                  fill="#fff"
-                  opacity={0.5}
-                />
-                {labelled && (
-                  <text
-                    y={r + 11}
-                    textAnchor="middle"
-                    className="pointer-events-none select-none"
-                    fill="#e4e4e7"
-                    fontSize={Math.max(8, Math.min(12, r * 0.55))}
-                    stroke="#07080c"
-                    strokeWidth={2.4}
-                    paintOrder="stroke"
-                  >
-                    {n.symbol}
-                  </text>
-                )}
-              </g>
+          onPointerLeave={() => {
+            if (hoverRef.current !== null) {
+              hoverRef.current = null
+              requestDraw()
+            }
+          }}
+          onWheel={(e) => {
+            camRef.current.zoom = Math.max(
+              0.35,
+              Math.min(6, camRef.current.zoom * (e.deltaY > 0 ? 1 / 1.12 : 1.12))
             )
-          })}
-        </svg>
+            requestDraw()
+          }}
+        />
+
+        {selected && (
+          <div className="absolute right-4 top-4 w-64 rounded-lg border border-zinc-700 bg-zinc-950/95 p-3 shadow-xl">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold text-zinc-100">{selected.symbol}</div>
+                {selected.name && (
+                  <div className="text-xs text-zinc-400">{selected.name}</div>
+                )}
+              </div>
+              <button
+                onClick={() => setSelected(null)}
+                className="text-zinc-500 hover:text-zinc-300"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {selected.topSectorName && (
+              <div className="mt-2 inline-block rounded px-1.5 py-0.5 text-[10px] text-zinc-300 ring-1 ring-zinc-700">
+                {selected.topSectorName}
+              </div>
+            )}
+
+            <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+              <dt className="text-zinc-500">Links</dt>
+              <dd className="text-zinc-300">{degree.get(selected.symbol) ?? 0}</dd>
+              <dt className="text-zinc-500">Articles</dt>
+              <dd className="text-zinc-300">{selected.newsCount}</dd>
+              {selected.marketCap ? (
+                <>
+                  <dt className="text-zinc-500">Market cap</dt>
+                  <dd className="text-zinc-300">
+                    ${(selected.marketCap / 1e9).toFixed(1)}B
+                  </dd>
+                </>
+              ) : null}
+              {(() => {
+                const q = quoteBySymbol.get(selected.symbol)
+                if (!q || q.price === null) return null
+                return (
+                  <>
+                    <dt className="text-zinc-500">Price</dt>
+                    <dd
+                      className={
+                        (q.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                      }
+                    >
+                      ${q.price.toFixed(2)}
+                      {q.changePct !== null ? ` (${q.changePct.toFixed(2)}%)` : ''}
+                    </dd>
+                  </>
+                )
+              })()}
+            </dl>
+
+            {selected.blurb && (
+              <p className="mt-2 text-[11px] leading-snug text-zinc-400">{selected.blurb}</p>
+            )}
+
+            <button
+              onClick={() => onSelectSymbol?.(selected.symbol)}
+              disabled={!onSelectSymbol}
+              className="mt-3 w-full rounded bg-emerald-500/15 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-300 ring-1 ring-inset ring-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-40"
+            >
+              Open {selected.symbol}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-t border-zinc-800 px-4 py-1.5 text-[10px] text-zinc-500">
-        {usedPalette.slice(0, 8).map((s) => (
+        {palette.slice(0, 8).map((s) => (
           <span key={s.id} className="flex items-center gap-1">
             <span
               className="inline-block h-2 w-2 rounded-full"
-              style={{ background: s.color }}
+              style={{ background: `rgb(${s.rgb})` }}
             />
             {s.name}
           </span>
         ))}
-        <span className="ml-auto">scroll to zoom · drag to pan · hover to isolate</span>
+        <span className="ml-auto">drag to rotate · scroll to zoom · click a star</span>
       </div>
-
-      {hovered && (
-        <div className="border-t border-zinc-800 px-4 py-2 text-xs text-zinc-300">
-          <span className="font-semibold text-zinc-100">{hovered.symbol}</span>
-          {hovered.name ? <span className="text-zinc-400"> · {hovered.name}</span> : null}
-          {hovered.topSectorName ? (
-            <span className="text-zinc-500"> · {hovered.topSectorName}</span>
-          ) : null}
-          <span className="text-zinc-500">
-            {' '}
-            · {degree.get(hovered.symbol) ?? 0} links · {hovered.newsCount} articles
-            {hovered.marketCap ? ` · $${(hovered.marketCap / 1e9).toFixed(1)}B` : ''}
-          </span>
-          {hovered.blurb ? <div className="mt-1 text-zinc-400">{hovered.blurb}</div> : null}
-        </div>
-      )}
     </div>
   )
 }

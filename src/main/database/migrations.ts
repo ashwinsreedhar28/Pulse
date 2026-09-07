@@ -1796,5 +1796,61 @@ export const migrations: Migration[] = [
         END;
       `)
     }
+  },
+  {
+    version: 57,
+    name: 'paper_embeddings_and_ticker_links',
+    // Semantic layer for the research corpus, plus the research <-> finance
+    // bridge.
+    //
+    // paper_embeddings: SPECTER2 vectors, fetched from Semantic Scholar's
+    // batch endpoint (fields=embedding.specter_v2). 768 floats per paper,
+    // free and anonymous — no API key, no local model, nothing to install.
+    // That matters because aiProvider is Claude here and Ollama isn't
+    // running, so a local embedding model would be a dependency we can't
+    // rely on.
+    //
+    // Stored as a BLOB of little-endian float32 (3072 bytes) rather than
+    // JSON: a JSON array of 768 floats is ~9 KB of text that has to be
+    // parsed on every similarity pass. Cosine similarity runs in the main
+    // process over a Float32Array view, which at library scale (hundreds to
+    // low thousands of papers) is a sub-millisecond linear scan — a vector
+    // index would be premature.
+    //
+    // paper_ticker_links: the bridge. A paper about HBM relates to MU and
+    // SK Hynix; nothing else in the app can currently express that, and
+    // Pulse is unusual in holding both a citation graph and a company graph.
+    // Deliberately not a foreign key to tickers(symbol) — a paper can be
+    // relevant to a company that isn't on the watchlist yet, and losing the
+    // link when a ticker is removed would be wrong.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS paper_embeddings (
+          paperId TEXT PRIMARY KEY,
+          model TEXT NOT NULL,
+          dims INTEGER NOT NULL,
+          vector BLOB NOT NULL,
+          fetchedAt INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS paper_ticker_links (
+          paperId TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          -- 0..1. How strongly the paper's subject matter bears on the
+          -- company, as judged at link time.
+          confidence REAL NOT NULL DEFAULT 0,
+          -- Short justification, shown in the UI so a surprising link can be
+          -- audited rather than taken on faith.
+          rationale TEXT,
+          -- 'claude' | 'concept' | 'manual' — provenance, so a hand-made
+          -- link is never silently overwritten by a generated one.
+          source TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          PRIMARY KEY (paperId, symbol)
+        );
+        CREATE INDEX IF NOT EXISTS idx_paper_ticker_links_symbol
+          ON paper_ticker_links(symbol);
+      `)
+    }
   }
 ]

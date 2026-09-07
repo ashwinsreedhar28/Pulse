@@ -247,3 +247,163 @@ function fitToBox(
     }
   })
 }
+
+// ---------------------------------------------------------------------------
+// 3D variant
+// ---------------------------------------------------------------------------
+//
+// Same physics with a z axis, for the orbitable market view. Kept separate
+// from the 2D path rather than generalised over dimension: the inner loop is
+// O(n²) and runs hundreds of times, so an extra branch or array indirection
+// per pair is real cost for no benefit to the 2D callers.
+//
+// Positions come back in a centred, unit-ish cube (roughly -1..1 on the
+// widest axis). The caller owns projection, so it can rotate and zoom without
+// ever re-running the simulation — which is the whole point: layout is
+// expensive and stable, projection is cheap and continuous.
+
+export interface LayoutPosition3D {
+  id: string
+  x: number
+  y: number
+  z: number
+}
+
+interface Body3D {
+  id: string
+  x: number
+  y: number
+  z: number
+  vx: number
+  vy: number
+  vz: number
+}
+
+export interface ForceLayout3DOptions {
+  repulsion?: number
+  attraction?: number
+  damping?: number
+  iterations?: number
+  gravity?: number
+}
+
+const DEFAULTS_3D = {
+  repulsion: 1.4,
+  attraction: 0.045,
+  damping: 0.87,
+  iterations: 300,
+  gravity: 0.012
+}
+
+export function runForceLayout3D(
+  ids: string[],
+  edges: LayoutEdge[],
+  opts: ForceLayout3DOptions = {}
+): LayoutPosition3D[] {
+  const repulsion = opts.repulsion ?? DEFAULTS_3D.repulsion
+  const attraction = opts.attraction ?? DEFAULTS_3D.attraction
+  const damping = opts.damping ?? DEFAULTS_3D.damping
+  const iterations = opts.iterations ?? DEFAULTS_3D.iterations
+  const gravity = opts.gravity ?? DEFAULTS_3D.gravity
+  if (ids.length === 0) return []
+
+  // Seed on a Fibonacci sphere. Uniform random in a cube clumps at the
+  // corners and takes far longer to relax; an even shell starts the system
+  // close to the shape it wants to be.
+  const golden = Math.PI * (3 - Math.sqrt(5))
+  const nodes: Body3D[] = ids.map((id, i) => {
+    const y = 1 - (i / Math.max(ids.length - 1, 1)) * 2
+    const r = Math.sqrt(Math.max(0, 1 - y * y))
+    const theta = golden * i
+    return {
+      id,
+      x: Math.cos(theta) * r * 10 + (Math.random() - 0.5) * 0.4,
+      y: y * 10 + (Math.random() - 0.5) * 0.4,
+      z: Math.sin(theta) * r * 10 + (Math.random() - 0.5) * 0.4,
+      vx: 0,
+      vy: 0,
+      vz: 0
+    }
+  })
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+
+  for (let iter = 0; iter < iterations; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i]
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j]
+        const dx = a.x - b.x
+        const dy = a.y - b.y
+        const dz = a.z - b.z
+        const d2 = dx * dx + dy * dy + dz * dz + 0.01
+        const d = Math.sqrt(d2)
+        const f = repulsion / d2
+        const ux = dx / d
+        const uy = dy / d
+        const uz = dz / d
+        a.vx += ux * f
+        a.vy += uy * f
+        a.vz += uz * f
+        b.vx -= ux * f
+        b.vy -= uy * f
+        b.vz -= uz * f
+      }
+    }
+
+    for (const e of edges) {
+      const a = byId.get(e.from)
+      const b = byId.get(e.to)
+      if (!a || !b) continue
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const dz = b.z - a.z
+      a.vx += dx * attraction
+      a.vy += dy * attraction
+      a.vz += dz * attraction
+      b.vx -= dx * attraction
+      b.vy -= dy * attraction
+      b.vz -= dz * attraction
+    }
+
+    for (const n of nodes) {
+      n.vx += -n.x * gravity
+      n.vy += -n.y * gravity
+      n.vz += -n.z * gravity
+      n.x += n.vx
+      n.y += n.vy
+      n.z += n.vz
+      n.vx *= damping
+      n.vy *= damping
+      n.vz *= damping
+    }
+  }
+
+  // Centre on the centroid, then scale by a trimmed radius rather than the
+  // maximum — same reasoning as FIT_TRIM in the 2D path. A couple of nodes
+  // flung clear of the mass would otherwise set the scale and shrink the
+  // whole structure into the middle of the screen.
+  let cx = 0
+  let cy = 0
+  let cz = 0
+  for (const n of nodes) {
+    cx += n.x
+    cy += n.y
+    cz += n.z
+  }
+  cx /= nodes.length
+  cy /= nodes.length
+  cz /= nodes.length
+
+  const radii = nodes
+    .map((n) => Math.hypot(n.x - cx, n.y - cy, n.z - cz))
+    .sort((a, b) => a - b)
+  const cut = radii[Math.floor((radii.length - 1) * 0.95)] || 1
+  const scale = 1 / cut
+
+  return nodes.map((n) => ({
+    id: n.id,
+    x: (n.x - cx) * scale,
+    y: (n.y - cy) * scale,
+    z: (n.z - cz) * scale
+  }))
+}
