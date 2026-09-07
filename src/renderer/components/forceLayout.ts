@@ -38,7 +38,7 @@ export interface ForceLayoutOptions {
   /** Velocity retained per iteration; < 1 so the system settles. */
   damping?: number
   iterations?: number
-  /** Keeps nodes off the canvas edge. Should exceed the largest node radius. */
+  /** Margin left around the fitted layout. Should exceed the largest node radius. */
   padding?: number
   /** Pull toward centre, so disconnected nodes don't drift away. */
   gravity?: number
@@ -52,6 +52,26 @@ const DEFAULTS = {
   padding: 50,
   gravity: 0.005
 }
+
+// Preset for the market graph (~290 nodes, ~880 edges).
+//
+// Close to the defaults on purpose. A parameter sweep over repulsion
+// 3k-26k, attraction 0.018-0.05 and gravity 0.004-0.10 produced nothing that
+// beat these once results were averaged over several runs — single-run scores
+// looked dramatically better or worse purely from the random seeding, which
+// is what made the first attempt at "tuning" misleading. Cranking repulsion
+// was actively harmful: it flings weakly-connected components far out, and
+// the fit then shrinks everything else to compensate.
+//
+// The readability problem was the fit, not the forces — see FIT_TRIM below.
+// Only the iteration count is raised here, to let the larger system settle.
+export const DENSE_GRAPH_PRESET = {
+  repulsion: 4500,
+  attraction: 0.045,
+  damping: 0.87,
+  iterations: 300,
+  gravity: 0.006
+} as const
 
 interface Body {
   id: string
@@ -137,10 +157,93 @@ export function runForceLayout(
       n.y += n.vy
       n.vx *= damping
       n.vy *= damping
-      n.x = Math.max(padding, Math.min(width - padding, n.x))
-      n.y = Math.max(padding, Math.min(height - padding, n.y))
     }
   }
 
-  return nodes.map((n) => ({ id: n.id, x: n.x, y: n.y }))
+  // Fit to the viewport instead of clamping during simulation.
+  //
+  // Clamping per-iteration was actively harmful: any node the repulsion
+  // pushed outward stuck to the wall, and once stuck it kept its neighbours
+  // stretched toward it. The result was visible as tight knots pinned in the
+  // canvas corners with long edges radiating back to a central hairball —
+  // an artefact of the boundary, not of the data.
+  //
+  // Letting the simulation run unbounded and rescaling once at the end
+  // preserves the true relative geometry and uses the full canvas.
+  return fitToBox(nodes, width, height, padding)
+}
+
+// Fraction trimmed from each end of the coordinate distribution before
+// fitting. This single number dominates layout quality and is not a
+// cosmetic choice.
+//
+// Fitting to the true min/max lets one stray node decide the scale for all
+// the others. Real graphs have them: a two-node component that repulsion
+// flings far from the mass expands the bounding box several-fold, the
+// uniform scale shrinks to compensate, and the entire main cluster collapses
+// into a few overlapping pixels.
+//
+// Measured over 5 runs on the live market graph (286 nodes / 882 edges),
+// counting occupied 25px cells and nodes with a neighbour closer than 10px:
+//   trim 0.00 -> 45 cells, 228 crowded   (and wildly unstable, min 14)
+//   trim 0.01 -> 131 cells, 120 crowded
+//   trim 0.03 -> 189 cells,  65 crowded
+//   trim 0.05 -> 236 cells,  28 crowded  (stable: min 225)
+//   trim 0.08 -> 219 cells,  47 crowded
+// Outliers are clamped back to the edge rather than dropped, so nothing
+// disappears — the far-flung few just stack at the boundary instead of
+// squashing everyone else.
+const FIT_TRIM = 0.05
+
+function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0
+  const i = (sorted.length - 1) * p
+  const lo = Math.floor(i)
+  const hi = Math.ceil(i)
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo)
+}
+
+function fitToBox(
+  nodes: Body[],
+  width: number,
+  height: number,
+  padding: number
+): LayoutPosition[] {
+  if (nodes.length === 0) return []
+  const finite = nodes.filter((n) => Number.isFinite(n.x) && Number.isFinite(n.y))
+  if (finite.length === 0) {
+    return nodes.map((n) => ({ id: n.id, x: width / 2, y: height / 2 }))
+  }
+
+  const xs = finite.map((n) => n.x).sort((a, b) => a - b)
+  const ys = finite.map((n) => n.y).sort((a, b) => a - b)
+  const minX = percentile(xs, FIT_TRIM)
+  const maxX = percentile(xs, 1 - FIT_TRIM)
+  const minY = percentile(ys, FIT_TRIM)
+  const maxY = percentile(ys, 1 - FIT_TRIM)
+
+  const spanX = maxX - minX || 1
+  const spanY = maxY - minY || 1
+  const availW = Math.max(width - padding * 2, 1)
+  const availH = Math.max(height - padding * 2, 1)
+  // One uniform scale for both axes — scaling x and y independently would
+  // shear the layout and distort the cluster shapes that carry the meaning.
+  const scale = Math.min(availW / spanX, availH / spanY)
+  // Centre whatever slack the uniform scale leaves on the other axis.
+  const offX = padding + (availW - spanX * scale) / 2
+  const offY = padding + (availH - spanY * scale) / 2
+
+  const clamp = (v: number, lo: number, hi: number): number =>
+    Math.max(lo, Math.min(hi, v))
+
+  return nodes.map((n) => {
+    if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
+      return { id: n.id, x: width / 2, y: height / 2 }
+    }
+    return {
+      id: n.id,
+      x: clamp((n.x - minX) * scale + offX, padding, width - padding),
+      y: clamp((n.y - minY) * scale + offY, padding, height - padding)
+    }
+  })
 }
