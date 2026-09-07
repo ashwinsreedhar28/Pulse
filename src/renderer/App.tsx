@@ -11,6 +11,7 @@ import { FindBar } from './components/FindBar'
 import { ResearchPage } from './components/ResearchPage'
 import { CollapseChevron, useCollapsedSection } from './components/collapseUI'
 import { ValueChain } from './components/ValueChain'
+import MarketGraph from './components/MarketGraph'
 import { UnifiedValueChainCard } from './components/UnifiedValueChainCard'
 import { ValueChainDiagram } from './components/ValueChainDiagram'
 import { MorningBrief } from './components/MorningBrief'
@@ -3161,7 +3162,7 @@ function StocksPage({
   const [busy, setBusy] = useState(false)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
   const [selectedTickerId, setSelectedTickerId] = useState<number | null>(null)
-  const [view, setView] = useState<'holdings' | 'chain'>('holdings')
+  const [view, setView] = useState<'holdings' | 'chain' | 'graph'>('holdings')
   // Symbol handed to ValueChain when the user searches while the chain
   // view is active. Cleared by ValueChain once it accepts the request
   // (via onExternalFocusHandled) so subsequent searches fire cleanly.
@@ -3265,6 +3266,7 @@ function StocksPage({
           <div className="flex items-center gap-1 rounded-full bg-surface-1 ring-1 ring-edge/60 p-0.5">
             <StocksViewTab label="Holdings" active={view === 'holdings'} onClick={() => setView('holdings')} />
             <StocksViewTab label="Value Chain" active={view === 'chain'} onClick={() => setView('chain')} />
+            <StocksViewTab label="Graph" active={view === 'graph'} onClick={() => setView('graph')} />
           </div>
           <Stat label="Holdings" value={tickers.filter((t) => t.isActive).length} />
           <Stat label="Gainers" value={gainers} tone="accent" />
@@ -3338,7 +3340,18 @@ function StocksPage({
             />
           </CollapsibleSection>
         </div>
-        {view === 'chain' ? (
+        {view === 'graph' ? (
+          // Whole-universe relationship graph. Quotes are passed for the
+          // live change tint only — MarketGraph never lays out from them,
+          // so a 60s tick recolours without re-running the simulation.
+          <MarketGraph
+            quotes={quotes}
+            onSelectSymbol={(symbol) => {
+              const t = tickers.find((x) => x.symbol === symbol)
+              if (t) setSelectedTickerId(t.id)
+            }}
+          />
+        ) : view === 'chain' ? (
           <ValueChain
             tickers={tickers}
             quotes={quotes}

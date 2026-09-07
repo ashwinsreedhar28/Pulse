@@ -1033,6 +1033,13 @@ export function registerDbIpc(): void {
   // have assigned tickers. primarySectorIndex + topLevelAncestor power the
   // cross-sector edge badge (endpoints whose primary sectors resolve to
   // different top-level parents are "cross-sector").
+  // Whole-market graph — nodes, edges, sector ancestry, sizing metrics and
+  // news co-mentions in one round-trip. See marketGraphService.
+  ipcMain.handle('graph:getMarketGraph', async () => {
+    const { getMarketGraph } = await import('../services/marketGraphService')
+    return getMarketGraph()
+  })
+
   ipcMain.handle('sectors:list', () => listSectors())
   ipcMain.handle('sectors:listWithContent', () => listSectorsWithContent())
   ipcMain.handle('sectors:forSymbol', (_e, symbol: string) => getSectorsForSymbol(symbol))

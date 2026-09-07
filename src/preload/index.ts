@@ -324,6 +324,41 @@ export interface DiscoverySuggestion {
   mode: string
 }
 
+
+// ---- Market graph (whole-universe view) ------------------------------------
+export interface MarketGraphNode {
+  symbol: string
+  name: string | null
+  stage: string | null
+  sectorId: string | null
+  topSectorId: string | null
+  topSectorName: string | null
+  blurb: string | null
+  marketCap: number | null
+  newsCount: number
+  isActive: boolean
+}
+export interface MarketGraphEdge {
+  from: string
+  to: string
+  relationship: string
+  weight: number | null
+  note: string | null
+  source: string
+  crossSector: boolean
+}
+export interface MarketCoMention {
+  from: string
+  to: string
+  count: number
+}
+export interface MarketGraphPayload {
+  nodes: MarketGraphNode[]
+  edges: MarketGraphEdge[]
+  coMentions: MarketCoMention[]
+  sectors: Array<{ id: string; name: string }>
+}
+
 export interface StockQuote {
   symbol: string
   price: number | null
@@ -2000,6 +2035,9 @@ const api = {
       invoke<GraphEdgeOverride[]>('graph:listOverrides'),
     listNodeOverrides: (): Promise<GraphNodeOverride[]> =>
       invoke<GraphNodeOverride[]>('graph:listNodeOverrides'),
+    // Whole-market graph in one call — see marketGraphService.
+    getMarketGraph: (): Promise<MarketGraphPayload> =>
+      invoke<MarketGraphPayload>('graph:getMarketGraph'),
     undoNodeOverride: (
       symbol: string,
       candidateId?: number | null
