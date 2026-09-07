@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+# A newer push to the same branch makes an in-flight run redundant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # --ignore-scripts skips the postinstall electron-rebuild, which
+      # downloads an Electron binary and recompiles better-sqlite3 against
+      # its ABI. Neither tsc nor the current tests load the native module,
+      # so paying that cost here would only make CI slow and flaky. If a
+      # test ever needs a real DB handle, drop the flag for that job.
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        run: npm run lint
+
+      # Currently a stub that exits 0. Wired up now so the job starts
+      # failing the moment a real runner lands (see plan P4.5 — vitest,
+      # 65 existing cases in paperValueChainService.test.ts).
+      - name: Test
+        run: npm test
