@@ -23,13 +23,17 @@ jobs:
           node-version: 20
           cache: npm
 
-      # --ignore-scripts skips the postinstall electron-rebuild, which
-      # downloads an Electron binary and recompiles better-sqlite3 against
-      # its ABI. Neither tsc nor the current tests load the native module,
-      # so paying that cost here would only make CI slow and flaky. If a
-      # test ever needs a real DB handle, drop the flag for that job.
+      # Full install, scripts included.
+      #
+      # This previously used --ignore-scripts to skip Electron's binary
+      # download and the postinstall electron-rebuild, on the reasoning that
+      # neither tsc nor the tests need the native module. That was wrong once
+      # the tests became real: the suites import modules that reach `electron`
+      # transitively (database/connection uses app.getPath), so vitest failed
+      # with "Electron failed to install correctly" while passing locally,
+      # where the binary is present. Correctness beats the minute it saves.
       - name: Install
-        run: npm ci --ignore-scripts
+        run: npm ci
 
       - name: Typecheck
         run: npm run lint
