@@ -14,9 +14,27 @@ const ACTIVE_MS = 60_000
 const WEEKDAY_OFF_MS = 60 * 60 * 1000
 const WEEKEND_MS = 6 * 60 * 60 * 1000
 
+// Hard ceiling on symbols requested per tick.
+//
+// The scheduler used to fetch every ticker row every tick. That was fine at
+// ~500 symbols but does not scale, and it scales in exactly the wrong
+// direction: Yahoo rate-limits by IP more aggressively than the once-a-minute
+// cadence suggests (sustained requests earn a 429 whose cooldown outlives the
+// traffic), and fetchQuoteOne returns an empty quote on !res.ok — so crossing
+// the limit shows up as blank prices across the whole app rather than as an
+// error anyone would notice.
+//
+// Active watchlist symbols are always included; passive rows (which back the
+// value-chain and market-graph tiles) fill the remaining budget on a rotating
+// window, so every passive symbol still refreshes regularly while the request
+// rate stays bounded no matter how large the ticker table grows.
+const MAX_SYMBOLS_PER_TICK = 320
+
 let timer: NodeJS.Timeout | null = null
 let lastQuotes: StockQuote[] = []
 let currentCadence = 0
+// Rotation offset into the passive list, advanced each tick.
+let passiveCursor = 0
 
 export function getLastQuotes(): StockQuote[] {
   return lastQuotes
@@ -50,12 +68,28 @@ function pickCadence(): number {
 }
 
 async function tick(): Promise<void> {
-  // Poll every ticker row, not just watchlist entries. Passive rows (isActive=0)
-  // back the Value Chain graph view so those tiles show live prices. Watchlist
-  // gating happens at UI/service layers that care (notifications, summaries,
-  // per-ticker RSS), not here.
+  // Active rows every tick; passive rows (isActive=0, backing the value-chain
+  // and market-graph tiles) on rotation within a fixed budget. Watchlist
+  // gating for notifications, summaries and per-ticker RSS happens at the
+  // layers that care, not here.
   const tickers = listTickers()
-  const symbols = tickers.map((t) => t.symbol)
+  const active = tickers.filter((t) => t.isActive).map((t) => t.symbol)
+  const passive = tickers.filter((t) => !t.isActive).map((t) => t.symbol)
+
+  let symbols: string[]
+  if (active.length + passive.length <= MAX_SYMBOLS_PER_TICK) {
+    symbols = [...active, ...passive]
+  } else {
+    const budget = Math.max(0, MAX_SYMBOLS_PER_TICK - active.length)
+    const slice: string[] = []
+    if (passive.length > 0 && budget > 0) {
+      for (let i = 0; i < Math.min(budget, passive.length); i++) {
+        slice.push(passive[(passiveCursor + i) % passive.length])
+      }
+      passiveCursor = (passiveCursor + slice.length) % passive.length
+    }
+    symbols = [...active, ...slice]
+  }
   if (symbols.length === 0) {
     lastQuotes = []
     broadcast([])
@@ -123,8 +157,19 @@ async function tick(): Promise<void> {
       quotes = stooqQuotes
     }
 
-    lastQuotes = quotes
-    broadcast(quotes)
+    // Merge, don't replace. A tick now covers only a slice of the passive
+    // rotation, so overwriting would blank every symbol not in this batch and
+    // make value-chain and market-graph tiles flicker between polls. Merging
+    // keeps the last known price for anything not refreshed this round.
+    if (lastQuotes.length === 0) {
+      lastQuotes = quotes
+    } else {
+      const merged = new Map(lastQuotes.map((q) => [q.symbol, q]))
+      for (const q of quotes) merged.set(q.symbol, q)
+      lastQuotes = [...merged.values()]
+    }
+    // Broadcast the full merged set so the renderer always sees every symbol.
+    broadcast(lastQuotes)
     // Phase 2: feed every successful tick into the stock-alerts evaluator.
     // Synchronous call — no event-loop yield, no TOCTOU window between
     // daily-cap checks. The evaluator early-returns when stocks alerts

@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { initDatabase, closeDatabase } from './database/connection'
 import { bootstrapSectorCatalog } from './services/sectorService'
+import { seedSectorUniverse, sectorCoverage } from './services/sectorUniverseService'
 import {
   backfillPassiveTickersForAbsorbedNodes,
   repopulateAbsorbedSectorIds
@@ -546,6 +547,31 @@ app.whenReady().then(async () => {
     // migrations. Idempotent — re-syncs on every boot, but the backfill only
     // fires when ticker_sectors is empty.
     bootstrapSectorCatalog()
+
+    // Broaden the per-sector ticker universe. Coverage was extremely lopsided
+    // — Information Technology had 106 assigned symbols and every other GICS
+    // sector had 0-23 — which made sector filters, cross-sector edge
+    // detection and event-study size buckets describe a semiconductor
+    // watchlist rather than a market. Symbols are added passive and never
+    // overwrite an existing row or sector assignment, so this is safe to run
+    // on every boot.
+    try {
+      const seeded = seedSectorUniverse()
+      if (seeded.tickersAdded > 0 || seeded.assignmentsAdded > 0) {
+        console.log(
+          `[sector-universe] +${seeded.tickersAdded} tickers, ` +
+            `+${seeded.assignmentsAdded} sector assignments`
+        )
+        for (const row of sectorCoverage()) {
+          console.log(`[sector-universe]   ${row.name}: ${row.count}`)
+        }
+      }
+    } catch (err) {
+      console.warn(
+        '[sector-universe] seed failed:',
+        err instanceof Error ? err.message : err
+      )
+    }
 
     // One-time fix for chain-absorbed tickers created before the absorber
     // started calling ensurePassiveTicker. Without this, the stocks scheduler
