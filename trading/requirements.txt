@@ -1,0 +1,10 @@
+# Phase A1 dependencies. Whitelist matches the brief's "Hard constraints"
+# section — anything else needs sign-off before adding.
+yfinance>=0.2.40
+pandas>=2.2.0
+numpy>=1.26.0
+scipy>=1.13.0
+scikit-learn>=1.5.0
+trafilatura>=1.12.0
+# trafilatura indirect deps that pip resolves automatically:
+#   lxml, charset-normalizer, justext, htmldate, dateparser

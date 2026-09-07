@@ -6,8 +6,20 @@ dist/
 .vite/
 .env
 .env.local
-.claude/
 .vscode/
+*.tsbuildinfo
+coverage/
+
+# Python (trading/ research scripts)
+.venv/
+__pycache__/
+*.pyc
+
+# Claude Code harness. The reviewer agents + slash commands under
+# .claude/agents and .claude/commands ARE tracked — they're project
+# tooling, and reviews/ (their output) is already committed. Only the
+# machine-local settings file stays out.
+.claude/settings.local.json
 # Electron userData DB lives under ~/Library/Application Support/Pulse.
 # A stray pulse.db at the repo root means sqlite3 was run from here and
 # auto-created an empty file.
