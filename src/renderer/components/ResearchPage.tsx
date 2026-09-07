@@ -24,6 +24,7 @@ import type {
 } from '../../preload'
 import { CollapseChevron, useCollapsedSection } from './collapseUI'
 import { ResearchMap } from './ResearchMap'
+import { ResearchGraph } from './ResearchGraph'
 import { PaperValueChainCard } from './PaperValueChainCard'
 
 interface Props {
@@ -170,6 +171,10 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
   // the bookmarks list, not a separate top-level view kind — keeps the
   // bookmark detail/PDF pane logic shared.
   const [bookmarksMode, setBookmarksMode] = useState<'list' | 'map'>('list')
+  // Full-page citation graph, shown instead of the search/results column.
+  // Not a bookmarks sub-mode like ResearchMap: it spans the whole corpus, not
+  // just saved papers, so it needs the full width.
+  const [graphOpen, setGraphOpen] = useState(false)
   const [bookmarksFull, setBookmarksFull] = useState<ResearchBookmarkRow[]>([])
   const [foundationalEdges, setFoundationalEdges] = useState<BookmarkFoundationalEdge[]>([])
   const [bookmarkTopicLinks, setBookmarkTopicLinks] = useState<BookmarkTopicLink[]>([])
@@ -472,6 +477,17 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
           </form>
         </div>
         <button
+          onClick={() => setGraphOpen((v) => !v)}
+          className={
+            'px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.18em] ' +
+            (graphOpen
+              ? 'bg-sky-500/20 text-sky-200 ring-1 ring-inset ring-sky-500/40'
+              : 'text-zinc-400 hover:text-zinc-100 hover:bg-surface-2')
+          }
+        >
+          Graph
+        </button>
+        <button
           onClick={onClose}
           className="px-3 py-1.5 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-surface-2 text-[10px] font-semibold uppercase tracking-[0.18em]"
         >
@@ -479,6 +495,13 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
         </button>
       </header>
 
+      {graphOpen ? (
+        <div className="flex-1 min-h-0">
+          <ResearchGraph
+            onOpenURL={(url, title, subtitle) => onOpenURL(url, title, subtitle ?? null)}
+          />
+        </div>
+      ) : (
       <div className="flex-1 min-h-0 flex overflow-hidden">
         <div className="flex-1 min-w-0 overflow-y-auto px-6 py-5">
           {chainPaper && (
@@ -697,6 +720,7 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
           )
         )}
       </div>
+      )}
     </section>
   )
 }

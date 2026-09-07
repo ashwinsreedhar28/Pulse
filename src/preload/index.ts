@@ -1232,27 +1232,6 @@ export interface SimilarPaper {
   paperId: string
   score: number
 }
-export interface ResearchGraphNode {
-  paperId: string
-  title: string | null
-  year: number | null
-  citationCount: number | null
-  influentialCitationCount: number | null
-  bookmarked: boolean
-  chainCount: number
-  cluster: number | null
-}
-export interface ResearchGraphEdge {
-  from: string
-  to: string
-  relationship: string
-  support: number
-}
-export interface ResearchGraphPayload {
-  nodes: ResearchGraphNode[]
-  edges: ResearchGraphEdge[]
-  hubs: Array<{ paperId: string; title: string | null; chainCount: number }>
-}
 export interface PaperTickerLink {
   paperId: string
   symbol: string
@@ -1264,6 +1243,46 @@ export interface PaperTickerLink {
 export interface MultiSourceSearchResult {
   papers: ResearchPaper[]
   concepts: Array<{ name: string; score: number }>
+}
+
+
+export interface ResearchGraphNode {
+  paperId: string
+  title: string
+  year: number | null
+  authors: string[]
+  venue: string | null
+  citationCount: number
+  influentialCitationCount: number
+  fields: string[]
+  field: string | null
+  abstract: string | null
+  url: string | null
+  pdfUrl: string | null
+  bookmarked: boolean
+  depth: number
+  expanded: boolean
+  cluster: number | null
+  degree: number
+}
+export interface ResearchGraphEdge {
+  from: string
+  to: string
+  relationship: string
+  intent: string | null
+}
+export interface ResearchGraphPayload {
+  nodes: ResearchGraphNode[]
+  edges: ResearchGraphEdge[]
+  fields: Array<{ name: string; count: number }>
+  hubs: Array<{ paperId: string; title: string; degree: number }>
+  stats: { nodes: number; edges: number; expanded: number }
+}
+export interface GraphExpansionResult {
+  papersExpanded: number
+  nodesAdded: number
+  edgesAdded: number
+  stats: { nodes: number; edges: number; expanded: number }
 }
 
 export interface ResearchPaper {
@@ -1950,6 +1969,10 @@ const api = {
     // Union of every paper chain into one graph.
     graph: (): Promise<ResearchGraphPayload> =>
       invoke<ResearchGraphPayload>('research:graph'),
+    expandGraph: (papers?: number): Promise<GraphExpansionResult> =>
+      invoke<GraphExpansionResult>('research:expandGraph', papers),
+    expandFromPaper: (paperId: string): Promise<GraphExpansionResult> =>
+      invoke<GraphExpansionResult>('research:expandFromPaper', paperId),
     coCited: (paperId: string, limit?: number): Promise<Array<{ paperId: string; shared: number }>> =>
       invoke<Array<{ paperId: string; shared: number }>>('research:coCited', paperId, limit),
     // S2 + OpenAlex + arXiv, merged and deduped on title.

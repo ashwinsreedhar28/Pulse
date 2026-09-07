@@ -1,164 +1,168 @@
-// Unified research graph — the "universe view" the Phase 3A comments
-// promised but never built.
+// Assembles the paper graph for the renderer, in one round-trip.
 //
-// paper_value_chain_edges has been populated on every chain write since v52
-// and read by nothing: getEdgesMentioningPaper had zero call sites, so the
-// whole denormalized table was dead weight. It is exactly the right shape for
-// this, though — every chain's edges in one place, indexed on both endpoints.
+// Mirrors marketGraphService on the finance side: nodes, edges, clustering
+// and the derived structure the UI needs, all in a single IPC call so the
+// canvas has everything before first paint.
 //
-// The per-chain view answers "what is this paper built on". Unioning the
-// chains answers questions no single chain can:
-//   - which papers recur as foundations across many different chains (the
-//     canon of whatever the user actually works on),
-//   - which two focus papers turn out to be one hop apart,
-//   - which papers bridge otherwise-disconnected reading.
+// Two sources are unioned:
+//   - research_graph_nodes / research_graph_edges (v58) — the growing
+//     citation graph, fed by researchGraphExpander
+//   - paper_value_chain_edges — edges from generated paper chains, which
+//     predate the graph tables and would otherwise be stranded
+//
+// The second is why this unions rather than reading one table: those chain
+// edges are work already paid for (S2 calls plus Haiku enrichment), and
+// dropping them would lose typed relationships (extends / contrasts /
+// refutes) that a citation walk cannot produce.
 
 import { getDb } from '../database/connection'
-import { listResearchBookmarks } from '../database/researchBookmarks'
+import { getBookmarkedPaperIds } from '../database/researchBookmarks'
+import { listGraphEdges, listGraphNodes, graphStats } from '../database/researchGraph'
 import { clusterLibrary } from './paperSimilarityService'
 
 export interface ResearchGraphNode {
   paperId: string
-  title: string | null
+  title: string
   year: number | null
-  citationCount: number | null
-  influentialCitationCount: number | null
-  /** True when the paper is in the user's saved library. */
+  authors: string[]
+  venue: string | null
+  citationCount: number
+  influentialCitationCount: number
+  fields: string[]
+  /** Primary field of study, used for colouring. */
+  field: string | null
+  abstract: string | null
+  url: string | null
+  pdfUrl: string | null
   bookmarked: boolean
-  /** How many distinct chains this paper appears in. */
-  chainCount: number
+  /** Hops from the nearest seed; 0 = a paper the user chose. */
+  depth: number
+  /** True once this paper's own neighbours have been fetched. */
+  expanded: boolean
   /** Semantic cluster index, or null when no embedding is stored. */
   cluster: number | null
+  degree: number
 }
 
 export interface ResearchGraphEdge {
   from: string
   to: string
   relationship: string
-  /** Number of distinct chains asserting this edge — real corroboration. */
-  support: number
+  intent: string | null
 }
 
 export interface ResearchGraphPayload {
   nodes: ResearchGraphNode[]
   edges: ResearchGraphEdge[]
-  /** Papers appearing in several chains — the recurring foundations. */
-  hubs: Array<{ paperId: string; title: string | null; chainCount: number }>
+  fields: Array<{ name: string; count: number }>
+  hubs: Array<{ paperId: string; title: string; degree: number }>
+  stats: { nodes: number; edges: number; expanded: number }
 }
 
-// A paper cited by this many distinct chains is a recurring foundation
-// rather than a one-off reference.
-const HUB_MIN_CHAINS = 2
-
 export function getResearchGraph(): ResearchGraphPayload {
-  const db = getDb()
+  const nodeRows = listGraphNodes()
+  const edges: ResearchGraphEdge[] = listGraphEdges().map((e) => ({
+    from: e.fromPaperId,
+    to: e.toPaperId,
+    relationship: e.relationship,
+    intent: e.intent
+  }))
 
-  // Collapse duplicate assertions of the same edge across chains into one
-  // row, keeping the count. Unlike the company graph's source tags, these
-  // ARE independent: each chain was generated from a different focus paper's
-  // own reference list, so agreement is genuine corroboration.
-  let edgeRows: Array<{
-    fromPaperId: string
-    toPaperId: string
-    relationship: string
-    support: number
-  }> = []
+  // Fold in chain edges, but only where both endpoints already exist as
+  // nodes. Chain graphs reference papers by id alone, so admitting unknown
+  // endpoints would create titleless ghost nodes.
+  const known = new Set(nodeRows.map((n) => n.paperId))
   try {
-    edgeRows = db
-      .prepare<
-        [],
-        { fromPaperId: string; toPaperId: string; relationship: string; support: number }
-      >(
-        `SELECT fromPaperId, toPaperId, relationship,
-                COUNT(DISTINCT sourceFocusPaperId) AS support
-           FROM paper_value_chain_edges
-          GROUP BY fromPaperId, toPaperId, relationship`
+    const chainEdges = getDb()
+      .prepare<[], { fromPaperId: string; toPaperId: string; relationship: string }>(
+        `SELECT DISTINCT fromPaperId, toPaperId, relationship FROM paper_value_chain_edges`
       )
       .all()
+    const seen = new Set(edges.map((e) => e.from + '>' + e.to))
+    for (const c of chainEdges) {
+      if (!known.has(c.fromPaperId) || !known.has(c.toPaperId)) continue
+      const key = c.fromPaperId + '>' + c.toPaperId
+      if (seen.has(key)) continue
+      seen.add(key)
+      edges.push({
+        from: c.fromPaperId,
+        to: c.toPaperId,
+        relationship: c.relationship,
+        intent: null
+      })
+    }
   } catch {
-    // Pre-v52 database.
-    return { nodes: [], edges: [], hubs: [] }
+    // Pre-v52 database — citation edges alone are fine.
   }
 
-  let chainCounts: Array<{ paperId: string; chainCount: number }> = []
-  try {
-    // A paper's chain count is the number of distinct chains it appears in on
-    // either endpoint — the union, not the sum, so an edge pair doesn't
-    // double-count.
-    chainCounts = db
-      .prepare<[], { paperId: string; chainCount: number }>(
-        `SELECT paperId, COUNT(DISTINCT sourceFocusPaperId) AS chainCount FROM (
-           SELECT fromPaperId AS paperId, sourceFocusPaperId FROM paper_value_chain_edges
-           UNION
-           SELECT toPaperId AS paperId, sourceFocusPaperId FROM paper_value_chain_edges
-         ) GROUP BY paperId`
-      )
-      .all()
-  } catch {
-    chainCounts = []
+  const degree = new Map<string, number>()
+  for (const e of edges) {
+    degree.set(e.from, (degree.get(e.from) ?? 0) + 1)
+    degree.set(e.to, (degree.get(e.to) ?? 0) + 1)
   }
-  const chainCountBy = new Map(chainCounts.map((r) => [r.paperId, r.chainCount]))
 
-  // Titles only exist locally for bookmarked papers; chain endpoints are bare
-  // ids. Rather than fan out to S2 for every node (hundreds of calls), the
-  // graph renders unknown titles as the id and lets the detail panel hydrate
-  // on demand.
-  const bookmarks = listResearchBookmarks()
-  const bookmarkById = new Map(bookmarks.map((b) => [b.paperId, b.paper]))
+  const bookmarked = getBookmarkedPaperIds()
 
-  const ids = new Set<string>()
-  for (const e of edgeRows) {
-    ids.add(e.fromPaperId)
-    ids.add(e.toPaperId)
-  }
-  for (const b of bookmarks) ids.add(b.paperId)
-
-  // Semantic clusters, where embeddings exist. Papers without one get null
-  // rather than a bogus cluster.
+  // Semantic clusters where embeddings exist. Papers without one get null
+  // rather than being forced into a bucket they may not belong to.
   const clusterOf = new Map<string, number>()
   try {
-    for (const c of clusterLibrary([...ids])) {
+    for (const c of clusterLibrary(nodeRows.map((n) => n.paperId))) {
       for (const m of c.members) clusterOf.set(m, c.id)
     }
   } catch {
-    // Embeddings not fetched yet — the graph still renders uncoloured.
+    // No embeddings fetched yet — the graph still renders, coloured by field.
   }
 
-  const nodes: ResearchGraphNode[] = [...ids].map((paperId) => {
-    const paper = bookmarkById.get(paperId)
-    return {
-      paperId,
-      title: paper?.title ?? null,
-      year: paper?.year ?? null,
-      citationCount: paper?.citationCount ?? null,
-      influentialCitationCount: paper?.influentialCitationCount ?? null,
-      bookmarked: bookmarkById.has(paperId),
-      chainCount: chainCountBy.get(paperId) ?? 0,
-      cluster: clusterOf.get(paperId) ?? null
-    }
-  })
+  const nodes: ResearchGraphNode[] = nodeRows.map((n) => ({
+    paperId: n.paperId,
+    title: n.title,
+    year: n.year,
+    authors: n.authors,
+    venue: n.venue,
+    citationCount: n.citationCount,
+    influentialCitationCount: n.influentialCitationCount,
+    fields: n.fields,
+    field: n.fields[0] ?? null,
+    abstract: n.abstract,
+    url: n.url,
+    pdfUrl: n.pdfUrl,
+    bookmarked: bookmarked.has(n.paperId),
+    depth: n.depth,
+    expanded: n.expandedAt !== null,
+    cluster: clusterOf.get(n.paperId) ?? null,
+    degree: degree.get(n.paperId) ?? 0
+  }))
 
-  const hubs = nodes
-    .filter((n) => n.chainCount >= HUB_MIN_CHAINS)
-    .sort((a, b) => b.chainCount - a.chainCount)
-    .slice(0, 25)
-    .map((n) => ({ paperId: n.paperId, title: n.title, chainCount: n.chainCount }))
+  const fieldCounts = new Map<string, number>()
+  for (const n of nodes) {
+    if (!n.field) continue
+    fieldCounts.set(n.field, (fieldCounts.get(n.field) ?? 0) + 1)
+  }
+
+  // Hubs are the papers that the most other papers in YOUR graph connect to —
+  // the de facto canon of whatever the user actually works on, which is a
+  // different and more useful list than "most cited overall".
+  const hubs = [...nodes]
+    .sort((a, b) => b.degree - a.degree)
+    .slice(0, 20)
+    .filter((n) => n.degree > 1)
+    .map((n) => ({ paperId: n.paperId, title: n.title, degree: n.degree }))
 
   return {
     nodes,
-    edges: edgeRows.map((e) => ({
-      from: e.fromPaperId,
-      to: e.toPaperId,
-      relationship: e.relationship,
-      support: e.support
-    })),
-    hubs
+    edges,
+    fields: [...fieldCounts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count),
+    hubs,
+    stats: graphStats()
   }
 }
 
-// Co-citation: papers that recur together across chains without necessarily
-// citing each other. One of the two classic citation-graph similarity
-// metrics, and free here because the union table already exists.
+// Co-citation: papers this one frequently appears alongside, because they
+// cite the same works. Classic citation-graph similarity, and free now that
+// the edge table exists.
 export function findCoCited(
   paperId: string,
   limit = 15
@@ -167,19 +171,16 @@ export function findCoCited(
   if (!id) return []
   try {
     return getDb()
-      .prepare<[string, string, string, number], { paperId: string; shared: number }>(
-        `SELECT other AS paperId, COUNT(DISTINCT sourceFocusPaperId) AS shared FROM (
-           SELECT sourceFocusPaperId,
-                  CASE WHEN fromPaperId = ? THEN toPaperId ELSE fromPaperId END AS other
-             FROM paper_value_chain_edges
-            WHERE fromPaperId = ? OR toPaperId = ?
-         )
-         WHERE other IS NOT NULL
-         GROUP BY other
-         ORDER BY shared DESC
-         LIMIT ?`
+      .prepare<[string, string, number], { paperId: string; shared: number }>(
+        `SELECT b.fromPaperId AS paperId, COUNT(*) AS shared
+           FROM research_graph_edges a
+           JOIN research_graph_edges b ON b.toPaperId = a.toPaperId
+          WHERE a.fromPaperId = ? AND b.fromPaperId <> ?
+          GROUP BY b.fromPaperId
+          ORDER BY shared DESC
+          LIMIT ?`
       )
-      .all(id, id, id, limit)
+      .all(id, id, limit)
   } catch {
     return []
   }

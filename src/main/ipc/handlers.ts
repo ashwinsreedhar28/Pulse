@@ -788,6 +788,20 @@ export function registerDbIpc(): void {
     return getResearchGraph()
   })
 
+  // Grow the graph one bounded pass. Each run walks a slice of the frontier
+  // and marks it expanded, so repeated calls make progress rather than
+  // re-walking the same papers.
+  ipcMain.handle('research:expandGraph', async (_e, papers?: number) => {
+    const { expandGraph } = await import('../services/researchGraphExpander')
+    return expandGraph(typeof papers === 'number' ? { papers } : {})
+  })
+
+  // Grow from one specific paper, seeding it if the graph has not seen it.
+  ipcMain.handle('research:expandFromPaper', async (_e, paperId: string) => {
+    const { expandFromPaper } = await import('../services/researchGraphExpander')
+    return expandFromPaper(paperId)
+  })
+
   ipcMain.handle('research:coCited', async (_e, paperId: string, limit?: number) => {
     const { findCoCited } = await import('../services/researchGraphService')
     return findCoCited(paperId, limit ?? 15)

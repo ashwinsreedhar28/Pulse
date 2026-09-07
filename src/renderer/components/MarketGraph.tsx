@@ -22,7 +22,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MarketGraphNode, MarketGraphPayload, StockQuote } from '../../preload'
-import { runForceLayout3D, type LayoutEdge, type LayoutPosition3D } from './forceLayout'
+import type { LayoutEdge, LayoutPosition3D } from './forceLayout'
+import { runClusteredLayout3D } from './clusteredLayout'
 
 const R_MIN = 2.5
 const R_MAX = 15
@@ -202,68 +203,25 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
 
   // The expensive part, and the only part that must not run on camera moves.
   //
-  // Split by connectivity. The graph now includes every symbol with a sector
-  // assignment (~1,300) so the sector filter reflects the tracked universe,
-  // but only ~286 of those have edges. Feeding all of them to an O(n^2)
-  // simulation would be ~20x the pair work for no benefit: an isolated node
-  // has nothing pulling it anywhere, so the sim would only push it outward
-  // until the trimmed scaling squashed the connected core back into the
-  // middle — the same failure mode FIT_TRIM exists to prevent.
+  // Clustered by sector: every node is pulled toward its own sector centre,
+  // repulsion runs only within a sector, and cross-sector edges are softened
+  // so galaxies bend toward each other without merging. Sector centres are
+  // themselves positioned by cross-sector link counts, so sectors that
+  // actually trade with each other end up adjacent.
   //
-  // So connected symbols get the real simulation, and isolated ones are
-  // placed on a shell around it, grouped by sector. That keeps the layout at
-  // its measured ~85ms and reads correctly: a structured core surrounded by
-  // the wider universe.
+  // This replaces a plain force pass plus an outer shell for unconnected
+  // nodes. That version put the ~286 connected symbols in one central knot
+  // and scattered the other ~1,000 across latitude bands, which rendered as
+  // stripes on a sphere — structure invented by the layout rather than
+  // present in the data. Grouping also makes including all 1,300 nodes
+  // affordable: per-sector repulsion is a sum of small O(k^2) passes rather
+  // than one O(n^2) pass over everything.
   const layout = useMemo(() => {
-    const connectedIds = new Set<string>()
-    for (const e of visible.edges) {
-      connectedIds.add(e.from)
-      connectedIds.add(e.to)
-    }
-    const connected = visible.nodes.filter((n) => connectedIds.has(n.symbol))
-    const isolated = visible.nodes.filter((n) => !connectedIds.has(n.symbol))
-
+    const ids = visible.nodes.map((n) => n.symbol)
+    const sectorById = new Map(visible.nodes.map((n) => [n.symbol, n.topSectorId ?? 'unknown']))
     const edges: LayoutEdge[] = visible.edges.map((e) => ({ from: e.from, to: e.to }))
-    const pos = runForceLayout3D(
-      connected.map((n) => n.symbol),
-      edges
-    )
-    const map = new Map(pos.map((p) => [p.id, p]))
-
-    if (isolated.length > 0) {
-      // Group isolated nodes by sector so the outer shell is legible rather
-      // than a uniform haze — same-sector companies sit together.
-      const bySector = new Map<string, MarketGraphNode[]>()
-      for (const n of isolated) {
-        const key = n.topSectorId ?? 'unknown'
-        const arr = bySector.get(key)
-        if (arr) arr.push(n)
-        else bySector.set(key, [n])
-      }
-      const sectorKeys = [...bySector.keys()].sort()
-      // Shell radius sits outside the connected core, which the 3D layout
-      // normalizes to roughly unit radius.
-      const SHELL = 1.9
-      sectorKeys.forEach((key, si) => {
-        const group = bySector.get(key)!
-        // Each sector gets its own band of latitude, and members spread
-        // around it — a coarse spherical bucketing, cheap and stable.
-        const lat = ((si + 0.5) / sectorKeys.length - 0.5) * Math.PI * 0.85
-        group.forEach((n, i) => {
-          const lon = (i / Math.max(group.length, 1)) * Math.PI * 2
-          // Slight radial jitter so members of a large sector don't land on a
-          // perfect ring, which reads as an artefact rather than data.
-          const r = SHELL + ((i % 5) - 2) * 0.06
-          map.set(n.symbol, {
-            id: n.symbol,
-            x: Math.cos(lat) * Math.cos(lon) * r,
-            y: Math.sin(lat) * r,
-            z: Math.cos(lat) * Math.sin(lon) * r
-          })
-        })
-      })
-    }
-    return map
+    const pos = runClusteredLayout3D(ids, edges, (id) => sectorById.get(id) ?? 'unknown')
+    return new Map(pos.map((p) => [p.id, p]))
   }, [visible.nodes, visible.edges])
 
   const matches = useMemo(() => {

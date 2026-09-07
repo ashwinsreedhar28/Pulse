@@ -1852,5 +1852,74 @@ export const migrations: Migration[] = [
           ON paper_ticker_links(symbol);
       `)
     }
+  },
+  {
+    version: 58,
+    name: 'research_graph',
+    // A persistent, growing paper graph — the research counterpart to
+    // graph_node_overrides / graph_edge_overrides on the finance side.
+    //
+    // The research module had no equivalent accumulation. The stock graph
+    // works because ~880 typed edges built up over months of chain
+    // generation; research only ever had paper_value_chain_edges, which holds
+    // edges from generated chains alone (21 rows over 4 chains). ResearchMap
+    // drew bookmark-to-bookmark foundational links only, so with 2 bookmarks
+    // it was structurally empty no matter how good the renderer was.
+    //
+    // These tables are fed by citation expansion: BFS out from seed papers
+    // through S2's references and citations endpoints. That is the same shape
+    // as the finance graph — a slowly-accumulating structure the UI reads —
+    // except the edges are real bibliographic facts rather than model output,
+    // so they need no consensus weighting.
+    //
+    // Deliberately separate from paper_value_chain_edges rather than reusing
+    // it: that table is scoped per focus paper (sourceFocusPaperId) and is
+    // rewritten wholesale on regeneration. This one is global and additive.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS research_graph_nodes (
+          paperId TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          year INTEGER,
+          authorsJson TEXT,
+          venue TEXT,
+          citationCount INTEGER NOT NULL DEFAULT 0,
+          influentialCitationCount INTEGER NOT NULL DEFAULT 0,
+          fieldsJson TEXT,
+          abstract TEXT,
+          url TEXT,
+          pdfUrl TEXT,
+          arxivId TEXT,
+          doi TEXT,
+          -- Hops from the nearest seed. 0 = a seed itself (bookmark, chain
+          -- focus, or explicitly expanded paper). Lets the UI distinguish
+          -- "papers I chose" from "papers reached by expansion".
+          depth INTEGER NOT NULL DEFAULT 0,
+          -- Set when this paper's own references/citations have been fetched,
+          -- so expansion is resumable and never re-walks the same frontier.
+          expandedAt INTEGER,
+          addedAt INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_rgn_depth ON research_graph_nodes(depth);
+        CREATE INDEX IF NOT EXISTS idx_rgn_expanded ON research_graph_nodes(expandedAt);
+        CREATE INDEX IF NOT EXISTS idx_rgn_citations
+          ON research_graph_nodes(citationCount DESC);
+
+        CREATE TABLE IF NOT EXISTS research_graph_edges (
+          -- Direction is always citing -> cited, i.e. "from builds on to".
+          fromPaperId TEXT NOT NULL,
+          toPaperId TEXT NOT NULL,
+          -- 'cites' by default; 'influential' when S2 flags the citation as
+          -- influential, which is a far stronger signal than a bare reference.
+          relationship TEXT NOT NULL DEFAULT 'cites',
+          -- S2 intent when present (background / methodology / result).
+          intent TEXT,
+          addedAt INTEGER NOT NULL,
+          PRIMARY KEY (fromPaperId, toPaperId)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rge_from ON research_graph_edges(fromPaperId);
+        CREATE INDEX IF NOT EXISTS idx_rge_to ON research_graph_edges(toPaperId);
+      `)
+    }
   }
 ]
