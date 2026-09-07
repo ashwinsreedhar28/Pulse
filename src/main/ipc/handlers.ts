@@ -710,6 +710,13 @@ export function registerDbIpc(): void {
     deleteResearchTopic(id)
     return { ok: true }
   })
+  // Rehydrate a brief's paper cards from its persisted paperIds — one S2
+  // batch call, no search and no Sonnet synthesis. See hydratePapersByIds.
+  ipcMain.handle('research:hydratePapers', async (_e, paperIds: string[]) => {
+    const { hydratePapersByIds } = await import('../services/researchService')
+    return hydratePapersByIds(Array.isArray(paperIds) ? paperIds : [])
+  })
+
   ipcMain.handle('research:getBrief', async (_e, topicId: number) => {
     const { getResearchBrief } = await import('../database/researchBriefs')
     return getResearchBrief(topicId)

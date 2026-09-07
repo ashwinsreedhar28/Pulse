@@ -374,14 +374,17 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
       .catch(() => setTopicBookmarks([]))
     const row = await window.api.research.getBrief(topic.id)
     if (row) {
-      // Re-fetch papers via search to fill the cards (we only persist
-      // paperIds + the brief payload; not the full paper objects).
-      const result = await window.api.research.search(topic.query)
+      // Refill the cards from the brief's persisted paperIds. This used to
+      // call research.search(), i.e. a fresh S2 search plus a Sonnet
+      // synthesis at maxTokens 4000 — whose brief was then discarded in
+      // favour of row.payload below. Every click on a saved topic paid for
+      // a synthesis nobody read. hydratePapers is one S2 batch call.
+      const papers = await window.api.research.hydratePapers(row.paperIds)
       setView({
         kind: 'topic',
         query: topic.query,
         brief: row.payload,
-        papers: result.papers,
+        papers,
         topicId: topic.id
       })
     } else {

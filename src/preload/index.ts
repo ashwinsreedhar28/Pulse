@@ -1856,6 +1856,10 @@ const api = {
       invoke<{ ok: boolean }>('research:deleteTopic', id),
     getBrief: (topicId: number): Promise<ResearchBriefRow | null> =>
       invoke<ResearchBriefRow | null>('research:getBrief', topicId),
+    // Refill paper cards for a cached brief without re-running search or
+    // synthesis. One S2 batch call.
+    hydratePapers: (paperIds: string[]): Promise<ResearchPaper[]> =>
+      invoke<ResearchPaper[]>('research:hydratePapers', paperIds),
     refreshTopic: (topicId: number): Promise<{ ok: boolean }> =>
       invoke<{ ok: boolean }>('research:refreshTopic', topicId),
     onTopicUpdated: (cb: (topicId: number) => void): (() => void) => {

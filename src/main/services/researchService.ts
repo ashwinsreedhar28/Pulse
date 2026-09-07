@@ -62,6 +62,7 @@ const UA = 'Pulse/0.1 (research; ashwin.sreedhar2003@gmail.com)'
 // every fetch so a Settings change is picked up live without restart;
 // the cost is one DB read per S2 call (negligible vs the network).
 import { getPreferences } from '../database/preferences'
+import { s2Schedule } from './s2RateLimit'
 
 function s2ApiKey(): string | null {
   try {
@@ -145,24 +146,9 @@ function fromS2Paper(p: S2Paper): ResearchPaper | null {
 }
 
 // Semantic Scholar's unauthenticated tier is throttled to roughly
-// 1 request/second shared across all anonymous traffic — even one
-// user clicking through papers will 429 if we let request cluster.
-// We serialize all S2 calls behind a single-slot queue with a 1.1s
-// minimum gap, plus per-call retry-once on 429 with a 5s backoff.
-// 1.1s > 1s adds enough margin that simultaneous Pulse + other-app
-// traffic doesn't tip us over.
-const S2_MIN_GAP_MS = 1_100
-let s2NextSlot = 0
-let s2Queue: Promise<unknown> = Promise.resolve()
-
-async function s2Throttle(): Promise<void> {
-  const now = Date.now()
-  if (now < s2NextSlot) {
-    const wait = s2NextSlot - now
-    await new Promise((resolve) => setTimeout(resolve, wait))
-  }
-  s2NextSlot = Date.now() + S2_MIN_GAP_MS
-}
+// Pacing lives in s2RateLimit.ts, shared with paperValueChainService. Both
+// features draw on the same S2 per-IP budget, so they must queue together —
+// see that module for why the previous per-service counters double-emitted.
 
 async function fetchJsonRaw<T>(url: string): Promise<T> {
   const controller = new AbortController()
@@ -189,21 +175,16 @@ async function fetchJsonRaw<T>(url: string): Promise<T> {
 const S2_RETRY_DELAYS_MS = [5_000, 15_000]
 
 async function fetchJson<T>(url: string): Promise<T> {
-  // Chain into the queue so concurrent callers are serialized.
-  // Each task awaits its slot, runs, and returns its result; the
-  // queue advances regardless of success/failure.
-  const task = s2Queue.then(async () => {
-    await s2Throttle()
+  // s2Schedule serializes across BOTH S2 features and owns the rate-limit
+  // slot; retries re-enter it so a backoff doesn't jump the queue.
+  return s2Schedule(async () => {
     let lastErr: unknown = null
     for (let attempt = 0; attempt <= S2_RETRY_DELAYS_MS.length; attempt++) {
       try {
-        if (attempt === 0) {
-          return await fetchJsonRaw<T>(url)
-        }
+        if (attempt === 0) return await fetchJsonRaw<T>(url)
         await new Promise((resolve) =>
           setTimeout(resolve, S2_RETRY_DELAYS_MS[attempt - 1])
         )
-        await s2Throttle()
         return await fetchJsonRaw<T>(url)
       } catch (err) {
         lastErr = err
@@ -212,19 +193,12 @@ async function fetchJson<T>(url: string): Promise<T> {
         if (!msg.includes('HTTP 429')) throw err
       }
     }
-    // Exhausted retries — convert to tagged error so the caller can
-    // distinguish from empty-result.
     console.warn(
       '[research] Semantic Scholar still rate-limited after retries; surfacing rate_limited to caller',
       lastErr instanceof Error ? lastErr.message : ''
     )
     throw new S2RateLimitError()
   })
-  // Replace the queue head so the next caller chains off this task.
-  // Catch the rejection on the queue side so a single failure doesn't
-  // poison every subsequent S2 call.
-  s2Queue = task.catch(() => undefined)
-  return task as Promise<T>
 }
 
 // ---------- Search + filter -------------------------------------------------
@@ -677,4 +651,65 @@ export function computeBridgePapers(
     return paperScore(b.paper) - paperScore(a.paper)
   })
   return results.slice(0, limit)
+}
+
+// Hydrate a known set of papers by id, with no search and no synthesis.
+//
+// Opening a saved topic used to call searchAndSynthesize just to refill the
+// paper cards: an S2 search plus a claude-sonnet-4-6 call at maxTokens 4000,
+// whose brief was then thrown away in favour of the cached
+// research_briefs.payload. Every click on a saved topic cost a real Sonnet
+// call and 5-10s for a synthesis nobody read.
+//
+// research_briefs.paperIdsJson exists precisely so the cards can be
+// rehydrated. S2's POST /paper/batch resolves up to 500 ids in one request,
+// so this is a single call — cheaper than the search it replaces, never mind
+// the synthesis.
+export async function hydratePapersByIds(paperIds: string[]): Promise<ResearchPaper[]> {
+  const ids = paperIds.map((s) => s.trim()).filter(Boolean).slice(0, 500)
+  if (ids.length === 0) return []
+
+  const url = `${S2_BASE}/paper/batch?fields=${encodeURIComponent(PAPER_FIELDS)}`
+  let rows: Array<S2Paper | null>
+  try {
+    rows = await s2Schedule(async () => {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+      try {
+        const headers: Record<string, string> = {
+          'User-Agent': UA,
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        }
+        const key = s2ApiKey()
+        if (key) headers['x-api-key'] = key
+        const res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ ids }),
+          signal: controller.signal
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return (await res.json()) as Array<S2Paper | null>
+      } finally {
+        clearTimeout(timer)
+      }
+    })
+  } catch (err) {
+    console.warn(
+      '[research] batch hydrate failed:',
+      err instanceof Error ? err.message : err
+    )
+    return []
+  }
+
+  // The batch endpoint returns null in-place for ids it can't resolve, and
+  // preserves request order — so this keeps the brief's original ranking.
+  const out: ResearchPaper[] = []
+  for (const row of rows ?? []) {
+    if (!row) continue
+    const p = fromS2Paper(row)
+    if (p) out.push(p)
+  }
+  return out
 }

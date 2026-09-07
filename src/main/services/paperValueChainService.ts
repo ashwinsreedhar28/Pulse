@@ -53,6 +53,7 @@ import {
 } from '../database/paperChainEnrichments'
 import { callClaude, CLAUDE_MODELS } from './claudeService'
 import { recordClaudeCall } from './aiClient'
+import { s2Schedule } from './s2RateLimit'
 
 const S2_BASE = 'https://api.semanticscholar.org/graph/v1'
 const FETCH_TIMEOUT_MS = 20_000
@@ -89,13 +90,10 @@ const PAPER_FIELDS = [
 
 const UA = 'Pulse/0.1 (paper-value-chain; ashwin.sreedhar2003@gmail.com)'
 
-// Same throttle shape as researchService — anonymous tier shares ~1 RPS
-// across all callers, so we serialize behind a single-slot queue with a
-// 1.1s minimum gap. Independent counter intentionally so neither feature
-// can starve the other; both are bound by S2's per-IP limit anyway.
-const S2_MIN_GAP_MS = 1_100
-let s2NextSlot = 0
-let s2Queue: Promise<unknown> = Promise.resolve()
+// Pacing lives in s2RateLimit.ts, shared with researchService. Previously
+// each service kept its own counter, on the reasoning that they were "bound
+// by S2's per-IP limit anyway" — which is exactly why one shared queue is
+// required: two independent queues each pacing at 1 RPS emit 2 RPS.
 
 function s2ApiKey(): string | null {
   try {
@@ -104,14 +102,6 @@ function s2ApiKey(): string | null {
   } catch {
     return null
   }
-}
-
-async function s2Throttle(): Promise<void> {
-  const now = Date.now()
-  if (now < s2NextSlot) {
-    await new Promise((resolve) => setTimeout(resolve, s2NextSlot - now))
-  }
-  s2NextSlot = Date.now() + S2_MIN_GAP_MS
 }
 
 class S2RateLimitError extends Error {
@@ -147,20 +137,19 @@ interface FetchOutcome<T> {
 }
 
 async function fetchJson<T>(url: string): Promise<FetchOutcome<T>> {
-  const task = s2Queue.then(async (): Promise<FetchOutcome<T>> => {
+  // s2Schedule owns the rate-limit slot and serializes across BOTH S2
+  // features, so a chain regen and an open paper-detail panel now interleave
+  // on one budget instead of racing.
+  return s2Schedule(async (): Promise<FetchOutcome<T>> => {
     let calls = 0
     let lastErr: unknown = null
     for (let attempt = 0; attempt <= S2_RETRY_DELAYS_MS.length; attempt++) {
       try {
-        if (attempt === 0) {
-          await s2Throttle()
-          calls += 1
-          return { data: await fetchJsonRaw<T>(url), callsMade: calls }
+        if (attempt > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, S2_RETRY_DELAYS_MS[attempt - 1])
+          )
         }
-        await new Promise((resolve) =>
-          setTimeout(resolve, S2_RETRY_DELAYS_MS[attempt - 1])
-        )
-        await s2Throttle()
         calls += 1
         return { data: await fetchJsonRaw<T>(url), callsMade: calls }
       } catch (err) {
@@ -175,8 +164,6 @@ async function fetchJson<T>(url: string): Promise<FetchOutcome<T>> {
     )
     throw new S2RateLimitError()
   })
-  s2Queue = task.catch(() => undefined)
-  return task as Promise<FetchOutcome<T>>
 }
 
 // ---------- S2 wire shape --------------------------------------------------
