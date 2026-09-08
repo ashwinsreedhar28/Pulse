@@ -1879,8 +1879,17 @@ const api = {
       ),
     getCompanyChain: (symbol: string) =>
       invoke<CompanyValueChainRow | null>('stocks:getCompanyChain', symbol),
-    regenerateAllChains: (): Promise<{ ok: boolean }> =>
-      invoke<{ ok: boolean }>('stocks:regenerateAllChains'),
+    // scope 'watchlist' (default) = existing chains + active tickers.
+    // scope 'graph' = every sector-classified symbol, i.e. the full market
+    // graph universe. The latter is a multi-hour run.
+    regenerateAllChains: (scope?: 'watchlist' | 'graph'): Promise<{ ok: boolean }> =>
+      invoke<{ ok: boolean }>('stocks:regenerateAllChains', scope),
+    getChainScopeCounts: (): Promise<{
+      existing: number
+      watchlist: number
+      graph: number
+      graphMissing: number
+    }> => invoke('stocks:getChainScopeCounts'),
     // One-shot Claude-only regen. Bypasses the local cap counter and
     // disables Ollama fallback. Used to backfill citations across the
     // entire watchlist with maximum quality — accept the API cost.

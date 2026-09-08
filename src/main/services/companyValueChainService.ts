@@ -28,7 +28,8 @@ import { forceRefreshFilings } from './secFilingsService'
 import {
   ensureTickerSectorsClassified,
   getPrimarySectorForSymbol,
-  getSector
+  getSector,
+  listSectorClassifiedSymbols
 } from './sectorService'
 import { absorbGeneratedChain } from './chainAbsorberService'
 import {
@@ -2887,6 +2888,14 @@ export async function regenerateAllChains(
     // quality. On per-call Claude failure (real Anthropic 429 or auth
     // error), the ticker is recorded as failed and the loop continues.
     forceProvider?: 'claude' | 'ollama'
+    // Which symbols count as "all".
+    //
+    // 'watchlist' (default) is the historical scope: existing chains plus
+    // active tickers. 'graph' is every symbol carrying a sector assignment,
+    // i.e. everything the market graph is supposed to describe. The two used
+    // to be nearly the same set and are not any more — see the scope note
+    // below.
+    scope?: 'watchlist' | 'graph'
   } = {}
 ): Promise<RegenerateAllProgress> {
   if (regenRunning) return regenProgress
@@ -2898,20 +2907,40 @@ export async function regenerateAllChains(
   // Regenerate-all in the same session short-circuits on the early
   // `if (regenRunning) return` guard above.
   try {
-  // Expanded scope: "regenerate all" now means every ticker the user has
-  // expressed interest in — union of (a) tickers that already have a chain
-  // (refresh them with the latest classifier / prompt / model) and
-  // (b) active watchlist tickers that have never been generated (give them
-  // a chain so they participate in the unified graph). Passive tickers
-  // (chain-absorbed counterparties in someone else's chain) are NOT in
-  // scope — they already appear via inheritance and would multiply cost.
+  // Scope: union of (a) tickers that already have a chain (refresh them with
+  // the latest classifier / prompt / model) and (b) tickers that have never
+  // been generated, so they can join the unified graph.
+  //
+  // What counts as (b) depends on the scope. It used to be "active tickers"
+  // unconditionally, on the reasoning that passive tickers were chain-absorbed
+  // counterparties in someone else's chain and so already appeared by
+  // inheritance. That reasoning died with the sectorUniverse.json seed: those
+  // ~1,160 rows land passive but are nobody's counterparty, so on the live DB
+  // 1,093 of 1,291 passive tickers appeared in NO chain and on NO edge. They
+  // were not inherited, they were absent — which is why the graph had chains
+  // for 105 symbols while 1,199 carried sector assignments.
+  //
+  // 'graph' scope therefore keys on having a sector assignment (membership in
+  // the graph universe) rather than on isActive (membership in the watchlist,
+  // which governs quote polling and article scoring and has nothing to say
+  // about the graph). It stays opt-in because it is a far larger run.
   const existingChainSymbols = new Set(listCompanyValueChainSymbols())
-  const watchlist = listTickers().filter((t) => t.isActive)
+  const scope = opts.scope ?? 'watchlist'
+  const candidates =
+    scope === 'graph'
+      ? listSectorClassifiedSymbols()
+      : listTickers()
+          .filter((t) => t.isActive)
+          .map((t) => t.symbol)
   const symbolSet = new Set<string>([
     ...existingChainSymbols,
-    ...watchlist.map((t) => t.symbol.toUpperCase())
+    ...candidates.map((sym) => sym.toUpperCase())
   ])
   let symbols = [...symbolSet].sort()
+  console.log(
+    `[companyChain] regenerate-all scope=${scope}: ${symbols.length} symbols ` +
+      `(${existingChainSymbols.size} existing chains, ${candidates.length} in scope)`
+  )
 
   // Skip-fresh filter: when a window is provided, drop any symbol whose
   // stored chain was generated more recently than the window. Never-
@@ -3051,6 +3080,31 @@ const AUTO_REGEN_MAX_PER_BOOT = 25 // Cap a single boot's regen run at the
 // 25 stalest chains. With ~65-100 symbols in scope this means one boot
 // won't burn the entire daily Claude budget; it takes 3-4 boots over the
 // throttle window to fully refresh the graph.
+
+// Symbol counts per regen scope, so the UI can state the size of a run
+// before starting it rather than after.
+export function getChainScopeCounts(): {
+  existing: number
+  watchlist: number
+  graph: number
+  graphMissing: number
+} {
+  const existing = new Set(listCompanyValueChainSymbols())
+  const watchlist = new Set(
+    listTickers()
+      .filter((t) => t.isActive)
+      .map((t) => t.symbol.toUpperCase())
+  )
+  const graph = new Set(listSectorClassifiedSymbols().map((sym) => sym.toUpperCase()))
+  let graphMissing = 0
+  for (const sym of graph) if (!existing.has(sym)) graphMissing++
+  return {
+    existing: existing.size,
+    watchlist: new Set([...existing, ...watchlist]).size,
+    graph: new Set([...existing, ...graph]).size,
+    graphMissing
+  }
+}
 
 export async function maybeAutoRegenerateOnBoot(): Promise<void> {
   // Late-imported to avoid circular-dependency headaches with preferences.

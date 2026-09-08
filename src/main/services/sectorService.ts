@@ -552,6 +552,20 @@ export function getPrimarySectorForSymbol(symbol: string): TickerSector | null {
   return rows.find((r) => r.isPrimary) ?? null
 }
 
+// Every symbol carrying a sector assignment — the graph universe.
+//
+// Distinct from the watchlist (`tickers.isActive`), which governs quote
+// polling and article scoring. A symbol can belong in the graph without being
+// on the watchlist, and after the sectorUniverse seed most of them are.
+export function listSectorClassifiedSymbols(): string[] {
+  return getDb()
+    .prepare<[], { symbol: string }>(
+      `SELECT DISTINCT symbol FROM ticker_sectors ORDER BY symbol`
+    )
+    .all()
+    .map((r) => r.symbol)
+}
+
 export function listSymbolsInSector(sectorId: string): string[] {
   return getDb()
     .prepare<[string], { symbol: string }>(

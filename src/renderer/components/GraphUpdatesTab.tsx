@@ -98,6 +98,12 @@ export function GraphUpdatesTab(): JSX.Element {
     skipped: number
   } | null>(null)
   const [regenProgress, setRegenProgress] = useState<RegenerateAllProgress | null>(null)
+  const [scopeCounts, setScopeCounts] = useState<{
+    existing: number
+    watchlist: number
+    graph: number
+    graphMissing: number
+  } | null>(null)
 
   const reload = useCallback(async (): Promise<void> => {
     const [overrideRows, nodeRows, auditRows, weekCounts] = await Promise.all([
@@ -128,6 +134,10 @@ export function GraphUpdatesTab(): JSX.Element {
     void window.api.stocks.getRegenerateAllProgress().then((p) => {
       if (p.total > 0) setRegenProgress(p)
     })
+    void window.api.stocks
+      .getChainScopeCounts()
+      .then(setScopeCounts)
+      .catch(() => setScopeCounts(null))
     return window.api.stocks.onRegenerateAllProgress((p) => setRegenProgress(p))
   }, [])
 
@@ -156,6 +166,23 @@ export function GraphUpdatesTab(): JSX.Element {
   const onRegenerateAll = async (): Promise<void> => {
     if (regenProgress?.running) return
     await window.api.stocks.regenerateAllChains()
+  }
+
+  // Full-universe run. Guarded by a confirm because it is hours long and
+  // costs real API spend — the one action here where a stray click matters.
+  const onRegenerateUniverse = async (): Promise<void> => {
+    if (regenProgress?.running) return
+    const missing = scopeCounts?.graphMissing ?? 0
+    const hours = Math.round((missing * 93) / 3600)
+    const ok = window.confirm(
+      `Generate value chains for the full graph universe?\n\n` +
+        `${missing} symbols have no chain yet. At ~90s each this is roughly ` +
+        `${hours} hours of continuous generation and a Claude call per symbol.\n\n` +
+        `It resumes where it left off if you quit, and already-generated ` +
+        `chains are skipped.`
+    )
+    if (!ok) return
+    await window.api.stocks.regenerateAllChains('graph')
   }
 
   const onUndo = async (
@@ -257,10 +284,32 @@ export function GraphUpdatesTab(): JSX.Element {
             >
               {regenProgress?.running
                 ? `Generating ${regenProgress.completed + 1}/${regenProgress.total}…`
-                : 'Regenerate all chains'}
+                : `Regenerate watchlist${scopeCounts ? ` (${scopeCounts.watchlist})` : ''}`}
+            </button>
+            <button
+              onClick={onRegenerateUniverse}
+              disabled={regenProgress?.running ?? false}
+              title="Generate a value chain for every sector-classified symbol, not just the watchlist. This is what fills the market graph out to its full universe. Multi-hour, resumable, one Claude call per symbol."
+              className={`text-[10.5px] font-semibold uppercase tracking-[0.18em] px-3 py-1.5 rounded-full ring-1 ring-inset transition-colors ${
+                regenProgress?.running
+                  ? 'bg-zinc-800 text-zinc-500 ring-zinc-700 cursor-wait'
+                  : 'bg-amber-500/15 text-amber-200 ring-amber-500/40 hover:bg-amber-500/25'
+              }`}
+            >
+              {`Full universe${scopeCounts ? ` (${scopeCounts.graph})` : ''}`}
             </button>
           </div>
         </div>
+        {/* The gap between the two scopes is the whole point of the second
+            button existing, so state it rather than hiding it in a tooltip. */}
+        {scopeCounts && scopeCounts.graphMissing > 0 && !regenProgress?.running && (
+          <div className="mt-2 text-[11px] text-amber-200/70">
+            {scopeCounts.existing} symbols have a value chain.{' '}
+            {scopeCounts.graphMissing} more carry a sector assignment but no chain,
+            so they are absent from the market graph — &ldquo;Full universe&rdquo;
+            generates those.
+          </div>
+        )}
         {regenProgress && regenProgress.total > 0 && (
           <div className="mt-2 text-[11px] text-zinc-500">
             {regenProgress.running ? (

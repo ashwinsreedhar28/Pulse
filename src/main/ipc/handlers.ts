@@ -636,10 +636,17 @@ export function registerDbIpc(): void {
   // absorber behavior without the user re-clicking Generate on each detail
   // page. Fire-and-forget from the renderer's perspective — progress is
   // broadcast on 'chainRegen:progress'.
-  ipcMain.handle('stocks:regenerateAllChains', async () => {
+  ipcMain.handle('stocks:regenerateAllChains', async (_e, scope?: 'watchlist' | 'graph') => {
     const { regenerateAllChains } = await import('../services/companyValueChainService')
-    void regenerateAllChains()
+    void regenerateAllChains(scope === 'graph' ? { scope: 'graph' } : {})
     return { ok: true }
+  })
+  // How many symbols each scope would cover. The graph-scope run is long
+  // enough (hours, and real API spend) that the button must be able to say
+  // what it is about to do before it is pressed.
+  ipcMain.handle('stocks:getChainScopeCounts', async () => {
+    const { getChainScopeCounts } = await import('../services/companyValueChainService')
+    return getChainScopeCounts()
   })
   // One-shot Claude-only variant. Bypasses the local cap counter and
   // disables Ollama fallback so the entire run uses Sonnet for maximum
