@@ -1246,6 +1246,13 @@ export interface MultiSourceSearchResult {
 }
 
 
+export interface DiscoverSection {
+  fieldId: string
+  label: string
+  papers: ResearchPaper[]
+  fetchedAt: number | null
+}
+
 export interface ResearchGraphNode {
   paperId: string
   title: string
@@ -1967,6 +1974,10 @@ const api = {
     recommend: (candidateIds: string[], limit?: number): Promise<SimilarPaper[]> =>
       invoke<SimilarPaper[]>('research:recommend', candidateIds, limit),
     // Union of every paper chain into one graph.
+    discover: (): Promise<DiscoverSection[]> =>
+      invoke<DiscoverSection[]>('research:discover'),
+    refreshDiscover: (force?: boolean): Promise<number> =>
+      invoke<number>('research:refreshDiscover', force),
     graph: (): Promise<ResearchGraphPayload> =>
       invoke<ResearchGraphPayload>('research:graph'),
     expandGraph: (papers?: number): Promise<GraphExpansionResult> =>

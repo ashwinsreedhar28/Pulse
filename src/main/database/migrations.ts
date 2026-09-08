@@ -1921,5 +1921,34 @@ export const migrations: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_rge_to ON research_graph_edges(toPaperId);
       `)
     }
+  },
+  {
+    version: 59,
+    name: 'research_discover_cache',
+    // Cached "what is happening in field X right now" results.
+    //
+    // Research opened onto an empty search box, which is a bad front door: it
+    // demands the user already know what they are looking for, and since the
+    // paper graph only grows from papers they have engaged with, an empty
+    // start meant an empty graph indefinitely.
+    //
+    // Cached rather than fetched live, for a measured reason. Semantic Scholar
+    // throttles this account intermittently regardless of pacing (2s and 3s
+    // gaps both land near 83% success; 5s tested worse), so a landing page
+    // firing ten searches on open would be slow and would often render with
+    // holes in it. One row per field, refreshed in the background, makes
+    // opening Research instant and keeps it working offline.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS research_discover (
+          fieldId TEXT PRIMARY KEY,
+          label TEXT NOT NULL,
+          -- Full ResearchPaper objects rather than ids: the landing page has
+          -- to render without a second round-trip, and these are display-only.
+          papersJson TEXT NOT NULL,
+          fetchedAt INTEGER NOT NULL
+        );
+      `)
+    }
   }
 ]

@@ -783,6 +783,17 @@ export function registerDbIpc(): void {
 
   // Union of every paper chain — the "universe view" over
   // paper_value_chain_edges, which was populated but never read.
+  // Discovery landing page. Reads cache only so the view paints instantly;
+  // refreshing is the scheduler's job.
+  ipcMain.handle('research:discover', async () => {
+    const { getDiscoverSections } = await import('../services/researchDiscoverService')
+    return getDiscoverSections()
+  })
+  ipcMain.handle('research:refreshDiscover', async (_e, force?: boolean) => {
+    const { refreshDiscover } = await import('../services/researchDiscoverService')
+    return refreshDiscover({ force: force === true })
+  })
+
   ipcMain.handle('research:graph', async () => {
     const { getResearchGraph } = await import('../services/researchGraphService')
     return getResearchGraph()

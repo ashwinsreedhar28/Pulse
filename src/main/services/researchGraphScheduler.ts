@@ -15,6 +15,7 @@
 // here would starve the interactive paths the user is actually waiting on.
 
 import { expandGraph } from './researchGraphExpander'
+import { refreshDiscover } from './researchDiscoverService'
 import { ensureEmbeddings } from './paperSimilarityService'
 import { listGraphNodes } from '../database/researchGraph'
 import { listEmbeddedIds } from '../database/paperEmbeddings'
@@ -42,6 +43,16 @@ async function tick(): Promise<void> {
   if (shouldDeferOnResume()) return
   running = true
   try {
+    // Discovery cache first. It is the landing view, so it matters more than
+    // graph growth that nobody is looking at yet, and it is cheap — one
+    // search per stale field, at most once a day each.
+    try {
+      const n = await refreshDiscover()
+      if (n > 0) console.log(`[discover] refreshed ${n} fields`)
+    } catch (err) {
+      console.warn('[discover] refresh failed:', err instanceof Error ? err.message : err)
+    }
+
     const res = await expandGraph({ papers: PAPERS_PER_TICK })
     if (res.papersExpanded > 0) {
       console.log(

@@ -25,6 +25,7 @@ import type {
 import { CollapseChevron, useCollapsedSection } from './collapseUI'
 import { ResearchMap } from './ResearchMap'
 import { ResearchGraph } from './ResearchGraph'
+import { ResearchDiscover } from './ResearchDiscover'
 import { PaperValueChainCard } from './PaperValueChainCard'
 
 interface Props {
@@ -565,14 +566,23 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
             />
           )}
 
+          {/* Landing view. Replaces a bare "type something" prompt: every
+              card here is also a valid graph seed, so browsing is how the
+              citation graph gets built in the first place. */}
           {view.kind === 'idle' && (
-            <div className="mt-12 text-center">
-              <div className="text-[12px] text-zinc-500 max-w-md mx-auto">
-                Search the academic literature. Pulse pulls top papers from
-                Semantic Scholar, filters to the most-cited / most-influential,
-                and synthesizes a brief on what's groundbreaking.
-              </div>
-            </div>
+            <ResearchDiscover
+              onSelectPaper={setSelectedPaper}
+              onSearch={(q) => {
+                setDraft(q)
+                void runSearch(q)
+              }}
+              onBuildGraph={(p) => {
+                setGraphOpen(true)
+                void window.api.research.expandFromPaper(p.paperId).catch((err) => {
+                  console.warn('[research] expandFromPaper failed:', err)
+                })
+              }}
+            />
           )}
           {view.kind === 'loading' && (
             <div className="mt-12 text-center text-[12px] text-zinc-500">
