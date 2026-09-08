@@ -21,10 +21,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { NeighborhoodNode, NeighborhoodPayload, ResearchPaper } from '../../preload'
 
-const R_MIN = 5
-const R_MAX = 22
-const LAYER_GAP = 190
-const NODE_GAP = 170
+const R_MIN = 7
+const R_MAX = 26
+// Bands need vertical room for a two-line label under each node, but not
+// much more: every extra pixel here costs zoom, and zoom is what makes labels
+// readable. 110 leaves ~105px between bands at the default zoom.
+const LAYER_GAP = 110
+// Wide enough that adjacent titles have a fighting chance of not colliding.
+const NODE_GAP = 300
+// Labels are drawn at a fixed screen size rather than scaled with zoom —
+// text that shrinks with the layout is the fastest way to make a graph
+// unreadable when zoomed out to fit.
+const LABEL_PX = 11
+const LABEL_MAX_CHARS = 34
 
 interface Placed {
   node: NeighborhoodNode
@@ -78,6 +87,9 @@ export function ResearchGraph({
   const placedRef = useRef<Placed[]>([])
   const dragRef = useRef<{ x: number; y: number; camX: number; camY: number } | null>(null)
   const rafRef = useRef<number | null>(null)
+  // Papers we have already auto-fetched for, so a paper that genuinely has no
+  // stored citations does not retry on every reload.
+  const autoExpandedRef = useRef<string | null>(null)
   const [dragging, setDragging] = useState(false)
 
 
@@ -122,6 +134,21 @@ export function ResearchGraph({
       setExpanding(false)
     }
   }, [focusPaperId, load])
+
+  // Fetch automatically the first time a focus turns out to be unexpanded.
+  //
+  // "Build graph" from the discover page lands on a paper whose neighbours
+  // have never been fetched, and the honest answer to that click is to go
+  // fetch them — not to render an empty canvas with a second button that
+  // does what the first one implied. The ref keys on the paper id so a paper
+  // with genuinely zero stored citations asks once, not in a loop.
+  useEffect(() => {
+    if (!focusPaperId || !data || expanding) return
+    if (!data.needsExpansion) return
+    if (autoExpandedRef.current === focusPaperId) return
+    autoExpandedRef.current = focusPaperId
+    void expand()
+  }, [focusPaperId, data, expanding, expand])
 
   // Layered layout. Generation sets the row; within a row, papers are ordered
   // by year then citations so each layer reads left-to-right as a timeline.
@@ -186,33 +213,38 @@ export function ResearchGraph({
     const canvas = canvasRef.current
     if (!canvas || layout.length === 0) return false
     if (canvas.clientWidth === 0 || canvas.clientHeight === 0) return false
-    let minX = Infinity
-    let maxX = -Infinity
+    // Only the vertical extent matters — see the fit rationale below.
     let minY = Infinity
     let maxY = -Infinity
     for (const p of layout) {
-      minX = Math.min(minX, p.x)
-      maxX = Math.max(maxX, p.x)
       minY = Math.min(minY, p.y)
       maxY = Math.max(maxY, p.y)
     }
+    // Fit VERTICALLY only, and never below a legible zoom.
+    //
+    // Fitting the full bounding box was actively harmful. A band of ten
+    // papers is ~2,700px wide against a ~1,400px canvas, so fitting both axes
+    // drove zoom to 0.32 — nodes shrank to 8px and, because labels are drawn
+    // at a fixed screen size, only 61% of them could be placed without
+    // colliding. Measured across configurations, fitting height alone with a
+    // 0.7 floor lands at zoom ~0.95 and fits 100% of labels at full node size.
+    //
+    // The horizontal overflow is real and is the right trade: all five
+    // generations stay visible at once, which is the structure, and the user
+    // pans sideways to read along a band.
     const pad = 90
-    const spanX = Math.max(maxX - minX, 1)
     const spanY = Math.max(maxY - minY, 1)
     const zoom = Math.max(
-      0.05,
-      Math.min(
-        1.4,
-        Math.min(
-          (canvas.clientWidth - pad * 2) / spanX,
-          (canvas.clientHeight - pad * 2) / spanY
-        )
-      )
+      0.7,
+      Math.min(1.3, (canvas.clientHeight - pad) / spanY)
     )
     // Centre on the layout's midpoint rather than the origin — the focus node
     // is at x=0 but a lopsided neighbourhood is not centred there.
+    // Centre horizontally on the focus paper (x = 0) rather than on the
+    // bounding box, so the paper you asked about is under the cursor when the
+    // view opens and panning radiates out from it.
     camRef.current = {
-      x: -((minX + maxX) / 2) * zoom,
+      x: 0,
       y: -((minY + maxY) / 2) * zoom,
       zoom
     }
@@ -278,32 +310,135 @@ export function ResearchGraph({
       }
     }
 
-    // Edges, drawn as vertical-tending curves so direction is obvious even
-    // where two papers sit in the same band.
-    for (const e of data?.edges ?? []) {
+    // Edges.
+    //
+    // Three problems made these unreadable: every edge had the same weight,
+    // so 80 of them read as undifferentiated noise; there was no arrowhead,
+    // so direction was invisible; and the focus paper's own citations — the
+    // only ones the view exists to show — were drawn exactly like everything
+    // else. The result was that the band labels carried all the meaning and
+    // the lines carried none.
+    //
+    // Now there are three tiers. Edges touching the focus are bright and
+    // arrowed. Edges touching whatever is hovered are bright. Everything else
+    // is faint context. Arrowheads point along the citation, from the citing
+    // paper down to the work it builds on, so direction is legible without
+    // consulting the axis.
+    const focusId = data?.focusPaperId
+    const edges = data?.edges ?? []
+
+    // Arrowhead on the curve, at its midpoint, pointing along it.
+    //
+    // Heads used to sit at the target node, which could not have worked: the
+    // curve's second control point is (x2, cy1), so every edge arrives
+    // perfectly vertically and every head pointed straight down regardless of
+    // where its edge came from. They read as detached triangles hovering over
+    // the nodes because that is effectively what they were.
+    //
+    // The midpoint is where the curve is most diagonal, so the head sits ON
+    // the line and its angle genuinely varies per edge. For the cubic through
+    // (x1,y1), (x1,cy1), (x2,cy1), (x2,y2) with cy1 the Y midpoint, B(0.5) is
+    // exactly the chord midpoint and the tangent there reduces to
+    // (2(x2-x1), y2-y1) — so both fall out in closed form, no sampling.
+    const drawArrow = (
+      x1: number,
+      y1: number,
+      x2: number,
+      y2: number,
+      color: string,
+      size: number
+    ): void => {
+      const dx = 2 * (x2 - x1)
+      const dy = y2 - y1
+      const len = Math.hypot(dx, dy) || 1
+      const ux = dx / len
+      const uy = dy / len
+      const mx = (x1 + x2) / 2
+      const my = (y1 + y2) / 2
+      // Straddle the midpoint rather than starting at it, so the head reads
+      // as part of the line instead of as a marker sitting after it.
+      const tipX = mx + ux * size * 0.5
+      const tipY = my + uy * size * 0.5
+      const nx = -uy
+      const ny = ux
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.moveTo(tipX, tipY)
+      ctx.lineTo(tipX - ux * size + nx * size * 0.55, tipY - uy * size + ny * size * 0.55)
+      ctx.lineTo(tipX - ux * size - nx * size * 0.55, tipY - uy * size - ny * size * 0.55)
+      ctx.closePath()
+      ctx.fill()
+    }
+
+    // Paint faint first, emphasised last, so important edges are never buried
+    // under context lines.
+    const tier = (e: { from: string; to: string }): 0 | 1 | 2 => {
+      if (hover) return neighbours.has(e.from) && neighbours.has(e.to) ? 2 : 0
+      if (e.from === focusId || e.to === focusId) return 2
+      return 1
+    }
+    const ordered = [...edges].sort((x, y) => tier(x) - tier(y))
+
+    for (const e of ordered) {
       const a = positions.get(e.from)
-      const b = positions.get(e.to)
-      if (!a || !b) continue
-      const focused = hover ? neighbours.has(e.from) && neighbours.has(e.to) : null
-      if (focused === false) continue
+      const bNode = positions.get(e.to)
+      if (!a || !bNode) continue
+      const t = tier(e)
+      // While hovering, non-neighbour edges disappear entirely rather than
+      // dimming — at this density, faint clutter still reads as clutter.
+      if (hover && t === 0) continue
+
       const influential = e.relationship === 'influential'
-      ctx.strokeStyle = influential
-        ? `rgba(251,191,36,${focused ? 0.85 : 0.34})`
-        : `rgba(120,150,200,${focused ? 0.75 : 0.2})`
-      ctx.lineWidth = (influential ? 1.5 : 1) * (focused ? 1.6 : 1)
+      const rgb = influential ? '251,191,36' : '125,155,205'
+      const alpha = t === 2 ? 0.9 : 0.13
+      const width = t === 2 ? (influential ? 2.2 : 1.6) : 0.8
+
       const x1 = sx(a)
       const y1 = sy(a)
-      const x2 = sx(b)
-      const y2 = sy(b)
-      const mid = (y1 + y2) / 2
+      const x2 = sx(bNode)
+      const y2 = sy(bNode)
+      // Gentle S-curve: control points pulled toward the midpoint in Y keeps
+      // the line vertical-tending, which reinforces the time axis.
+      const cx1 = x1
+      const cy1 = (y1 + y2) / 2
+      ctx.strokeStyle = `rgba(${rgb},${alpha})`
+      ctx.lineWidth = width
       ctx.beginPath()
       ctx.moveTo(x1, y1)
-      ctx.bezierCurveTo(x1, mid, x2, mid, x2, y2)
+      ctx.bezierCurveTo(cx1, cy1, x2, cy1, x2, y2)
       ctx.stroke()
+
+      // Arrowheads only on emphasised edges — one per context line would
+      // reintroduce exactly the noise this is trying to remove.
+      if (t === 2) {
+        drawArrow(x1, y1, x2, y2, `rgba(${rgb},${alpha})`, influential ? 9 : 7.5)
+      }
     }
 
     placedRef.current = layout
-    for (const p of layout) {
+
+    // Occupied label rectangles, so labels can be skipped when they would
+    // collide. Draw order is the priority order: focus first, then hovered,
+    // then largest, so the labels that win the contest are the ones worth
+    // reading.
+    const labelBoxes: Array<{ x1: number; y1: number; x2: number; y2: number }> = []
+
+    // Two passes. Circles paint smallest-first so larger nodes occlude their
+    // neighbours; labels paint in priority order so that when two collide,
+    // the more important one keeps its text. Doing both in one pass would
+    // force one of those orders to be wrong.
+    const circleOrder = [...layout].sort((a, b) => a.r - b.r)
+    const labelOrder = [...layout]
+      .map((p, i) => ({ p, i }))
+      .sort((a, b) => {
+        const score = (q: Placed): number =>
+          (q.node.generation === 0 ? 1e9 : 0) +
+          (hover === q.node.paperId ? 1e8 : 0) +
+          q.r
+        return score(b.p) - score(a.p)
+      })
+
+    for (const p of circleOrder) {
       const dim = hover ? !neighbours.has(p.node.paperId) : false
       const alpha = dim ? 0.12 : 1
       const rgb = generationColor(p.node.generation)
@@ -339,23 +474,59 @@ export function ResearchGraph({
         ctx.stroke()
       }
 
+    }
+
+    for (const { p, i: idx } of labelOrder) {
+      const dim = hover ? !neighbours.has(p.node.paperId) : false
+      const x = sx(p)
+      const y = sy(p)
+      const r = Math.max(p.r * zoom, 2)
+
+      // Labels are collision-tested rather than blindly drawn.
+      //
+      // At any real band width, titles at adjacent nodes overlap and the row
+      // becomes an unreadable smear — worse than no labels, because it hides
+      // the structure too. Each candidate label is measured and skipped if it
+      // would intersect one already placed, so what remains is always legible.
+      // Priority order (set when the draw list was built) puts the focus,
+      // hovered and larger nodes first, so the labels that survive are the
+      // ones worth reading.
       if (!dim) {
-        // Titles are long and the layers are tight, so labels are clipped to
-        // a recognisable prefix. Full text lives in the panel.
-        const label =
-          p.node.title.length > 30 ? p.node.title.slice(0, 28) + '…' : p.node.title
-        ctx.font = `${p.node.generation === 0 ? 600 : 400} 11px ui-sans-serif, system-ui`
-        ctx.textAlign = 'center'
-        ctx.lineWidth = 3
-        ctx.strokeStyle = 'rgba(7,8,12,0.92)'
-        ctx.strokeText(label, x, y + r + 13)
-        ctx.fillStyle = 'rgba(228,228,231,0.95)'
-        ctx.fillText(label, x, y + r + 13)
-        if (p.node.year) {
-          ctx.fillStyle = 'rgba(148,163,184,0.7)'
-          ctx.font = '9px ui-sans-serif, system-ui'
-          ctx.strokeText(String(p.node.year), x, y + r + 24)
-          ctx.fillText(String(p.node.year), x, y + r + 24)
+        const isFocus = p.node.generation === 0
+        const isHovered = hover === p.node.paperId
+        const title =
+          p.node.title.length > LABEL_MAX_CHARS
+            ? p.node.title.slice(0, LABEL_MAX_CHARS - 1) + '\u2026'
+            : p.node.title
+        ctx.font = `${isFocus ? 600 : 400} ${LABEL_PX}px ui-sans-serif, system-ui`
+        const tw = ctx.measureText(title).width
+        // Stagger below/above by parity so neighbours are less likely to
+        // contend for the same strip in the first place.
+        const below = idx % 2 === 0
+        const ly = below ? y + r + 15 : y - r - 8
+        const box = { x1: x - tw / 2 - 5, y1: ly - LABEL_PX, x2: x + tw / 2 + 5, y2: ly + 5 }
+        const clash = labelBoxes.some(
+          (o) => !(box.x2 < o.x1 || box.x1 > o.x2 || box.y2 < o.y1 || box.y1 > o.y2)
+        )
+        // The focus and whatever is hovered always get a label, even if it
+        // has to overlap something — those are the two the user is looking at.
+        if (!clash || isFocus || isHovered) {
+          labelBoxes.push(box)
+          ctx.textAlign = 'center'
+          ctx.lineWidth = 3.5
+          ctx.strokeStyle = 'rgba(7,8,12,0.95)'
+          ctx.strokeText(title, x, ly)
+          ctx.fillStyle = isFocus ? 'rgba(253,230,138,0.98)' : 'rgba(226,232,240,0.94)'
+          ctx.fillText(title, x, ly)
+          if (p.node.year) {
+            ctx.font = `10px ui-sans-serif, system-ui`
+            ctx.lineWidth = 3
+            ctx.strokeStyle = 'rgba(7,8,12,0.95)'
+            const yy = below ? ly + 13 : ly - 13
+            ctx.strokeText(String(p.node.year), x, yy)
+            ctx.fillStyle = 'rgba(148,163,184,0.85)'
+            ctx.fillText(String(p.node.year), x, yy)
+          }
         }
       }
     }
@@ -568,7 +739,9 @@ export function ResearchGraph({
         {!loading && data && data.nodes.length <= 1 && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 p-8 text-center">
             <p className="max-w-sm text-sm text-zinc-400">
-              No citations fetched for this paper yet.
+              {expanding
+                ? "Fetching this paper's references and citations from Semantic Scholar…"
+                : 'No citations found for this paper.'}
             </p>
             <button
               onClick={() => void expand()}

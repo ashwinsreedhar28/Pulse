@@ -212,7 +212,12 @@ export interface NeighborhoodPayload {
 // Cap per generation (not per parent), so a band stays readable however many
 // parents feed it. Ranked by influence, so the slice that survives is the
 // meaningful one.
-const PER_GENERATION = 18
+//
+// 10 rather than 18: at 18 the labels collide into an unreadable smear no
+// matter how they are laid out, and a band you cannot read carries no
+// information. Ten influential papers per direction is a legible summary;
+// "Fetch more" and the hop control are there for anyone who wants depth.
+const PER_GENERATION = 10
 
 export function getPaperNeighborhood(
   paperId: string,

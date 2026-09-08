@@ -584,14 +584,14 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
                 void runSearch(q)
               }}
               onBuildGraph={(p) => {
-                // Centre the lineage view on this paper, then fetch its
-                // neighbours. The graph re-reads once expansion lands, so the
-                // user sees the focus immediately rather than a blank wait.
+                // Just centre the lineage view; ResearchGraph fetches the
+                // neighbours itself when it finds none stored. Firing an
+                // expansion from here as well ran two concurrent walks
+                // against a ~1 req/s rate limit, and this one's completion
+                // was invisible to the graph, which had already rendered its
+                // empty state and would not reload.
                 setGraphFocus(p.paperId)
                 setGraphOpen(true)
-                void window.api.research.expandFromPaper(p.paperId).catch((err) => {
-                  console.warn('[research] expandFromPaper failed:', err)
-                })
               }}
             />
           )}
