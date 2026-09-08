@@ -176,6 +176,10 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
   // Not a bookmarks sub-mode like ResearchMap: it spans the whole corpus, not
   // just saved papers, so it needs the full width.
   const [graphOpen, setGraphOpen] = useState(false)
+  // Which paper the lineage view is centred on. The graph is deliberately
+  // scoped to one paper rather than the whole corpus — "build graph from
+  // this" should show that paper's lineage, not ~5,000 unrelated nodes.
+  const [graphFocus, setGraphFocus] = useState<string | null>(null)
   const [bookmarksFull, setBookmarksFull] = useState<ResearchBookmarkRow[]>([])
   const [foundationalEdges, setFoundationalEdges] = useState<BookmarkFoundationalEdge[]>([])
   const [bookmarkTopicLinks, setBookmarkTopicLinks] = useState<BookmarkTopicLink[]>([])
@@ -499,6 +503,9 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
       {graphOpen ? (
         <div className="flex-1 min-h-0">
           <ResearchGraph
+            focusPaperId={graphFocus}
+            onFocusPaper={(id) => setGraphFocus(id || null)}
+            onSelectPaper={setSelectedPaper}
             onOpenURL={(url, title, subtitle) => onOpenURL(url, title, subtitle ?? null)}
           />
         </div>
@@ -577,6 +584,10 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
                 void runSearch(q)
               }}
               onBuildGraph={(p) => {
+                // Centre the lineage view on this paper, then fetch its
+                // neighbours. The graph re-reads once expansion lands, so the
+                // user sees the focus immediately rather than a blank wait.
+                setGraphFocus(p.paperId)
                 setGraphOpen(true)
                 void window.api.research.expandFromPaper(p.paperId).catch((err) => {
                   console.warn('[research] expandFromPaper failed:', err)

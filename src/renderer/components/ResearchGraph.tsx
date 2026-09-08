@@ -1,235 +1,172 @@
-// Orbitable 3D citation graph over the paper corpus — the research
-// counterpart to MarketGraph.
+// One paper's citation lineage, as a layered 2D DAG.
 //
-// The existing ResearchMap draws bookmark-to-bookmark foundational links
-// only, so with a handful of bookmarks it is structurally empty regardless of
-// how good the renderer is. This reads the growing citation graph
-// (research_graph_nodes/edges), which accumulates as papers are expanded, and
-// is therefore the surface that actually gets richer the more the module is
-// used — the same property that makes the stock graph worth looking at.
+// This replaces an orbiting 3D "universe" view, which was wrong here for two
+// separate reasons.
 //
-// Shares forceLayout3D and the canvas approach with MarketGraph for the same
-// reasons documented there: SVG re-rendered every edge on hover (the jitter),
-// and rotation needs a projection-only redraw path. Layout runs once per
-// topology change; the camera never re-runs it.
+// First, scope. It rendered the entire ~5,000-node corpus, so "build graph
+// from this paper" answered a question nobody asked. The useful question
+// about a paper is its lineage — what it stands on, and what stands on it.
+//
+// Second, geometry. Citations carry an arrow of time: 99.3% of edges in this
+// corpus point from a newer paper to an older one. A sphere throws that away
+// and substitutes arbitrary angular position. Here the vertical axis IS that
+// arrow — foundations at the bottom, the focus in the middle, descendants
+// above — so "builds on" is legible without reading a single label. The
+// median node has degree 1, which also makes force simulation the wrong tool:
+// it exists to resolve dense-mesh tension, and there is none to resolve.
+//
+// Deterministic layered layout, so no simulation and no settling. Pan and
+// zoom only, no rotation, and no rAF loop when idle.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type {
-  ResearchGraphNode,
-  ResearchGraphPayload
-} from '../../preload'
-import { runForceLayout3D, type LayoutEdge, type LayoutPosition3D } from './forceLayout'
+import type { NeighborhoodNode, NeighborhoodPayload, ResearchPaper } from '../../preload'
 
-const R_MIN = 2.5
-const R_MAX = 16
-const FOV = 3.2
+const R_MIN = 5
+const R_MAX = 22
+const LAYER_GAP = 190
+const NODE_GAP = 170
 
-type SizeMetric = 'citations' | 'influential' | 'degree' | 'uniform'
-
-const SIZE_LABELS: Record<SizeMetric, string> = {
-  citations: 'Citations',
-  influential: 'Influential cites',
-  degree: 'Connections',
-  uniform: 'Uniform'
-}
-
-type ColorMode = 'field' | 'cluster' | 'depth'
-
-// Deterministic palette, indexed by sorted position so a field keeps its
-// colour across reloads.
-const PALETTE = [
-  '56,189,248', '74,222,128', '251,191,36', '232,121,249', '251,113,133',
-  '129,140,248', '251,146,60', '45,212,191', '167,139,250', '163,230,53',
-  '34,211,238', '244,114,182'
-]
-const NEUTRAL_RGB = '113,113,122'
-// Seeds are the papers the user chose; everything else was reached by
-// expansion. Depth colouring makes that distinction the primary read.
-const DEPTH_RGB = ['250,204,21', '56,189,248', '100,116,139']
-
-interface Projected {
-  node: ResearchGraphNode
-  sx: number
-  sy: number
-  depth: number
+interface Placed {
+  node: NeighborhoodNode
+  x: number
+  y: number
   r: number
-  rgb: string
 }
 
 interface Props {
+  /** Paper whose lineage to show. Null shows the picker. */
+  focusPaperId: string | null
+  onFocusPaper: (paperId: string) => void
   onOpenURL?: (url: string, title: string, subtitle?: string | null) => void
+  onSelectPaper?: (p: ResearchPaper) => void
 }
 
-export function ResearchGraph({ onOpenURL }: Props): JSX.Element {
-  const [data, setData] = useState<ResearchGraphPayload | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [sizeBy, setSizeBy] = useState<SizeMetric>('degree')
-  const [colorBy, setColorBy] = useState<ColorMode>('field')
-  const [fieldFilter, setFieldFilter] = useState('all')
-  const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState<ResearchGraphNode | null>(null)
-  const [growing, setGrowing] = useState(false)
-  const [growNote, setGrowNote] = useState<string | null>(null)
-  const [autoOrbit, setAutoOrbit] = useState(false)
+// Generation -> colour. Ancestors cool, focus gold, descendants warm, so
+// direction is readable from colour as well as position.
+function generationColor(g: number): string {
+  if (g === 0) return '250,204,21'
+  if (g < 0) return g === -1 ? '56,189,248' : '99,132,190'
+  return g === 1 ? '74,222,128' : '134,180,120'
+}
+
+function generationLabel(g: number): string {
+  if (g === 0) return 'this paper'
+  if (g === -1) return 'builds on'
+  if (g < -1) return `${-g} hops back`
+  if (g === 1) return 'cited by'
+  return `${g} hops forward`
+}
+
+export function ResearchGraph({
+  focusPaperId,
+  onFocusPaper,
+  onOpenURL,
+  onSelectPaper
+}: Props): JSX.Element {
+  const [data, setData] = useState<NeighborhoodPayload | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [expanding, setExpanding] = useState(false)
+  const [hops, setHops] = useState(2)
+  const [selected, setSelected] = useState<NeighborhoodNode | null>(null)
+  const [picker, setPicker] = useState<Array<{ paperId: string; title: string; degree: number }>>([])
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  // Camera and hover live in refs so pointer movement never triggers a React
-  // render. This is what keeps rotation and hover smooth at graph scale.
-  const camRef = useRef({ yaw: 0.5, pitch: -0.25, zoom: 1 })
+  // Camera and hover in refs — pointer movement must not trigger a React
+  // render, which is what made the previous version jitter on hover.
+  const camRef = useRef({ x: 0, y: 0, zoom: 1 })
   const hoverRef = useRef<string | null>(null)
-  const projectedRef = useRef<Projected[]>([])
-  const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
+  const placedRef = useRef<Placed[]>([])
+  const dragRef = useRef<{ x: number; y: number; camX: number; camY: number } | null>(null)
   const rafRef = useRef<number | null>(null)
   const [dragging, setDragging] = useState(false)
 
   const load = useCallback(async (): Promise<void> => {
+    if (!focusPaperId) {
+      // No focus yet: offer the best-connected papers as entry points, since
+      // those produce the most informative lineage.
+      try {
+        const g = await window.api.research.graph()
+        setPicker(g.hubs.slice(0, 12))
+      } catch {
+        setPicker([])
+      }
+      setData(null)
+      return
+    }
+    setLoading(true)
     try {
-      const payload = await window.api.research.graph()
+      const payload = await window.api.research.neighborhood(focusPaperId, hops)
       setData(payload)
-      setError(null)
+      camRef.current = { x: 0, y: 0, zoom: 1 }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      console.warn('[research-graph] neighborhood failed:', err)
+      setData(null)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [focusPaperId, hops])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  const grow = useCallback(
-    async (paperId?: string): Promise<void> => {
-      setGrowing(true)
-      setGrowNote(null)
-      try {
-        const res = paperId
-          ? await window.api.research.expandFromPaper(paperId)
-          : await window.api.research.expandGraph()
-        setGrowNote(
-          res.papersExpanded === 0
-            ? 'Nothing left to expand at this depth.'
-            : `+${res.nodesAdded} papers, +${res.edgesAdded} links ` +
-              `(${res.stats.nodes} total, ${res.stats.expanded} expanded)`
-        )
-        await load()
-      } catch (err) {
-        setGrowNote(err instanceof Error ? err.message : String(err))
-      } finally {
-        setGrowing(false)
-      }
-    },
-    [load]
-  )
-
-  const fieldOptions = useMemo(() => data?.fields ?? [], [data])
-
-  const colorOf = useMemo(() => {
-    const order = fieldOptions.map((f) => f.name).sort()
-    return (n: ResearchGraphNode): string => {
-      if (colorBy === 'depth') return DEPTH_RGB[Math.min(n.depth, DEPTH_RGB.length - 1)]
-      if (colorBy === 'cluster') {
-        return n.cluster === null ? NEUTRAL_RGB : PALETTE[n.cluster % PALETTE.length]
-      }
-      if (!n.field) return NEUTRAL_RGB
-      const i = order.indexOf(n.field)
-      return i === -1 ? NEUTRAL_RGB : PALETTE[i % PALETTE.length]
+  const expand = useCallback(async () => {
+    if (!focusPaperId) return
+    setExpanding(true)
+    try {
+      await window.api.research.expandFromPaper(focusPaperId)
+      await load()
+    } catch (err) {
+      console.warn('[research-graph] expand failed:', err)
+    } finally {
+      setExpanding(false)
     }
-  }, [fieldOptions, colorBy])
+  }, [focusPaperId, load])
 
-  const visible = useMemo(() => {
-    if (!data) return { nodes: [], edges: [] }
-    const nodes =
-      fieldFilter === 'all' ? data.nodes : data.nodes.filter((n) => n.field === fieldFilter)
-    const keep = new Set(nodes.map((n) => n.paperId))
-    return { nodes, edges: data.edges.filter((e) => keep.has(e.from) && keep.has(e.to)) }
-  }, [data, fieldFilter])
-
-  const magnitude = useMemo(() => {
-    const raw = new Map<string, number>()
-    for (const n of visible.nodes) {
-      const v =
-        sizeBy === 'citations'
-          ? Math.log10(Math.max(n.citationCount, 1))
-          : sizeBy === 'influential'
-            ? Math.log10(Math.max(n.influentialCitationCount, 1))
-            : sizeBy === 'degree'
-              ? Math.sqrt(n.degree)
-              : 1
-      raw.set(n.paperId, v)
-    }
-    const nums = [...raw.values()]
-    const lo = nums.length ? Math.min(...nums) : 0
-    const hi = nums.length ? Math.max(...nums) : 1
-    const span = hi - lo || 1
-    const out = new Map<string, number>()
-    for (const [k, v] of raw) out.set(k, sizeBy === 'uniform' ? 0.5 : (v - lo) / span)
-    return out
-  }, [visible.nodes, sizeBy])
-
-  // Same connectivity split as MarketGraph: only connected papers go through
-  // the O(n^2) simulation. Isolated ones (freshly seeded, not yet expanded)
-  // would otherwise just be pushed outward until the trimmed scaling squashed
-  // the real structure into the middle.
+  // Layered layout. Generation sets the row; within a row, papers are ordered
+  // by year then citations so each layer reads left-to-right as a timeline.
+  // Fully deterministic — same input, same picture, every time.
   const layout = useMemo(() => {
-    const connectedIds = new Set<string>()
-    for (const e of visible.edges) {
-      connectedIds.add(e.from)
-      connectedIds.add(e.to)
-    }
-    const connected = visible.nodes.filter((n) => connectedIds.has(n.paperId))
-    const isolated = visible.nodes.filter((n) => !connectedIds.has(n.paperId))
-    const edges: LayoutEdge[] = visible.edges.map((e) => ({ from: e.from, to: e.to }))
-    const pos = runForceLayout3D(
-      connected.map((n) => n.paperId),
-      edges
-    )
-    const map = new Map<string, LayoutPosition3D>(pos.map((p) => [p.id, p]))
+    if (!data || data.nodes.length === 0) return [] as Placed[]
 
-    if (isolated.length > 0) {
-      const SHELL = 1.9
-      isolated.forEach((n, i) => {
-        const golden = Math.PI * (3 - Math.sqrt(5))
-        const y = 1 - (i / Math.max(isolated.length - 1, 1)) * 2
-        const r = Math.sqrt(Math.max(0, 1 - y * y))
-        const theta = golden * i
-        map.set(n.paperId, {
-          id: n.paperId,
-          x: Math.cos(theta) * r * SHELL,
-          y: y * SHELL,
-          z: Math.sin(theta) * r * SHELL
+    const byGen = new Map<number, NeighborhoodNode[]>()
+    for (const n of data.nodes) {
+      const arr = byGen.get(n.generation)
+      if (arr) arr.push(n)
+      else byGen.set(n.generation, [n])
+    }
+
+    const cites = data.nodes.map((n) => n.citationCount)
+    const maxCite = Math.max(1, ...cites)
+
+    const out: Placed[] = []
+    for (const [gen, group] of byGen) {
+      group.sort(
+        (a, b) => (a.year ?? 0) - (b.year ?? 0) || a.citationCount - b.citationCount
+      )
+      const width = (group.length - 1) * NODE_GAP
+      group.forEach((n, i) => {
+        // Negative generation is older, and older sits lower, so the sign is
+        // inverted into screen space (y grows downward on a canvas).
+        out.push({
+          node: n,
+          x: -width / 2 + i * NODE_GAP,
+          y: -gen * LAYER_GAP,
+          r:
+            R_MIN +
+            (Math.log10(Math.max(n.citationCount, 1)) / Math.log10(maxCite)) *
+              (R_MAX - R_MIN)
         })
       })
     }
-    return map
-  }, [visible.nodes, visible.edges])
+    return out
+  }, [data])
 
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return null
-    return new Set(
-      visible.nodes
-        .filter(
-          (n) =>
-            n.title.toLowerCase().includes(q) ||
-            n.authors.some((a) => a.toLowerCase().includes(q)) ||
-            (n.venue ?? '').toLowerCase().includes(q)
-        )
-        .map((n) => n.paperId)
-    )
-  }, [query, visible.nodes])
-
-  const adjacency = useMemo(() => {
-    const m = new Map<string, Set<string>>()
-    for (const e of visible.edges) {
-      if (!m.has(e.from)) m.set(e.from, new Set())
-      if (!m.has(e.to)) m.set(e.to, new Set())
-      m.get(e.from)!.add(e.to)
-      m.get(e.to)!.add(e.from)
-    }
+  const positions = useMemo(() => {
+    const m = new Map<string, Placed>()
+    for (const p of layout) m.set(p.node.paperId, p)
     return m
-  }, [visible.edges])
+  }, [layout])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -245,150 +182,125 @@ export function ResearchGraph({ onOpenURL }: Props): JSX.Element {
       canvas.height = h * dpr
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-
-    const bg = ctx.createRadialGradient(w / 2, h * 0.45, 0, w / 2, h * 0.45, Math.max(w, h) * 0.75)
-    bg.addColorStop(0, '#0d1018')
-    bg.addColorStop(1, '#05060a')
-    ctx.fillStyle = bg
+    ctx.fillStyle = '#07080c'
     ctx.fillRect(0, 0, w, h)
 
-    const { yaw, pitch, zoom } = camRef.current
-    const cy = Math.cos(yaw)
-    const sy = Math.sin(yaw)
-    const cp = Math.cos(pitch)
-    const sp = Math.sin(pitch)
-    const cxp = w / 2
-    const cyp = h / 2
-    const baseScale = Math.min(w, h) * 0.42 * zoom
+    const { x: camX, y: camY, zoom } = camRef.current
+    const ox = w / 2 + camX
+    const oy = h / 2 + camY
+    const sx = (p: Placed): number => ox + p.x * zoom
+    const sy = (p: Placed): number => oy + p.y * zoom
 
-    const project = (
-      p: LayoutPosition3D
-    ): { sx: number; sy: number; depth: number; k: number } => {
-      const x1 = p.x * cy + p.z * sy
-      const z1 = -p.x * sy + p.z * cy
-      const y2 = p.y * cp - z1 * sp
-      const z2 = p.y * sp + z1 * cp
-      const k = FOV / (FOV + z2)
-      return { sx: cxp + x1 * k * baseScale, sy: cyp + y2 * k * baseScale, depth: -z2, k }
-    }
-
-    const proj = new Map<string, { sx: number; sy: number; depth: number; k: number }>()
-    for (const n of visible.nodes) {
-      const p = layout.get(n.paperId)
-      if (p) proj.set(n.paperId, project(p))
+    // Generation bands and labels. The whole point of this layout is that
+    // vertical position means something, so it is worth saying so explicitly
+    // rather than making the user infer it.
+    const gens = [...new Set(layout.map((p) => p.node.generation))].sort((a, b) => b - a)
+    ctx.font = '10px ui-sans-serif, system-ui'
+    for (const g of gens) {
+      const y = oy + -g * LAYER_GAP * zoom
+      ctx.strokeStyle = g === 0 ? 'rgba(250,204,21,0.16)' : 'rgba(255,255,255,0.045)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(w, y)
+      ctx.stroke()
+      ctx.fillStyle = g === 0 ? 'rgba(250,204,21,0.75)' : 'rgba(148,163,184,0.5)'
+      ctx.textAlign = 'left'
+      ctx.fillText(generationLabel(g), 10, y - 6)
     }
 
     const hover = hoverRef.current
-    const focusSet = hover ? new Set([hover, ...(adjacency.get(hover) ?? [])]) : null
+    const neighbours = new Set<string>()
+    if (hover) {
+      neighbours.add(hover)
+      for (const e of data?.edges ?? []) {
+        if (e.from === hover) neighbours.add(e.to)
+        if (e.to === hover) neighbours.add(e.from)
+      }
+    }
 
-    for (const e of visible.edges) {
-      const a = proj.get(e.from)
-      const b = proj.get(e.to)
+    // Edges, drawn as vertical-tending curves so direction is obvious even
+    // where two papers sit in the same band.
+    for (const e of data?.edges ?? []) {
+      const a = positions.get(e.from)
+      const b = positions.get(e.to)
       if (!a || !b) continue
-      const focused = focusSet ? focusSet.has(e.from) && focusSet.has(e.to) : null
+      const focused = hover ? neighbours.has(e.from) && neighbours.has(e.to) : null
       if (focused === false) continue
-      // Influential citations are a far stronger signal than a bare
-      // reference, so they read brighter and warmer.
       const influential = e.relationship === 'influential'
-      const rgb = influential ? '251,191,36' : '99,132,190'
-      const alpha = focused ? 0.8 : (influential ? 0.14 : 0.06) + ((a.k + b.k) / 2) * 0.06
-      ctx.strokeStyle = `rgba(${rgb},${alpha})`
-      ctx.lineWidth = focused ? 1.4 : influential ? 0.7 : 0.4
+      ctx.strokeStyle = influential
+        ? `rgba(251,191,36,${focused ? 0.85 : 0.34})`
+        : `rgba(120,150,200,${focused ? 0.75 : 0.2})`
+      ctx.lineWidth = (influential ? 1.5 : 1) * (focused ? 1.6 : 1)
+      const x1 = sx(a)
+      const y1 = sy(a)
+      const x2 = sx(b)
+      const y2 = sy(b)
+      const mid = (y1 + y2) / 2
       ctx.beginPath()
-      ctx.moveTo(a.sx, a.sy)
-      ctx.lineTo(b.sx, b.sy)
+      ctx.moveTo(x1, y1)
+      ctx.bezierCurveTo(x1, mid, x2, mid, x2, y2)
       ctx.stroke()
     }
 
-    const items: Projected[] = []
-    for (const n of visible.nodes) {
-      const p = proj.get(n.paperId)
-      if (!p) continue
-      const m = magnitude.get(n.paperId) ?? 0
-      items.push({
-        node: n,
-        sx: p.sx,
-        sy: p.sy,
-        depth: p.depth,
-        r: (R_MIN + m * (R_MAX - R_MIN)) * p.k * zoom,
-        rgb: colorOf(n)
-      })
-    }
-    // Painter's algorithm — far to near, so near papers occlude far ones.
-    items.sort((a, b) => a.depth - b.depth)
-    projectedRef.current = items
+    placedRef.current = layout
+    for (const p of layout) {
+      const dim = hover ? !neighbours.has(p.node.paperId) : false
+      const alpha = dim ? 0.12 : 1
+      const rgb = generationColor(p.node.generation)
+      const x = sx(p)
+      const y = sy(p)
+      const r = Math.max(p.r * zoom, 2)
 
-    for (const it of items) {
-      const dimmed =
-        (focusSet && !focusSet.has(it.node.paperId)) ||
-        (matches && !matches.has(it.node.paperId))
-      const isSelected = selected?.paperId === it.node.paperId
-      const alpha = dimmed ? 0.08 : 1
-
-      const glowR = Math.max(it.r * 3.2, 6)
-      const g = ctx.createRadialGradient(it.sx, it.sy, 0, it.sx, it.sy, glowR)
-      g.addColorStop(0, `rgba(${it.rgb},${0.5 * alpha})`)
-      g.addColorStop(0.35, `rgba(${it.rgb},${0.15 * alpha})`)
-      g.addColorStop(1, `rgba(${it.rgb},0)`)
-      ctx.fillStyle = g
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 2.6)
+      glow.addColorStop(0, `rgba(${rgb},${0.4 * alpha})`)
+      glow.addColorStop(1, `rgba(${rgb},0)`)
+      ctx.fillStyle = glow
       ctx.beginPath()
-      ctx.arc(it.sx, it.sy, glowR, 0, Math.PI * 2)
+      ctx.arc(x, y, r * 2.6, 0, Math.PI * 2)
       ctx.fill()
 
-      const core = ctx.createRadialGradient(
-        it.sx - it.r * 0.3,
-        it.sy - it.r * 0.3,
-        it.r * 0.1,
-        it.sx,
-        it.sy,
-        Math.max(it.r, 0.6)
-      )
-      core.addColorStop(0, `rgba(255,255,255,${0.95 * alpha})`)
-      core.addColorStop(0.4, `rgba(${it.rgb},${alpha})`)
-      core.addColorStop(1, `rgba(${it.rgb},${0.65 * alpha})`)
-      ctx.fillStyle = core
+      ctx.fillStyle = `rgba(${rgb},${alpha})`
       ctx.beginPath()
-      ctx.arc(it.sx, it.sy, Math.max(it.r, 0.6), 0, Math.PI * 2)
+      ctx.arc(x, y, r, 0, Math.PI * 2)
       ctx.fill()
 
-      // Bookmarked papers get a ring — the user's own library should be
-      // findable at a glance inside a graph mostly made of other people's work.
-      if (it.node.bookmarked && !dimmed) {
+      if (p.node.bookmarked && !dim) {
         ctx.strokeStyle = 'rgba(250,204,21,0.9)'
-        ctx.lineWidth = 1.4
-        ctx.beginPath()
-        ctx.arc(it.sx, it.sy, it.r + 2.6, 0, Math.PI * 2)
-        ctx.stroke()
-      }
-      if (isSelected) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)'
         ctx.lineWidth = 1.6
         ctx.beginPath()
-        ctx.arc(it.sx, it.sy, it.r + 5, 0, Math.PI * 2)
+        ctx.arc(x, y, r + 3, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+      if (selected?.paperId === p.node.paperId) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.95)'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.arc(x, y, r + 6, 0, Math.PI * 2)
         ctx.stroke()
       }
 
-      const labelled =
-        !dimmed &&
-        (it.r > 7 ||
-          hover === it.node.paperId ||
-          isSelected ||
-          (matches?.has(it.node.paperId) ?? false))
-      if (labelled) {
-        // Titles are long; a short prefix is enough to recognise a paper you
-        // know, and the panel has the full text.
+      if (!dim) {
+        // Titles are long and the layers are tight, so labels are clipped to
+        // a recognisable prefix. Full text lives in the panel.
         const label =
-          it.node.title.length > 38 ? it.node.title.slice(0, 36) + '…' : it.node.title
-        ctx.font = `${Math.max(9, Math.min(12, it.r * 0.8))}px ui-sans-serif, system-ui`
+          p.node.title.length > 30 ? p.node.title.slice(0, 28) + '…' : p.node.title
+        ctx.font = `${p.node.generation === 0 ? 600 : 400} 11px ui-sans-serif, system-ui`
         ctx.textAlign = 'center'
         ctx.lineWidth = 3
-        ctx.strokeStyle = 'rgba(5,6,10,0.9)'
-        ctx.strokeText(label, it.sx, it.sy + it.r + 11)
+        ctx.strokeStyle = 'rgba(7,8,12,0.92)'
+        ctx.strokeText(label, x, y + r + 13)
         ctx.fillStyle = 'rgba(228,228,231,0.95)'
-        ctx.fillText(label, it.sx, it.sy + it.r + 11)
+        ctx.fillText(label, x, y + r + 13)
+        if (p.node.year) {
+          ctx.fillStyle = 'rgba(148,163,184,0.7)'
+          ctx.font = '9px ui-sans-serif, system-ui'
+          ctx.strokeText(String(p.node.year), x, y + r + 24)
+          ctx.fillText(String(p.node.year), x, y + r + 24)
+        }
       }
     }
-  }, [visible, layout, magnitude, colorOf, matches, adjacency, selected])
+  }, [layout, positions, data, selected])
 
   const requestDraw = useCallback(() => {
     if (rafRef.current !== null) return
@@ -408,25 +320,6 @@ export function ResearchGraph({ onOpenURL }: Props): JSX.Element {
     return () => window.removeEventListener('resize', onResize)
   }, [requestDraw])
 
-  // Opt-in only — CLAUDE.md bans perpetual animation by default because it
-  // jitters under screen capture. Fully torn down when disabled.
-  useEffect(() => {
-    if (!autoOrbit) return
-    let alive = true
-    let handle = 0
-    const step = (): void => {
-      if (!alive) return
-      camRef.current.yaw += 0.0022
-      draw()
-      handle = requestAnimationFrame(step)
-    }
-    handle = requestAnimationFrame(step)
-    return () => {
-      alive = false
-      cancelAnimationFrame(handle)
-    }
-  }, [autoOrbit, draw])
-
   useEffect(
     () => () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
@@ -434,193 +327,191 @@ export function ResearchGraph({ onOpenURL }: Props): JSX.Element {
     []
   )
 
-  const pick = (clientX: number, clientY: number): ResearchGraphNode | null => {
+  const pick = (clientX: number, clientY: number): NeighborhoodNode | null => {
     const canvas = canvasRef.current
     if (!canvas) return null
     const rect = canvas.getBoundingClientRect()
-    const x = clientX - rect.left
-    const y = clientY - rect.top
-    let best: ResearchGraphNode | null = null
+    const px = clientX - rect.left
+    const py = clientY - rect.top
+    const { x: camX, y: camY, zoom } = camRef.current
+    const ox = canvas.clientWidth / 2 + camX
+    const oy = canvas.clientHeight / 2 + camY
+    let best: NeighborhoodNode | null = null
     let bestD = Infinity
-    for (let i = projectedRef.current.length - 1; i >= 0; i--) {
-      const it = projectedRef.current[i]
-      const d = Math.hypot(it.sx - x, it.sy - y)
-      if (d <= Math.max(it.r + 5, 7) && d < bestD) {
+    for (const p of placedRef.current) {
+      const d = Math.hypot(ox + p.x * zoom - px, oy + p.y * zoom - py)
+      if (d <= Math.max(p.r * zoom + 6, 9) && d < bestD) {
         bestD = d
-        best = it.node
+        best = p.node
       }
     }
     return best
   }
 
-  if (loading) return <div className="p-8 text-sm text-zinc-400">Loading paper graph…</div>
-  if (error) return <div className="p-8 text-sm text-rose-400">Couldn&apos;t load graph: {error}</div>
+  // ---- picker (no focus yet) ----------------------------------------------
 
-  const empty = !data || data.nodes.length === 0
+  if (!focusPaperId) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
+        <div className="max-w-md text-center">
+          <h3 className="text-sm font-semibold text-zinc-100">Pick a paper</h3>
+          <p className="mt-1 text-[11px] text-zinc-500">
+            This view shows one paper&apos;s lineage — what it builds on, and
+            what built on it. Choose a starting point, or hit &ldquo;Build
+            graph&rdquo; on any paper in Discover.
+          </p>
+        </div>
+        {picker.length > 0 && (
+          <div className="w-full max-w-2xl space-y-1">
+            <div className="mb-1 text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+              Most connected in your graph
+            </div>
+            {picker.map((h) => (
+              <button
+                key={h.paperId}
+                onClick={() => onFocusPaper(h.paperId)}
+                className="flex w-full items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-left hover:border-zinc-700"
+              >
+                <span className="truncate text-[12px] text-zinc-200">{h.title}</span>
+                <span className="shrink-0 text-[10px] text-zinc-500">{h.degree} links</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const focusNode = data?.nodes.find((n) => n.generation === 0) ?? null
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 px-4 py-2">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Find paper / author…"
-          className="w-44 rounded bg-zinc-900 px-2 py-1 text-xs text-zinc-200 outline-none ring-1 ring-zinc-800 focus:ring-sky-700"
-        />
+        <button
+          onClick={() => onFocusPaper('')}
+          className="rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400 ring-1 ring-inset ring-zinc-700 hover:bg-surface-2 hover:text-zinc-100"
+        >
+          ← Change paper
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[12px] font-medium text-zinc-100" title={focusNode?.title}>
+            {focusNode?.title ?? focusPaperId}
+          </div>
+          {focusNode && (
+            <div className="truncate text-[10px] text-zinc-500">
+              {focusNode.authors.slice(0, 3).join(', ')}
+              {focusNode.year ? ` · ${focusNode.year}` : ''}
+              {focusNode.venue ? ` · ${focusNode.venue}` : ''}
+            </div>
+          )}
+        </div>
         <label className="flex items-center gap-1 text-xs text-zinc-400">
-          Size
+          Hops
           <select
-            value={sizeBy}
-            onChange={(e) => setSizeBy(e.target.value as SizeMetric)}
+            value={hops}
+            onChange={(e) => setHops(Number(e.target.value))}
             className="rounded bg-zinc-900 px-1 py-1 text-xs text-zinc-200 ring-1 ring-zinc-800"
           >
-            {(Object.keys(SIZE_LABELS) as SizeMetric[]).map((k) => (
-              <option key={k} value={k}>
-                {SIZE_LABELS[k]}
-              </option>
-            ))}
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={3}>3</option>
           </select>
-        </label>
-        <label className="flex items-center gap-1 text-xs text-zinc-400">
-          Colour
-          <select
-            value={colorBy}
-            onChange={(e) => setColorBy(e.target.value as ColorMode)}
-            className="rounded bg-zinc-900 px-1 py-1 text-xs text-zinc-200 ring-1 ring-zinc-800"
-          >
-            <option value="field">Field</option>
-            <option value="cluster">Semantic cluster</option>
-            <option value="depth">Distance from your papers</option>
-          </select>
-        </label>
-        {fieldOptions.length > 0 && (
-          <label className="flex items-center gap-1 text-xs text-zinc-400">
-            Field
-            <select
-              value={fieldFilter}
-              onChange={(e) => setFieldFilter(e.target.value)}
-              className="max-w-[12rem] rounded bg-zinc-900 px-1 py-1 text-xs text-zinc-200 ring-1 ring-zinc-800"
-            >
-              <option value="all">All ({data?.nodes.length ?? 0})</option>
-              {fieldOptions.map((f) => (
-                <option key={f.name} value={f.name}>
-                  {f.name} ({f.count})
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label className="flex items-center gap-1 text-xs text-zinc-400">
-          <input
-            type="checkbox"
-            checked={autoOrbit}
-            onChange={(e) => setAutoOrbit(e.target.checked)}
-          />
-          Orbit
         </label>
         <button
-          onClick={() => void grow()}
-          disabled={growing}
+          onClick={() => void expand()}
+          disabled={expanding}
           className="rounded bg-sky-500/15 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-sky-300 ring-1 ring-inset ring-sky-500/30 hover:bg-sky-500/25 disabled:opacity-50"
         >
-          {growing ? 'Growing…' : 'Grow graph'}
+          {expanding ? 'Fetching…' : 'Fetch more'}
         </button>
         <button
           onClick={() => {
-            camRef.current = { yaw: 0.5, pitch: -0.25, zoom: 1 }
+            camRef.current = { x: 0, y: 0, zoom: 1 }
             requestDraw()
           }}
-          className="rounded bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300 ring-1 ring-zinc-800 hover:bg-zinc-800"
+          className="rounded bg-zinc-900 px-2 py-1 text-xs text-zinc-300 ring-1 ring-zinc-800 hover:bg-zinc-800"
         >
-          reset view
+          reset
         </button>
-        <span className="ml-auto text-xs text-zinc-500">
-          {visible.nodes.length} papers · {visible.edges.length} citations
-          {data ? ` · ${data.stats.expanded}/${data.stats.nodes} expanded` : ''}
+        <span className="text-xs text-zinc-500">
+          {data?.nodes.length ?? 0} papers · {data?.edges.length ?? 0} citations
         </span>
       </div>
 
-      {growNote && (
-        <div className="border-b border-zinc-800 bg-zinc-900/40 px-4 py-1 text-[11px] text-zinc-400">
-          {growNote}
-        </div>
-      )}
-
-      <div className="relative min-h-0 flex-1 bg-[#05060a]">
-        {empty ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-            <p className="max-w-md text-sm text-zinc-400">
-              The paper graph is empty. It grows from papers you&apos;ve engaged
-              with — bookmark a paper or generate a paper chain, then Grow graph
-              walks its references and citations to build the neighbourhood.
-            </p>
-            <button
-              onClick={() => void grow()}
-              disabled={growing}
-              className="rounded bg-sky-500/15 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-sky-300 ring-1 ring-inset ring-sky-500/30 hover:bg-sky-500/25 disabled:opacity-50"
-            >
-              {growing ? 'Growing…' : 'Grow from my library'}
-            </button>
+      <div className="relative min-h-0 flex-1">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center text-sm text-zinc-400">
+            Loading lineage…
           </div>
-        ) : (
-          <canvas
-            ref={canvasRef}
-            className="h-full w-full"
-            style={{ cursor: dragging ? 'grabbing' : 'grab', display: 'block' }}
-            onPointerDown={(e) => {
-              const { yaw, pitch } = camRef.current
-              dragRef.current = { x: e.clientX, y: e.clientY, yaw, pitch }
-              setDragging(true)
-              e.currentTarget.setPointerCapture(e.pointerId)
-            }}
-            onPointerMove={(e) => {
-              const d = dragRef.current
-              if (d) {
-                camRef.current.yaw = d.yaw + (e.clientX - d.x) * 0.006
-                camRef.current.pitch = Math.max(
-                  -Math.PI / 2 + 0.05,
-                  Math.min(Math.PI / 2 - 0.05, d.pitch + (e.clientY - d.y) * 0.006)
-                )
-                requestDraw()
-                return
-              }
-              const hit = pick(e.clientX, e.clientY)
-              const next = hit?.paperId ?? null
-              if (next !== hoverRef.current) {
-                hoverRef.current = next
-                requestDraw()
-              }
-            }}
-            onPointerUp={(e) => {
-              const d = dragRef.current
-              dragRef.current = null
-              setDragging(false)
-              e.currentTarget.releasePointerCapture(e.pointerId)
-              // A near-stationary press is a click, so orbiting never selects
-              // by accident.
-              if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) {
-                setSelected(pick(e.clientX, e.clientY))
-              }
-              requestDraw()
-            }}
-            onPointerLeave={() => {
-              if (hoverRef.current !== null) {
-                hoverRef.current = null
-                requestDraw()
-              }
-            }}
-            onWheel={(e) => {
-              camRef.current.zoom = Math.max(
-                0.35,
-                Math.min(6, camRef.current.zoom * (e.deltaY > 0 ? 1 / 1.12 : 1.12))
-              )
-              requestDraw()
-            }}
-          />
         )}
 
+        {!loading && data && data.nodes.length <= 1 && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 p-8 text-center">
+            <p className="max-w-sm text-sm text-zinc-400">
+              No citations fetched for this paper yet.
+            </p>
+            <button
+              onClick={() => void expand()}
+              disabled={expanding}
+              className="rounded bg-sky-500/15 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-sky-300 ring-1 ring-inset ring-sky-500/30 hover:bg-sky-500/25 disabled:opacity-50"
+            >
+              {expanding ? 'Fetching…' : 'Fetch its references and citations'}
+            </button>
+          </div>
+        )}
+
+        <canvas
+          ref={canvasRef}
+          className="h-full w-full"
+          style={{ cursor: dragging ? 'grabbing' : 'grab', display: 'block' }}
+          onPointerDown={(e) => {
+            const { x, y } = camRef.current
+            dragRef.current = { x: e.clientX, y: e.clientY, camX: x, camY: y }
+            setDragging(true)
+            e.currentTarget.setPointerCapture(e.pointerId)
+          }}
+          onPointerMove={(e) => {
+            const d = dragRef.current
+            if (d) {
+              camRef.current.x = d.camX + (e.clientX - d.x)
+              camRef.current.y = d.camY + (e.clientY - d.y)
+              requestDraw()
+              return
+            }
+            const hit = pick(e.clientX, e.clientY)
+            const next = hit?.paperId ?? null
+            if (next !== hoverRef.current) {
+              hoverRef.current = next
+              requestDraw()
+            }
+          }}
+          onPointerUp={(e) => {
+            const d = dragRef.current
+            dragRef.current = null
+            setDragging(false)
+            e.currentTarget.releasePointerCapture(e.pointerId)
+            if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) {
+              setSelected(pick(e.clientX, e.clientY))
+            }
+            requestDraw()
+          }}
+          onPointerLeave={() => {
+            if (hoverRef.current !== null) {
+              hoverRef.current = null
+              requestDraw()
+            }
+          }}
+          onWheel={(e) => {
+            camRef.current.zoom = Math.max(
+              0.25,
+              Math.min(4, camRef.current.zoom * (e.deltaY > 0 ? 1 / 1.12 : 1.12))
+            )
+            requestDraw()
+          }}
+        />
+
         {selected && (
-          <div className="absolute right-4 top-4 max-h-[80%] w-80 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-950/95 p-3 shadow-xl">
+          <div className="absolute right-4 top-4 max-h-[85%] w-80 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-950/95 p-3 shadow-xl">
             <div className="flex items-start justify-between gap-2">
               <div className="text-sm font-semibold leading-snug text-zinc-100">
                 {selected.title}
@@ -633,7 +524,6 @@ export function ResearchGraph({ onOpenURL }: Props): JSX.Element {
                 ✕
               </button>
             </div>
-
             <div className="mt-1 text-[11px] text-zinc-400">
               {selected.authors.slice(0, 3).join(', ')}
               {selected.authors.length > 3 ? ' et al.' : ''}
@@ -644,23 +534,24 @@ export function ResearchGraph({ onOpenURL }: Props): JSX.Element {
             )}
 
             <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+              <span
+                className="rounded px-1.5 py-0.5 ring-1"
+                style={{
+                  color: `rgb(${generationColor(selected.generation)})`,
+                  borderColor: 'transparent',
+                  boxShadow: `inset 0 0 0 1px rgba(${generationColor(selected.generation)},0.4)`
+                }}
+              >
+                {generationLabel(selected.generation)}
+              </span>
               <span className="rounded px-1.5 py-0.5 text-zinc-300 ring-1 ring-zinc-700">
                 {selected.citationCount.toLocaleString()} cites
               </span>
-              <span className="rounded px-1.5 py-0.5 text-zinc-300 ring-1 ring-zinc-700">
-                {selected.influentialCitationCount} influential
-              </span>
-              <span className="rounded px-1.5 py-0.5 text-zinc-300 ring-1 ring-zinc-700">
-                {selected.degree} links
-              </span>
-              {selected.bookmarked && (
-                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-300 ring-1 ring-amber-500/30">
-                  bookmarked
+              {selected.influentialCitationCount > 0 && (
+                <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-300 ring-1 ring-amber-500/25">
+                  {selected.influentialCitationCount} influential
                 </span>
               )}
-              <span className="rounded px-1.5 py-0.5 text-zinc-400 ring-1 ring-zinc-800">
-                {selected.depth === 0 ? 'your paper' : `${selected.depth} hop${selected.depth > 1 ? 's' : ''} out`}
-              </span>
             </div>
 
             {selected.abstract && (
@@ -670,13 +561,40 @@ export function ResearchGraph({ onOpenURL }: Props): JSX.Element {
             )}
 
             <div className="mt-3 flex flex-col gap-1.5">
-              <button
-                onClick={() => void grow(selected.paperId)}
-                disabled={growing}
-                className="w-full rounded bg-sky-500/15 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-sky-300 ring-1 ring-inset ring-sky-500/30 hover:bg-sky-500/25 disabled:opacity-40"
-              >
-                {selected.expanded ? 'Re-expand from here' : 'Expand from here'}
-              </button>
+              {selected.paperId !== focusPaperId && (
+                <button
+                  onClick={() => {
+                    setSelected(null)
+                    onFocusPaper(selected.paperId)
+                  }}
+                  className="w-full rounded bg-violet-500/15 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-violet-200 ring-1 ring-inset ring-violet-500/30 hover:bg-violet-500/25"
+                >
+                  Centre on this paper
+                </button>
+              )}
+              {onSelectPaper && (
+                <button
+                  onClick={() =>
+                    onSelectPaper({
+                      paperId: selected.paperId,
+                      title: selected.title,
+                      abstract: selected.abstract,
+                      year: selected.year,
+                      authors: selected.authors,
+                      venue: selected.venue,
+                      citationCount: selected.citationCount,
+                      influentialCitationCount: selected.influentialCitationCount,
+                      url: selected.url,
+                      pdfUrl: selected.pdfUrl,
+                      arxivId: null,
+                      doi: null
+                    })
+                  }
+                  className="w-full rounded bg-zinc-800 px-2 py-1.5 text-[11px] text-zinc-200 ring-1 ring-inset ring-zinc-700 hover:bg-zinc-700"
+                >
+                  Open details
+                </button>
+              )}
               {selected.pdfUrl && onOpenURL && (
                 <button
                   onClick={() =>
@@ -687,33 +605,23 @@ export function ResearchGraph({ onOpenURL }: Props): JSX.Element {
                   Open PDF
                 </button>
               )}
-              {selected.url && onOpenURL && (
-                <button
-                  onClick={() => onOpenURL(selected.url as string, selected.title, selected.venue)}
-                  className="w-full rounded bg-zinc-800 px-2 py-1.5 text-[11px] text-zinc-200 ring-1 ring-inset ring-zinc-700 hover:bg-zinc-700"
-                >
-                  Open page
-                </button>
-              )}
             </div>
           </div>
         )}
       </div>
 
-      {!empty && (
-        <div className="flex flex-wrap items-center gap-3 border-t border-zinc-800 px-4 py-1.5 text-[10px] text-zinc-500">
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
-            influential citation
-          </span>
-          {data && data.hubs.length > 0 && (
-            <span className="truncate">
-              most-connected: {data.hubs.slice(0, 3).map((h) => h.title.slice(0, 28)).join(' · ')}
-            </span>
-          )}
-          <span className="ml-auto">drag to rotate · scroll to zoom · click a paper</span>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-3 border-t border-zinc-800 px-4 py-1.5 text-[10px] text-zinc-500">
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-sky-400" /> builds on (older)
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-amber-300" /> this paper
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" /> cited by (newer)
+        </span>
+        <span className="ml-auto">drag to pan · scroll to zoom · click a paper</span>
+      </div>
     </div>
   )
 }
