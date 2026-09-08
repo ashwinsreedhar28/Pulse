@@ -37,17 +37,21 @@ const S2_BASE = 'https://api.semanticscholar.org/graph/v1'
 const UA = 'Pulse/0.1 (research-graph; ashwin.sreedhar2003@gmail.com)'
 const FETCH_TIMEOUT_MS = 20_000
 
-// How far from a seed we are willing to walk. 2 already reaches "the papers
-// my papers build on, and what those build on", which is the useful
-// neighbourhood; 3 explodes into the general literature and stops being about
-// the user's work.
-export const MAX_DEPTH = 2
+// How far from a seed we are willing to walk. Depth 2 reaches "the papers my
+// papers build on, and what those build on" — the tight neighbourhood. Depth
+// 3 is where the frontier stops running dry and the graph reaches the scale
+// where structure becomes visible, at the cost of drifting toward the general
+// literature at the edges. `depth` is stored per node, so the UI can always
+// dim or filter the outer ring rather than the graph being stuck with it.
+export const MAX_DEPTH = 3
 // Per paper, per direction. S2 returns these ranked, so taking the top slice
 // keeps the influential spine and drops the long tail.
 const FANOUT = 12
 // Papers expanded per run. Each costs 2 S2 calls at ~1.1s apart, so 12 papers
 // is roughly 30s of background work.
 const PAPERS_PER_RUN = 12
+// Extra pause between papers, on top of the shared per-request limiter.
+const INTER_PAPER_PAUSE_MS = 1200
 
 const FIELDS = [
   'paperId',
@@ -381,6 +385,17 @@ export async function expandGraph(
       nodesAdded += r.nodes
       edgesAdded += r.edges
       expanded++
+      // Yield between papers. s2Schedule already paces every request, but
+      // this crawler is background work competing with the searches and
+      // detail panels the user is actually waiting on, so it deliberately
+      // takes less than its share.
+      //
+      // It also reflects measured behaviour: S2 returns 429 intermittently
+      // regardless of pacing (a 5s gap tested no better than 2s), so the
+      // limit is a fluctuating global throttle rather than a clean
+      // requests-per-second budget. Backing off further does not buy
+      // reliability; it only slows the crawl.
+      await new Promise((resolve) => setTimeout(resolve, INTER_PAPER_PAUSE_MS))
     }
     return { papersExpanded: expanded, nodesAdded, edgesAdded, stats: graphStats() }
   } finally {
