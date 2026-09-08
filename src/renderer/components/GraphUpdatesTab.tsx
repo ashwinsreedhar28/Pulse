@@ -173,13 +173,17 @@ export function GraphUpdatesTab(): JSX.Element {
   const onRegenerateUniverse = async (): Promise<void> => {
     if (regenProgress?.running) return
     const missing = scopeCounts?.graphMissing ?? 0
-    const hours = Math.round((missing * 93) / 3600)
+    const total = scopeCounts?.graph ?? 0
+    const hours = Math.round((total * 93) / 3600)
     const ok = window.confirm(
       `Generate value chains for the full graph universe?\n\n` +
-        `${missing} symbols have no chain yet. At ~90s each this is roughly ` +
-        `${hours} hours of continuous generation and a Claude call per symbol.\n\n` +
-        `It resumes where it left off if you quit, and already-generated ` +
-        `chains are skipped.`
+        `${total} symbols in scope — ${missing} have no chain at all.\n\n` +
+        `At the measured ~93s per chain this is roughly ${hours} hours and ` +
+        `one Sonnet call plus a few Haiku web searches per symbol. Estimated ` +
+        `API cost is $0.15-0.40 per chain.\n\n` +
+        `Claude-only, so no Ollama chains get mixed in. Resumable: quitting ` +
+        `is safe, and clicking again skips completed chains and retries the ` +
+        `failures. Keep the Mac awake for the duration.`
     )
     if (!ok) return
     await window.api.stocks.regenerateAllChains('graph')

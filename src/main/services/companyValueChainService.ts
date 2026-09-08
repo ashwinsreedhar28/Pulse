@@ -2952,6 +2952,13 @@ export async function regenerateAllChains(
     symbols = symbols.filter((sym) => {
       const row = getCompanyValueChain(sym)
       if (!row || row.generatedAt === null) return true
+      // Only a SUCCESSFUL chain counts as done. Skipping on timestamp alone
+      // skipped the failures too: a chain that died with status 'offline'
+      // still carries a fresh generatedAt, so on the live DB a resume would
+      // have skipped all 26 'offline' + 3 'pending' rows — precisely the
+      // ones needing a retry. This also makes a second click the natural
+      // "retry what failed" action.
+      if (row.status !== 'ready') return true
       return row.generatedAt < cutoff
     })
     const skipped = beforeCount - symbols.length

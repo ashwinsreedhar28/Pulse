@@ -638,7 +638,24 @@ export function registerDbIpc(): void {
   // broadcast on 'chainRegen:progress'.
   ipcMain.handle('stocks:regenerateAllChains', async (_e, scope?: 'watchlist' | 'graph') => {
     const { regenerateAllChains } = await import('../services/companyValueChainService')
-    void regenerateAllChains(scope === 'graph' ? { scope: 'graph' } : {})
+    void regenerateAllChains(
+      scope === 'graph'
+        ? {
+            scope: 'graph',
+            // Claude-only. The default router silently falls back to Ollama
+            // whenever a Claude call returns null, which over ~1,100 symbols
+            // would scatter lower-quality chains through the graph with no
+            // way to tell which. Forcing the provider records a failure
+            // instead, and a re-click retries exactly those.
+            forceProvider: 'claude',
+            // Resumable: a run this long will be interrupted. Chains this
+            // pass already completed are skipped on the next click; failures
+            // are not (see the status check in the skip filter).
+            skipIfGeneratedWithinMs: 7 * 24 * 60 * 60 * 1000,
+            stalestFirst: true
+          }
+        : {}
+    )
     return { ok: true }
   })
   // How many symbols each scope would cover. The graph-scope run is long
