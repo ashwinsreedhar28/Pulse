@@ -38,6 +38,7 @@ Entry format:
 ### 🛠 Deferred (decided not to do)
 
 - Tier 4 review-team refactors: `ollamaService.ts` 2.2K-line split, IPC handler-registration consolidation, `aiClient.ts` incomplete abstraction, `generateCompanyChain` 448-line function split, `await import()` → top-level. User decision: "no work without measurable impact." Re-evaluate only if one surfaces during actual feature work in that file.
+- (2026-09-08) [stocks] `AUTO_REGEN_MAX_PER_BOOT = 25` is now sized for the old universe. Its comment reasons about "~65-100 symbols in scope"; after a full-universe backfill the refresh set is ~1,199, so at 25 per boot behind a 20h throttle a complete cycle takes ~48 boots (months). The backfill itself is fine — it is manual and uncapped — but ongoing staleness refresh effectively stops keeping up. Deliberately not changed here: raising it raises steady-state Claude spend, which is the user's call, not a silent default.
 
 ## Resolved
 
