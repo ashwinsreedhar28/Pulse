@@ -103,6 +103,7 @@ export function GraphUpdatesTab(): JSX.Element {
     watchlist: number
     graph: number
     graphMissing: number
+    resumable: boolean
   } | null>(null)
 
   const reload = useCallback(async (): Promise<void> => {
@@ -174,16 +175,22 @@ export function GraphUpdatesTab(): JSX.Element {
     if (regenProgress?.running) return
     const missing = scopeCounts?.graphMissing ?? 0
     const total = scopeCounts?.graph ?? 0
+    const resuming = scopeCounts?.resumable ?? false
     const hours = Math.round((total * 93) / 3600)
     const ok = window.confirm(
-      `Generate value chains for the full graph universe?\n\n` +
-        `${total} symbols in scope — ${missing} have no chain at all.\n\n` +
-        `At the measured ~93s per chain this is roughly ${hours} hours and ` +
-        `one Sonnet call plus a few Haiku web searches per symbol. Estimated ` +
-        `API cost is $0.15-0.40 per chain.\n\n` +
-        `Claude-only, so no Ollama chains get mixed in. Resumable: quitting ` +
-        `is safe, and clicking again skips completed chains and retries the ` +
-        `failures. Keep the Mac awake for the duration.`
+      resuming
+        ? `Resume the interrupted universe run?\n\n` +
+            `Chains this run already completed are skipped; failures are ` +
+            `retried. Nothing is re-billed.`
+        : `Generate value chains for the full graph universe?\n\n` +
+            `${total} symbols in scope — ${missing} have no chain at all, and ` +
+            `the rest are regenerated too, so this is one clean pass over ` +
+            `everything.\n\n` +
+            `At the measured ~93s per chain this is roughly ${hours} hours and ` +
+            `one Sonnet call plus a few Haiku web searches per symbol. ` +
+            `Estimated API cost is $0.15-0.40 per chain.\n\n` +
+            `Claude-only, so no Ollama chains get mixed in. Quitting is safe — ` +
+            `clicking again resumes where it stopped. Keep the Mac awake.`
     )
     if (!ok) return
     await window.api.stocks.regenerateAllChains('graph')
@@ -288,7 +295,7 @@ export function GraphUpdatesTab(): JSX.Element {
             >
               {regenProgress?.running
                 ? `Generating ${regenProgress.completed + 1}/${regenProgress.total}…`
-                : `Regenerate watchlist${scopeCounts ? ` (${scopeCounts.watchlist})` : ''}`}
+                : `Watchlist only${scopeCounts ? ` (${scopeCounts.watchlist})` : ''}`}
             </button>
             <button
               onClick={onRegenerateUniverse}
@@ -300,7 +307,9 @@ export function GraphUpdatesTab(): JSX.Element {
                   : 'bg-amber-500/15 text-amber-200 ring-amber-500/40 hover:bg-amber-500/25'
               }`}
             >
-              {`Full universe${scopeCounts ? ` (${scopeCounts.graph})` : ''}`}
+              {scopeCounts?.resumable
+                ? '▶ Resume universe run'
+                : `▶ Full universe${scopeCounts ? ` (${scopeCounts.graph})` : ''}`}
             </button>
           </div>
         </div>

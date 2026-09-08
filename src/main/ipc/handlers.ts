@@ -638,32 +638,22 @@ export function registerDbIpc(): void {
   // broadcast on 'chainRegen:progress'.
   ipcMain.handle('stocks:regenerateAllChains', async (_e, scope?: 'watchlist' | 'graph') => {
     const { regenerateAllChains } = await import('../services/companyValueChainService')
-    void regenerateAllChains(
-      scope === 'graph'
-        ? {
-            scope: 'graph',
-            // Claude-only. The default router silently falls back to Ollama
-            // whenever a Claude call returns null, which over ~1,100 symbols
-            // would scatter lower-quality chains through the graph with no
-            // way to tell which. Forcing the provider records a failure
-            // instead, and a re-click retries exactly those.
-            forceProvider: 'claude',
-            // Resumable: a run this long will be interrupted. Chains this
-            // pass already completed are skipped on the next click; failures
-            // are not (see the status check in the skip filter).
-            skipIfGeneratedWithinMs: 7 * 24 * 60 * 60 * 1000,
-            stalestFirst: true
-          }
-        : {}
-    )
+    if (scope === 'graph') {
+      const { startUniverseRun } = await import('../services/companyValueChainService')
+      void startUniverseRun()
+    } else {
+      void regenerateAllChains()
+    }
     return { ok: true }
   })
   // How many symbols each scope would cover. The graph-scope run is long
   // enough (hours, and real API spend) that the button must be able to say
   // what it is about to do before it is pressed.
   ipcMain.handle('stocks:getChainScopeCounts', async () => {
-    const { getChainScopeCounts } = await import('../services/companyValueChainService')
-    return getChainScopeCounts()
+    const { getChainScopeCounts, getUniverseRunState } = await import(
+      '../services/companyValueChainService'
+    )
+    return { ...getChainScopeCounts(), ...getUniverseRunState() }
   })
   // One-shot Claude-only variant. Bypasses the local cap counter and
   // disables Ollama fallback so the entire run uses Sonnet for maximum

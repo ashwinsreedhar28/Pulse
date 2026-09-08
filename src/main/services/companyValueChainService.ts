@@ -2878,6 +2878,11 @@ export function getRegenerateAllProgress(): RegenerateAllProgress {
 export async function regenerateAllChains(
   opts: {
     skipIfGeneratedWithinMs?: number
+    // Absolute-timestamp variant of the skip filter: skip a symbol only if
+    // its chain succeeded at or after this instant. Used by the universe run
+    // to mean "skip what THIS run already did" rather than "skip anything
+    // recent", which are different sets and only the first one is a resume.
+    skipIfGeneratedAfter?: number
     idleGateSeconds?: number
     maxSymbols?: number
     stalestFirst?: boolean
@@ -2965,6 +2970,26 @@ export async function regenerateAllChains(
     if (skipped > 0) {
       console.log(
         `[companyChain] regenerate-all: skipped ${skipped} chain(s) regenerated within ${Math.round(opts.skipIfGeneratedWithinMs / 3600_000)}h — ${symbols.length} to process`
+      )
+    }
+  }
+
+  // Run-anchored skip. Same status rule as the window filter above: a chain
+  // that failed is never "already done", so a resume retries it.
+  if (opts.skipIfGeneratedAfter !== undefined && opts.skipIfGeneratedAfter > 0) {
+    const anchor = opts.skipIfGeneratedAfter
+    const beforeCount = symbols.length
+    symbols = symbols.filter((sym) => {
+      const row = getCompanyValueChain(sym)
+      if (!row || row.generatedAt === null) return true
+      if (row.status !== 'ready') return true
+      return row.generatedAt < anchor
+    })
+    const skipped = beforeCount - symbols.length
+    if (skipped > 0) {
+      console.log(
+        `[companyChain] regenerate-all: resuming — ${skipped} chain(s) already ` +
+          `completed in this run, ${symbols.length} remaining`
       )
     }
   }
@@ -3087,6 +3112,101 @@ const AUTO_REGEN_MAX_PER_BOOT = 25 // Cap a single boot's regen run at the
 // 25 stalest chains. With ~65-100 symbols in scope this means one boot
 // won't burn the entire daily Claude budget; it takes 3-4 boots over the
 // throttle window to fully refresh the graph.
+
+const UNIVERSE_STARTED_KEY = '_universeRunStartedAt'
+const UNIVERSE_COMPLETED_KEY = '_universeRunCompletedAt'
+
+// One clean pass over the whole graph universe, resumable.
+//
+// "Regenerate everything" and "resume safely" pull against each other. A
+// fixed skip window (skip anything generated in the last N days) makes a
+// resume cheap, but it also skips chains that predate the run — which are
+// exactly what a clean regeneration exists to refresh. Anchoring to the
+// run's own start time gives both: on a fresh start nothing is skipped, so
+// all 1,199 regenerate including the ones refreshed yesterday; on a resume
+// only what this run already finished is skipped.
+//
+// A run is "in progress" when a start stamp exists with no later completion
+// stamp — i.e. the app quit mid-run. Finishing a run clears the way for the
+// next click to be another full pass.
+export async function startUniverseRun(): Promise<RegenerateAllProgress> {
+  if (regenRunning) return regenProgress
+  const { getDb } = await import('../database/connection')
+  const db = getDb()
+  const readStamp = (key: string): number => {
+    const row = db
+      .prepare<[string], { value: string }>(`SELECT value FROM preferences WHERE key = ?`)
+      .get(key)
+    const n = row ? Number(row.value) : 0
+    return Number.isFinite(n) ? n : 0
+  }
+  const writeStamp = (key: string, v: number): void => {
+    db.prepare(
+      `INSERT INTO preferences (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    ).run(key, String(v))
+  }
+
+  const started = readStamp(UNIVERSE_STARTED_KEY)
+  const completed = readStamp(UNIVERSE_COMPLETED_KEY)
+  const resuming = started > 0 && completed < started
+  const anchor = resuming ? started : Date.now()
+  if (!resuming) writeStamp(UNIVERSE_STARTED_KEY, anchor)
+
+  // No stamp at all means this build has never run a universe pass — which
+  // includes upgrading onto a build that has this code WHILE an older
+  // build's run is in flight. We cannot tell those apart, so fall back to
+  // the old fixed-window behaviour for that one click: chains that already
+  // succeeded in the last week are treated as done. The cost is that a
+  // first clean pass skips very recent chains; the alternative is silently
+  // re-billing a run someone is midway through, which is much worse.
+  const legacyFirstUse = started === 0
+  if (legacyFirstUse) {
+    console.log(
+      '[companyChain] universe run: no prior run stamp — applying a 7-day ' +
+        'safety window so an in-flight run from an older build is not redone'
+    )
+  }
+  console.log(
+    `[companyChain] universe run ${resuming ? 'RESUMING' : 'starting fresh'} — ` +
+      `anchor ${new Date(anchor).toISOString()}`
+  )
+
+  const result = await regenerateAllChains({
+    scope: 'graph',
+    // Claude-only: the default router silently falls back to Ollama when a
+    // Claude call returns null, which over ~1,100 symbols would scatter
+    // lower-quality chains through the graph with no way to tell which.
+    forceProvider: 'claude',
+    skipIfGeneratedAfter: anchor,
+    skipIfGeneratedWithinMs: legacyFirstUse ? 7 * 24 * 60 * 60 * 1000 : undefined,
+    stalestFirst: true
+  })
+  // Only a run that reached the end counts as complete. Marking completion
+  // on a throw would turn the next click into a fresh full pass and re-bill
+  // everything the interrupted run had already finished.
+  writeStamp(UNIVERSE_COMPLETED_KEY, Date.now())
+  return result
+}
+
+// Whether an interrupted universe run is waiting to be resumed, so the UI
+// can say "resume" instead of implying a fresh pass.
+export function getUniverseRunState(): { resumable: boolean } {
+  try {
+    const db = getDb()
+    const get = (key: string): number => {
+      const row = db
+        .prepare<[string], { value: string }>(`SELECT value FROM preferences WHERE key = ?`)
+        .get(key)
+      const n = row ? Number(row.value) : 0
+      return Number.isFinite(n) ? n : 0
+    }
+    const started = get(UNIVERSE_STARTED_KEY)
+    return { resumable: started > 0 && get(UNIVERSE_COMPLETED_KEY) < started }
+  } catch {
+    return { resumable: false }
+  }
+}
 
 // Symbol counts per regen scope, so the UI can state the size of a run
 // before starting it rather than after.

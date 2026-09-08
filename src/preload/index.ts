@@ -1889,6 +1889,8 @@ const api = {
       watchlist: number
       graph: number
       graphMissing: number
+      /** True when a universe run was interrupted and can be resumed. */
+      resumable: boolean
     }> => invoke('stocks:getChainScopeCounts'),
     // One-shot Claude-only regen. Bypasses the local cap counter and
     // disables Ollama fallback. Used to backfill citations across the
