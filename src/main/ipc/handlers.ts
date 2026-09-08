@@ -142,6 +142,7 @@ import {
 } from '../database/hyperChats'
 
 export function registerDbIpc(): void {
+
   // Find-in-page bridge. The renderer's reader content is regular DOM,
   // but Electron doesn't fire Cmd+F → native find UI by default. We
   // expose webContents.findInPage / stopFindInPage and forward the

@@ -80,6 +80,7 @@ export function ResearchGraph({
   const rafRef = useRef<number | null>(null)
   const [dragging, setDragging] = useState(false)
 
+
   const load = useCallback(async (): Promise<void> => {
     if (!focusPaperId) {
       // No focus yet: offer the best-connected papers as entry points, since
@@ -179,9 +180,12 @@ export function ResearchGraph({
   // broken even when it is drawing correctly. Fitting to the actual bounds
   // makes the shape of the neighbourhood the first thing you see; zoom in for
   // labels.
-  const fitToView = useCallback(() => {
+  // Returns false when it could not fit (no canvas size yet), so the caller
+  // knows to try again once the element has been measured.
+  const fitToView = useCallback((): boolean => {
     const canvas = canvasRef.current
-    if (!canvas || layout.length === 0) return
+    if (!canvas || layout.length === 0) return false
+    if (canvas.clientWidth === 0 || canvas.clientHeight === 0) return false
     let minX = Infinity
     let maxX = -Infinity
     let minY = Infinity
@@ -212,29 +216,26 @@ export function ResearchGraph({
       y: -((minY + maxY) / 2) * zoom,
       zoom
     }
+    return true
   }, [layout])
 
-  useEffect(() => {
-    fitToView()
-    requestAnimationFrame(() => {
-      if (rafRef.current === null) {
-        rafRef.current = requestAnimationFrame(() => {
-          rafRef.current = null
-          drawRef.current()
-        })
-      }
-    })
-  }, [fitToView])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    try {
 
     const dpr = window.devicePixelRatio || 1
     const w = canvas.clientWidth
     const h = canvas.clientHeight
+    // A flex/grid parent can still be settling on the first frame after
+    // mount, in which case the canvas measures 0 and everything drawn is
+    // discarded. Nothing would schedule another frame, so the view stayed
+    // blank permanently even with correct data and geometry. Bail out and let
+    // the ResizeObserver below drive the real paint.
+    if (w === 0 || h === 0) return
     if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
       canvas.width = w * dpr
       canvas.height = h * dpr
@@ -358,6 +359,10 @@ export function ResearchGraph({
         }
       }
     }
+    } catch (err) {
+      // A canvas throw must not silently blank the view.
+      console.warn('[research-graph] draw failed:', err)
+    }
   }, [layout, positions, data, selected])
 
   // The queued frame must run the LATEST draw, not the one that was current
@@ -374,6 +379,26 @@ export function ResearchGraph({
     drawRef.current = draw
   }, [draw])
 
+  // Paint immediately. Used for anything that changes the SCENE (data
+  // arriving, layout, filters, selection) rather than the camera.
+  //
+  // Correctness must never depend on requestAnimationFrame here. Electron
+  // sets backgroundThrottling: true, so rAF is paused while the window is
+  // hidden — which it is during boot, before the splash hands over. A frame
+  // queued in that window never fires, so the `rafRef.current !== null` guard
+  // latched permanently and every subsequent request bailed. The result was a
+  // canvas that never painted once, with correct data and a correctly sized
+  // element behind it.
+  const drawNow = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    drawRef.current()
+  }, [])
+
+  // Coalesced paint, for high-frequency camera input (drag, wheel, hover).
+  // Dropping one of these is harmless; the next pointer event repaints.
   const requestDraw = useCallback(() => {
     if (rafRef.current !== null) return
     rafRef.current = requestAnimationFrame(() => {
@@ -383,16 +408,37 @@ export function ResearchGraph({
   }, [])
 
   useEffect(() => {
-    requestDraw()
-    // Keyed on `draw` because requestDraw is now stable — without this the
-    // canvas would never repaint when the scene changes.
-  }, [draw, requestDraw])
+    // drawNow, not requestDraw: a scene change must paint even if the window
+    // is currently throttled and rAF is not running.
+    drawNow()
+  }, [draw, drawNow])
 
+  // Whether the current layout has been framed yet. The first fit attempt
+  // often lands before the canvas has a measured size, so the ResizeObserver
+  // retries once it does.
+  const fittedRef = useRef(false)
   useEffect(() => {
-    const onResize = (): void => requestDraw()
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [requestDraw])
+    fittedRef.current = fitToView()
+    drawNow()
+  }, [fitToView, drawNow])
+
+
+  // Observe the canvas itself, not the window. The element's size changes for
+  // reasons a window-resize listener never sees — first layout after mount,
+  // a sibling panel opening, the tab becoming visible — and the first of
+  // those is exactly when the canvas measures 0 and the initial paint is
+  // thrown away.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ro = new ResizeObserver(() => {
+      // First real measurement is also the first chance to frame the layout.
+      if (!fittedRef.current) fittedRef.current = fitToView()
+      drawNow()
+    })
+    ro.observe(canvas)
+    return () => ro.disconnect()
+  }, [drawNow, fitToView])
 
   useEffect(
     () => () => {
@@ -500,8 +546,8 @@ export function ResearchGraph({
         </button>
         <button
           onClick={() => {
-            fitToView()
-            requestDraw()
+            fittedRef.current = fitToView()
+            drawNow()
           }}
           className="rounded bg-zinc-900 px-2 py-1 text-xs text-zinc-300 ring-1 ring-zinc-800 hover:bg-zinc-800"
         >
@@ -536,7 +582,12 @@ export function ResearchGraph({
 
         <canvas
           ref={canvasRef}
-          className="h-full w-full"
+          // absolute inset-0 rather than h-full: a canvas is a replaced
+          // element with its own intrinsic size, and height:100% inside a
+          // flex item resolves to 0 whenever the flex chain has any
+          // indefinite link. Pinning it to the relative parent sidesteps the
+          // whole class of problem.
+          className="absolute inset-0 h-full w-full"
           style={{ cursor: dragging ? 'grabbing' : 'grab', display: 'block' }}
           onPointerDown={(e) => {
             const { x, y } = camRef.current

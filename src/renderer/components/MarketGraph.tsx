@@ -256,6 +256,12 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
     const dpr = window.devicePixelRatio || 1
     const w = canvas.clientWidth
     const h = canvas.clientHeight
+    // A flex/grid parent can still be settling on the first frame after
+    // mount, in which case the canvas measures 0 and everything drawn is
+    // discarded. Nothing would schedule another frame, so the view stayed
+    // blank permanently even with correct data and geometry. Bail out and let
+    // the ResizeObserver below drive the real paint.
+    if (w === 0 || h === 0) return
     if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
       canvas.width = w * dpr
       canvas.height = h * dpr
@@ -453,6 +459,26 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
     drawRef.current = draw
   }, [draw])
 
+  // Paint immediately. Used for anything that changes the SCENE (data
+  // arriving, layout, filters, selection) rather than the camera.
+  //
+  // Correctness must never depend on requestAnimationFrame here. Electron
+  // sets backgroundThrottling: true, so rAF is paused while the window is
+  // hidden — which it is during boot, before the splash hands over. A frame
+  // queued in that window never fires, so the `rafRef.current !== null` guard
+  // latched permanently and every subsequent request bailed. The result was a
+  // canvas that never painted once, with correct data and a correctly sized
+  // element behind it.
+  const drawNow = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    drawRef.current()
+  }, [])
+
+  // Coalesced paint, for high-frequency camera input (drag, wheel, hover).
+  // Dropping one of these is harmless; the next pointer event repaints.
   const requestDraw = useCallback(() => {
     if (rafRef.current !== null) return
     rafRef.current = requestAnimationFrame(() => {
@@ -462,16 +488,23 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
   }, [])
 
   useEffect(() => {
-    requestDraw()
-    // Keyed on `draw` because requestDraw is now stable — without this the
-    // canvas would never repaint when the scene changes.
-  }, [draw, requestDraw])
+    // drawNow, not requestDraw: a scene change must paint even if the window
+    // is currently throttled and rAF is not running.
+    drawNow()
+  }, [draw, drawNow])
 
+  // Observe the canvas itself, not the window. The element's size changes for
+  // reasons a window-resize listener never sees — first layout after mount,
+  // a sibling panel opening, the tab becoming visible — and the first of
+  // those is exactly when the canvas measures 0 and the initial paint is
+  // thrown away.
   useEffect(() => {
-    const onResize = (): void => requestDraw()
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [requestDraw])
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ro = new ResizeObserver(() => drawNow())
+    ro.observe(canvas)
+    return () => ro.disconnect()
+  }, [drawNow])
 
   // Opt-in continuous orbit. Off by default: CLAUDE.md bans perpetual
   // animation because it visibly jitters under macOS screen capture, and an
@@ -606,7 +639,7 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
         <button
           onClick={() => {
             camRef.current = { yaw: 0.5, pitch: -0.25, zoom: 1 }
-            requestDraw()
+            drawNow()
           }}
           className="rounded bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300 ring-1 ring-zinc-800 hover:bg-zinc-800"
         >
@@ -620,7 +653,12 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
       <div className="relative min-h-0 flex-1">
         <canvas
           ref={canvasRef}
-          className="h-full w-full"
+          // absolute inset-0 rather than h-full: a canvas is a replaced
+          // element with its own intrinsic size, and height:100% inside a
+          // flex item resolves to 0 whenever the flex chain has any
+          // indefinite link. Pinning it to the relative parent sidesteps the
+          // whole class of problem.
+          className="absolute inset-0 h-full w-full"
           style={{ cursor: dragRef.current ? 'grabbing' : 'grab', display: 'block' }}
           onPointerDown={(e) => {
             const { yaw, pitch } = camRef.current
