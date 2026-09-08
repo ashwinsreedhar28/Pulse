@@ -97,7 +97,6 @@ export function ResearchGraph({
     try {
       const payload = await window.api.research.neighborhood(focusPaperId, hops)
       setData(payload)
-      camRef.current = { x: 0, y: 0, zoom: 1 }
     } catch (err) {
       console.warn('[research-graph] neighborhood failed:', err)
       setData(null)
@@ -136,8 +135,13 @@ export function ResearchGraph({
       else byGen.set(n.generation, [n])
     }
 
+    // Guard the log scale. If every paper in a neighbourhood has zero
+    // citations — entirely normal for a set of fresh preprints — then
+    // log10(maxCite) is 0 and the radius below becomes NaN. Canvas throws
+    // IndexSizeError on a NaN gradient radius, which aborts the whole draw
+    // and leaves a blank screen rather than a visible error.
     const cites = data.nodes.map((n) => n.citationCount)
-    const maxCite = Math.max(1, ...cites)
+    const maxCite = Math.max(10, ...cites)
 
     const out: Placed[] = []
     for (const [gen, group] of byGen) {
@@ -167,6 +171,60 @@ export function ResearchGraph({
     for (const p of layout) m.set(p.node.paperId, p)
     return m
   }, [layout])
+
+  // Frame the whole lineage on load.
+  //
+  // A wide generation is genuinely wide: 100 papers at NODE_GAP spacing is
+  // ~17,000px, so at zoom 1 all but a dozen sit off-screen and the view looks
+  // broken even when it is drawing correctly. Fitting to the actual bounds
+  // makes the shape of the neighbourhood the first thing you see; zoom in for
+  // labels.
+  const fitToView = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas || layout.length === 0) return
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+    for (const p of layout) {
+      minX = Math.min(minX, p.x)
+      maxX = Math.max(maxX, p.x)
+      minY = Math.min(minY, p.y)
+      maxY = Math.max(maxY, p.y)
+    }
+    const pad = 90
+    const spanX = Math.max(maxX - minX, 1)
+    const spanY = Math.max(maxY - minY, 1)
+    const zoom = Math.max(
+      0.05,
+      Math.min(
+        1.4,
+        Math.min(
+          (canvas.clientWidth - pad * 2) / spanX,
+          (canvas.clientHeight - pad * 2) / spanY
+        )
+      )
+    )
+    // Centre on the layout's midpoint rather than the origin — the focus node
+    // is at x=0 but a lopsided neighbourhood is not centred there.
+    camRef.current = {
+      x: -((minX + maxX) / 2) * zoom,
+      y: -((minY + maxY) / 2) * zoom,
+      zoom
+    }
+  }, [layout])
+
+  useEffect(() => {
+    fitToView()
+    requestAnimationFrame(() => {
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null
+          drawRef.current()
+        })
+      }
+    })
+  }, [fitToView])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -302,17 +360,33 @@ export function ResearchGraph({
     }
   }, [layout, positions, data, selected])
 
+  // The queued frame must run the LATEST draw, not the one that was current
+  // when the frame was scheduled.
+  //
+  // Coalescing on `rafRef.current !== null` alone is a trap: if a frame is
+  // already pending when new data arrives, the new requestDraw returns early,
+  // the pending frame then executes the STALE closure, and nothing schedules
+  // another. The canvas keeps rendering an empty layout forever even though
+  // state updated correctly — which is exactly how a graph reporting
+  // "132 papers" in its header painted nothing at all.
+  const drawRef = useRef(draw)
+  useEffect(() => {
+    drawRef.current = draw
+  }, [draw])
+
   const requestDraw = useCallback(() => {
     if (rafRef.current !== null) return
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null
-      draw()
+      drawRef.current()
     })
-  }, [draw])
+  }, [])
 
   useEffect(() => {
     requestDraw()
-  }, [requestDraw])
+    // Keyed on `draw` because requestDraw is now stable — without this the
+    // canvas would never repaint when the scene changes.
+  }, [draw, requestDraw])
 
   useEffect(() => {
     const onResize = (): void => requestDraw()
@@ -426,12 +500,12 @@ export function ResearchGraph({
         </button>
         <button
           onClick={() => {
-            camRef.current = { x: 0, y: 0, zoom: 1 }
+            fitToView()
             requestDraw()
           }}
           className="rounded bg-zinc-900 px-2 py-1 text-xs text-zinc-300 ring-1 ring-zinc-800 hover:bg-zinc-800"
         >
-          reset
+          fit
         </button>
         <span className="text-xs text-zinc-500">
           {data?.nodes.length ?? 0} papers · {data?.edges.length ?? 0} citations

@@ -439,17 +439,33 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
 
   // Single scheduling point. Every interaction asks for a frame rather than
   // drawing inline, so a burst of pointer events coalesces into one paint.
+  // The queued frame must run the LATEST draw, not the one that was current
+  // when the frame was scheduled.
+  //
+  // Coalescing on `rafRef.current !== null` alone is a trap: if a frame is
+  // already pending when new data arrives, the new requestDraw returns early,
+  // the pending frame then executes the STALE closure, and nothing schedules
+  // another. The canvas keeps rendering an empty layout forever even though
+  // state updated correctly — which is exactly how a graph reporting
+  // "132 papers" in its header painted nothing at all.
+  const drawRef = useRef(draw)
+  useEffect(() => {
+    drawRef.current = draw
+  }, [draw])
+
   const requestDraw = useCallback(() => {
     if (rafRef.current !== null) return
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null
-      draw()
+      drawRef.current()
     })
-  }, [draw])
+  }, [])
 
   useEffect(() => {
     requestDraw()
-  }, [requestDraw])
+    // Keyed on `draw` because requestDraw is now stable — without this the
+    // canvas would never repaint when the scene changes.
+  }, [draw, requestDraw])
 
   useEffect(() => {
     const onResize = (): void => requestDraw()

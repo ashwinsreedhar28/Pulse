@@ -209,8 +209,9 @@ export interface NeighborhoodPayload {
   needsExpansion: boolean
 }
 
-// Per generation, so one hub paper with hundreds of citers cannot flood the
-// view. Ranked by influence, so the slice that survives is the meaningful one.
+// Cap per generation (not per parent), so a band stays readable however many
+// parents feed it. Ranked by influence, so the slice that survives is the
+// meaningful one.
 const PER_GENERATION = 18
 
 export function getPaperNeighborhood(
@@ -252,18 +253,24 @@ export function getPaperNeighborhood(
   const walk = (dir: 'back' | 'forward'): void => {
     let frontier = [focus]
     for (let hop = 1; hop <= hops; hop++) {
-      const next: string[] = []
+      // Gather the whole candidate set for this hop, then cap ONCE across it.
+      //
+      // Capping per parent instead lets the layer multiply: 18 parents each
+      // contributing 18 children is 324 nodes in a single band, which is both
+      // unreadable and not what "top 18" was meant to mean. Ranking across the
+      // full candidate set also picks genuinely better papers, since it can
+      // prefer two strong children of one parent over one weak child each.
+      const candidates = new Set<string>()
       for (const id of frontier) {
         const neighbours = dir === 'back' ? (outgoing.get(id) ?? []) : (incoming.get(id) ?? [])
-        const ranked = [...neighbours]
-          .filter((n) => !generation.has(n))
-          .sort((a, b) => rank(b) - rank(a))
-          .slice(0, PER_GENERATION)
-        for (const n of ranked) {
-          generation.set(n, dir === 'back' ? -hop : hop)
-          next.push(n)
+        for (const n of neighbours) {
+          if (!generation.has(n)) candidates.add(n)
         }
       }
+      const next = [...candidates]
+        .sort((a, b) => rank(b) - rank(a))
+        .slice(0, PER_GENERATION)
+      for (const n of next) generation.set(n, dir === 'back' ? -hop : hop)
       frontier = next
       if (frontier.length === 0) break
     }
