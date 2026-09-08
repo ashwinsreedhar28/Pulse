@@ -185,3 +185,105 @@ export function findCoCited(
     return []
   }
 }
+
+// One paper's neighbourhood, rather than the whole corpus.
+//
+// "Build graph from this paper" was dropping the user into all ~4,900 nodes,
+// which answers a question nobody asked. The useful question about a single
+// paper is its lineage: what it builds on, and what built on it.
+//
+// Generations are signed. Negative is backward through references (older,
+// what this work stands on); positive is forward through citations (newer,
+// what stands on it); 0 is the focus. That sign is what lets the renderer lay
+// the neighbourhood out as a time-ordered DAG instead of a ball.
+export interface NeighborhoodNode extends ResearchGraphNode {
+  /** Hops from focus. Negative = ancestor, positive = descendant. */
+  generation: number
+}
+
+export interface NeighborhoodPayload {
+  focusPaperId: string
+  nodes: NeighborhoodNode[]
+  edges: ResearchGraphEdge[]
+  /** True when the focus paper's own neighbours have not been fetched yet. */
+  needsExpansion: boolean
+}
+
+// Per generation, so one hub paper with hundreds of citers cannot flood the
+// view. Ranked by influence, so the slice that survives is the meaningful one.
+const PER_GENERATION = 18
+
+export function getPaperNeighborhood(
+  paperId: string,
+  hops = 2
+): NeighborhoodPayload {
+  const focus = paperId.trim()
+  const all = getResearchGraph()
+  const byId = new Map(all.nodes.map((n) => [n.paperId, n]))
+  if (!byId.has(focus)) {
+    return { focusPaperId: focus, nodes: [], edges: [], needsExpansion: true }
+  }
+
+  // Adjacency split by direction so the walk can keep ancestors and
+  // descendants apart. A single undirected walk would mix "what this builds
+  // on" with "what builds on it" and lose the whole point.
+  const outgoing = new Map<string, string[]>() // from -> to  (cites)
+  const incoming = new Map<string, string[]>() // to -> from  (cited by)
+  for (const e of all.edges) {
+    const o = outgoing.get(e.from)
+    if (o) o.push(e.to)
+    else outgoing.set(e.from, [e.to])
+    const i = incoming.get(e.to)
+    if (i) i.push(e.from)
+    else incoming.set(e.to, [e.from])
+  }
+
+  const generation = new Map<string, number>([[focus, 0]])
+
+  const rank = (id: string): number => {
+    const n = byId.get(id)
+    if (!n) return -1
+    return n.influentialCitationCount * 5 + n.citationCount
+  }
+
+  // Breadth-first in each direction independently. A node already assigned a
+  // generation keeps it — the shortest path wins, so a paper that is both a
+  // reference and a distant citer reads as the reference it primarily is.
+  const walk = (dir: 'back' | 'forward'): void => {
+    let frontier = [focus]
+    for (let hop = 1; hop <= hops; hop++) {
+      const next: string[] = []
+      for (const id of frontier) {
+        const neighbours = dir === 'back' ? (outgoing.get(id) ?? []) : (incoming.get(id) ?? [])
+        const ranked = [...neighbours]
+          .filter((n) => !generation.has(n))
+          .sort((a, b) => rank(b) - rank(a))
+          .slice(0, PER_GENERATION)
+        for (const n of ranked) {
+          generation.set(n, dir === 'back' ? -hop : hop)
+          next.push(n)
+        }
+      }
+      frontier = next
+      if (frontier.length === 0) break
+    }
+  }
+  walk('back')
+  walk('forward')
+
+  const nodes: NeighborhoodNode[] = []
+  for (const [id, gen] of generation) {
+    const n = byId.get(id)
+    if (n) nodes.push({ ...n, generation: gen })
+  }
+  const keep = new Set(nodes.map((n) => n.paperId))
+
+  return {
+    focusPaperId: focus,
+    nodes,
+    edges: all.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
+    // A focus with no neighbours means it was seeded but never expanded, so
+    // the UI can offer to fetch rather than showing a lone dot.
+    needsExpansion: nodes.length <= 1
+  }
+}

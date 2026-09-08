@@ -11,7 +11,7 @@
 // slow and frequently render with holes.
 
 import { useCallback, useEffect, useState } from 'react'
-import type { DiscoverSection, ResearchPaper } from '../../preload'
+import type { DiscoverMode, DiscoverSection, ResearchPaper } from '../../preload'
 
 interface Props {
   onSelectPaper: (p: ResearchPaper) => void
@@ -35,15 +35,19 @@ export function ResearchDiscover({
 }: Props): JSX.Element {
   const [sections, setSections] = useState<DiscoverSection[] | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  // 'newest' is arXiv preprints by submission date — often days old. Journals
+  // publish ~a year after acceptance, so anything with citations behind it is
+  // necessarily months behind the field.
+  const [mode, setMode] = useState<DiscoverMode>('trending')
 
   const load = useCallback(async (): Promise<void> => {
     try {
-      setSections(await window.api.research.discover())
+      setSections(await window.api.research.discover(mode))
     } catch (err) {
       console.warn('[discover] load failed:', err)
       setSections([])
     }
-  }, [])
+  }, [mode])
 
   useEffect(() => {
     void load()
@@ -57,14 +61,14 @@ export function ResearchDiscover({
     if (refreshing) return
     setRefreshing(true)
     void window.api.research
-      .refreshDiscover(false)
+      .refreshDiscover(false, mode)
       .then(() => load())
       .catch((err) => console.warn('[discover] initial refresh failed:', err))
       .finally(() => setRefreshing(false))
     // Intentionally keyed on the empty state only — this must fire once when
     // the cache turns out to be cold, not on every sections update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sections === null ? null : sections.some((s) => s.papers.length > 0)])
+  }, [mode, sections === null ? null : sections.some((s) => s.papers.length > 0)])
 
   if (sections === null) {
     return <div className="p-8 text-sm text-zinc-400">Loading…</div>
@@ -80,15 +84,40 @@ export function ResearchDiscover({
             What&apos;s moving in research
           </h2>
           <p className="mt-0.5 text-[11px] text-zinc-500">
-            Recent high-impact work by field. Open one to read it, or build a
-            citation graph outward from it.
+            {mode === 'newest'
+              ? 'Fresh arXiv preprints by submission date — this is the frontier, before peer review and before citations exist.'
+              : 'Recent work ranked by citations per year. Open one to read it, or build a citation graph outward from it.'}
           </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1 rounded-full bg-surface-1 p-0.5 ring-1 ring-edge/60">
+          {(['trending', 'newest'] as DiscoverMode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => {
+                setMode(m)
+                setSections(null)
+              }}
+              title={
+                m === 'newest'
+                  ? 'arXiv preprints by submission date — often days old'
+                  : 'Recent work ranked by citations per year'
+              }
+              className={
+                'rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ' +
+                (mode === m
+                  ? 'bg-violet-500/20 text-violet-200'
+                  : 'text-zinc-500 hover:text-zinc-200')
+              }
+            >
+              {m === 'newest' ? 'Newest' : 'Trending'}
+            </button>
+          ))}
         </div>
         <button
           onClick={() => {
             setRefreshing(true)
             void window.api.research
-              .refreshDiscover(true)
+              .refreshDiscover(true, mode)
               .then(() => load())
               .finally(() => setRefreshing(false))
           }}
@@ -152,7 +181,9 @@ export function ResearchDiscover({
                   <div className="mt-1 text-[10px] text-zinc-500">
                     {p.authors.slice(0, 2).join(', ')}
                     {p.authors.length > 2 ? ' et al.' : ''}
-                    {p.year ? ` · ${p.year}` : ''}
+                    {/* Exact date where we have it — in 'newest' the whole
+                        point is that this is days old, which a bare year hides. */}
+                    {p.publicationDate ? ` · ${p.publicationDate}` : p.year ? ` · ${p.year}` : ''}
                   </div>
                   {p.venue && (
                     <div className="truncate text-[10px] text-zinc-600" title={p.venue}>
@@ -160,9 +191,14 @@ export function ResearchDiscover({
                     </div>
                   )}
                   <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
-                    <span className="rounded px-1 py-0.5 text-zinc-400 ring-1 ring-zinc-800">
-                      {p.citationCount.toLocaleString()} cites
-                    </span>
+                    {/* A week-old preprint has zero citations by definition,
+                        so showing "0 cites" would read as a quality signal
+                        when it is only a statement about age. */}
+                    {(p.citationCount > 0 || mode === 'trending') && (
+                      <span className="rounded px-1 py-0.5 text-zinc-400 ring-1 ring-zinc-800">
+                        {p.citationCount.toLocaleString()} cites
+                      </span>
+                    )}
                     {p.influentialCitationCount > 0 && (
                       <span className="rounded bg-amber-500/10 px-1 py-0.5 text-amber-300/90 ring-1 ring-amber-500/20">
                         {p.influentialCitationCount} infl.

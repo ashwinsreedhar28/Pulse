@@ -1246,9 +1246,14 @@ export interface MultiSourceSearchResult {
 }
 
 
+// 'trending' = established recent work, ranked by citations per year.
+// 'newest'   = arXiv preprints by submission date, often days old.
+export type DiscoverMode = 'trending' | 'newest'
+
 export interface DiscoverSection {
   fieldId: string
   label: string
+  mode: DiscoverMode
   papers: ResearchPaper[]
   fetchedAt: number | null
 }
@@ -1278,6 +1283,15 @@ export interface ResearchGraphEdge {
   relationship: string
   intent: string | null
 }
+export interface NeighborhoodNode extends ResearchGraphNode {
+  generation: number
+}
+export interface NeighborhoodPayload {
+  focusPaperId: string
+  nodes: NeighborhoodNode[]
+  edges: ResearchGraphEdge[]
+  needsExpansion: boolean
+}
 export interface ResearchGraphPayload {
   nodes: ResearchGraphNode[]
   edges: ResearchGraphEdge[]
@@ -1297,6 +1311,10 @@ export interface ResearchPaper {
   title: string
   abstract: string | null
   year: number | null
+  // Exact publication/submission date where the source provides one. `year`
+  // is too coarse for recency: journals publish ~a year after acceptance, so
+  // a 2026 `year` says nothing about whether the work is days or months old.
+  publicationDate?: string | null
   authors: string[] // up to ~5 — we truncate at fetch time
   venue: string | null
   citationCount: number
@@ -1974,12 +1992,14 @@ const api = {
     recommend: (candidateIds: string[], limit?: number): Promise<SimilarPaper[]> =>
       invoke<SimilarPaper[]>('research:recommend', candidateIds, limit),
     // Union of every paper chain into one graph.
-    discover: (): Promise<DiscoverSection[]> =>
-      invoke<DiscoverSection[]>('research:discover'),
-    refreshDiscover: (force?: boolean): Promise<number> =>
-      invoke<number>('research:refreshDiscover', force),
+    discover: (mode?: DiscoverMode): Promise<DiscoverSection[]> =>
+      invoke<DiscoverSection[]>('research:discover', mode),
+    refreshDiscover: (force?: boolean, mode?: DiscoverMode): Promise<number> =>
+      invoke<number>('research:refreshDiscover', force, mode),
     graph: (): Promise<ResearchGraphPayload> =>
       invoke<ResearchGraphPayload>('research:graph'),
+    neighborhood: (paperId: string, hops?: number): Promise<NeighborhoodPayload> =>
+      invoke<NeighborhoodPayload>('research:neighborhood', paperId, hops),
     expandGraph: (papers?: number): Promise<GraphExpansionResult> =>
       invoke<GraphExpansionResult>('research:expandGraph', papers),
     expandFromPaper: (paperId: string): Promise<GraphExpansionResult> =>

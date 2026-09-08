@@ -114,6 +114,10 @@ import { ensureMediaTools, getMediaToolsStatus } from './services/mediaToolsServ
 import { startMaintenanceSchedule, stopMaintenanceSchedule } from './services/maintenanceService'
 import { startMarketBackfill, stopMarketBackfill } from './services/marketBackfillService'
 import {
+  startResearchGraphScheduler,
+  stopResearchGraphScheduler
+} from './services/researchGraphScheduler'
+import {
   applySettingsChange as commitSettingsChange,
   type SettingsChange
 } from './services/settingsWriteService'
@@ -732,6 +736,12 @@ app.whenReady().then(async () => {
   // path itself, since Yahoo only retains ~30 days of those.
   startMarketBackfill()
 
+  // Paper graph growth. The finance graph accumulates on its own as chains
+  // are generated; research had no equivalent, so the graph only grew when
+  // someone pressed a button and in practice stayed empty. Trickles a few
+  // papers per tick plus embedding backfill.
+  startResearchGraphScheduler()
+
   // Auto-regenerate value chains on boot, throttled so back-to-back
   // restarts during active development don't re-burn the Claude daily
   // cap. Fires 3 min after startup (once the feed poll + financials
@@ -842,6 +852,7 @@ app.on('will-quit', () => {
   stopReelScheduler()
   stopMaintenanceSchedule()
   stopMarketBackfill()
+  stopResearchGraphScheduler()
   stopKokoro()
   stopVideoGen()
   closeDatabase()

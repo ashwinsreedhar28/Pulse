@@ -47,8 +47,13 @@ async function tick(): Promise<void> {
     // graph growth that nobody is looking at yet, and it is cheap — one
     // search per stale field, at most once a day each.
     try {
-      const n = await refreshDiscover()
-      if (n > 0) console.log(`[discover] refreshed ${n} fields`)
+      // Newest first — it has a 3h TTL versus 24h for trending, so it is the
+      // one that actually goes stale within a session.
+      const fresh = await refreshDiscover({ mode: 'newest' })
+      const trend = await refreshDiscover({ mode: 'trending' })
+      if (fresh + trend > 0) {
+        console.log(`[discover] refreshed ${fresh} newest, ${trend} trending`)
+      }
     } catch (err) {
       console.warn('[discover] refresh failed:', err instanceof Error ? err.message : err)
     }

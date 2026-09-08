@@ -1950,5 +1950,37 @@ export const migrations: Migration[] = [
         );
       `)
     }
+  },
+  {
+    version: 60,
+    name: 'discover_modes',
+    // Split the discovery cache by mode.
+    //
+    // "Recent notable work" and "what appeared this week" are different
+    // questions and cannot share a row. Journals publish roughly a year after
+    // acceptance, so S2's newest indexed papers run months behind the field —
+    // measured while building this, S2's freshest hits for a live topic were
+    // June/July while arXiv had papers from four days earlier.
+    //
+    // 'trending' ranks by citations per year, which necessarily favours work
+    // old enough to have accumulated citations. 'newest' sorts arXiv
+    // preprints by submission date and ignores citations entirely, because a
+    // paper from last week has none and would never surface otherwise.
+    //
+    // Recreated rather than altered: SQLite cannot extend a primary key in
+    // place, and this is a pure cache with nothing worth preserving.
+    up: (db) => {
+      db.exec(`
+        DROP TABLE IF EXISTS research_discover;
+        CREATE TABLE research_discover (
+          fieldId TEXT NOT NULL,
+          mode TEXT NOT NULL CHECK (mode IN ('trending', 'newest')),
+          label TEXT NOT NULL,
+          papersJson TEXT NOT NULL,
+          fetchedAt INTEGER NOT NULL,
+          PRIMARY KEY (fieldId, mode)
+        );
+      `)
+    }
   }
 ]

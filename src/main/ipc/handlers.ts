@@ -785,13 +785,22 @@ export function registerDbIpc(): void {
   // paper_value_chain_edges, which was populated but never read.
   // Discovery landing page. Reads cache only so the view paints instantly;
   // refreshing is the scheduler's job.
-  ipcMain.handle('research:discover', async () => {
+  ipcMain.handle('research:discover', async (_e, mode?: string) => {
     const { getDiscoverSections } = await import('../services/researchDiscoverService')
-    return getDiscoverSections()
+    return getDiscoverSections(mode === 'newest' ? 'newest' : 'trending')
   })
-  ipcMain.handle('research:refreshDiscover', async (_e, force?: boolean) => {
+  ipcMain.handle('research:refreshDiscover', async (_e, force?: boolean, mode?: string) => {
     const { refreshDiscover } = await import('../services/researchDiscoverService')
-    return refreshDiscover({ force: force === true })
+    return refreshDiscover({
+      force: force === true,
+      mode: mode === 'newest' ? 'newest' : 'trending'
+    })
+  })
+
+  // One paper's lineage, not the whole corpus.
+  ipcMain.handle('research:neighborhood', async (_e, paperId: string, hops?: number) => {
+    const { getPaperNeighborhood } = await import('../services/researchGraphService')
+    return getPaperNeighborhood(paperId, typeof hops === 'number' ? hops : 2)
   })
 
   ipcMain.handle('research:graph', async () => {

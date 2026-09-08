@@ -165,12 +165,26 @@ function pick(block: string, tag: string): string | null {
   return m ? unescapeXml(m[1].replace(/\s+/g, ' ').trim()) : null
 }
 
-export async function searchArxiv(query: string, limit = 20): Promise<ResearchPaper[]> {
+export async function searchArxiv(
+  query: string,
+  limit = 20,
+  // arXiv category, e.g. 'cs.LG'. Without it a date-sorted `all:` search
+  // returns whatever was posted most recently that mentions the terms at all
+  // — an astrophysics paper using a neural net outranks actual ML work,
+  // because recency is the sort and relevance is barely a filter.
+  category?: string,
+  // 'submittedDate' is what makes true recency possible. arXiv posts
+  // preprints immediately, so this reaches work from the last few days —
+  // whereas anything indexed with citations is necessarily months old.
+  sortBy: 'relevance' | 'submittedDate' = 'relevance'
+): Promise<ResearchPaper[]> {
   const q = query.trim()
   if (!q) return []
+  const expr = category ? `cat:${category} AND all:${q}` : `all:${q}`
   const url =
-    `${ARXIV_BASE}?search_query=${encodeURIComponent(`all:${q}`)}` +
-    `&start=0&max_results=${Math.min(limit, 50)}&sortBy=relevance`
+    `${ARXIV_BASE}?search_query=${encodeURIComponent(expr)}` +
+    `&start=0&max_results=${Math.min(limit, 50)}` +
+    `&sortBy=${sortBy}&sortOrder=descending`
   const xml = await fetchText(url, 'application/atom+xml')
   if (!xml) return []
 
@@ -192,6 +206,7 @@ export async function searchArxiv(query: string, limit = 20): Promise<ResearchPa
       title,
       abstract: pick(block, 'summary'),
       year: published ? Number(published.slice(0, 4)) || null : null,
+      publicationDate: published ? published.slice(0, 10) : null,
       authors,
       venue: 'arXiv',
       // arXiv publishes no citation counts. Zero is honest; the ranking
