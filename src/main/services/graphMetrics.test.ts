@@ -5,7 +5,7 @@ import {
   degreeMap,
   pagerank,
   relationshipDegree,
-  sectorFlows,
+  directedSectorFlows,
   sectorsTouched,
   supplierDegrees,
   type MetricEdge
@@ -163,31 +163,62 @@ describe('sectorsTouched', () => {
   })
 })
 
-describe('sectorFlows', () => {
+describe('directedSectorFlows', () => {
   const sectorOf = (sym: string): string | null =>
     ({ A: 'tech', B: 'energy', C: 'tech' })[sym] ?? null
 
-  it('orders pairs consistently and skips intra-sector edges', () => {
-    const f = sectorFlows([s('A', 'B'), s('B', 'C'), s('A', 'C')], sectorOf)
-    // A-C is tech-tech, so only the two cross-sector edges survive, and both
-    // collapse into one pair regardless of which endpoint came first.
-    expect(f).toEqual([{ a: 'energy', b: 'tech', count: 2 }])
+  it('keeps direction rather than summing both ways', () => {
+    // Two edges tech->energy, one energy->tech. An undirected count would
+    // report a single pair with 3; the asymmetry is the useful part.
+    const f = directedSectorFlows(
+      [s('A', 'B'), s('C', 'B'), s('B', 'A')],
+      sectorOf
+    )
+    expect(f).toHaveLength(2)
+    expect(f[0]).toMatchObject({ from: 'tech', to: 'energy', count: 2 })
+    expect(f[1]).toMatchObject({ from: 'energy', to: 'tech', count: 1 })
   })
 
-  it('keeps sector names with spaces distinguishable', () => {
-    // A joined-string key would make {"Consumer Discretionary","Energy"} and
-    // {"Consumer","Discretionary Energy"} indistinguishable.
+  it('skips intra-sector edges', () => {
+    expect(directedSectorFlows([s('A', 'C')], sectorOf)).toEqual([])
+  })
+
+  it('ignores relationships other than supplier', () => {
+    const f = directedSectorFlows(
+      [s('A', 'B', 'competitor'), s('A', 'B', 'partner')],
+      sectorOf
+    )
+    expect(f).toEqual([])
+  })
+
+  it('can count a different relationship on request', () => {
+    const f = directedSectorFlows([s('A', 'B', 'partner')], sectorOf, {
+      relationship: 'partner'
+    })
+    expect(f[0]).toMatchObject({ from: 'tech', to: 'energy', count: 1 })
+  })
+
+  it('keeps sector names containing spaces distinct', () => {
     const spaced = (sym: string): string | null =>
       ({ X: 'Consumer Discretionary', Y: 'Energy' })[sym] ?? null
-    expect(sectorFlows([s('X', 'Y')], spaced)).toEqual([
-      { a: 'Consumer Discretionary', b: 'Energy', count: 1 }
-    ])
+    const f = directedSectorFlows([s('X', 'Y')], spaced)
+    expect(f[0]).toMatchObject({ from: 'Consumer Discretionary', to: 'Energy' })
+  })
+
+  it('caps examples and records real symbol pairs', () => {
+    const many = Array.from({ length: 9 }, (_, i) => s(`A${i}`, 'B'))
+    const sectors = (sym: string): string | null =>
+      sym === 'B' ? 'energy' : 'tech'
+    const f = directedSectorFlows(many, sectors, { maxExamples: 3 })
+    expect(f[0].count).toBe(9)
+    expect(f[0].examples).toHaveLength(3)
+    expect(f[0].examples[0]).toEqual({ from: 'A0', to: 'B' })
   })
 
   it('sorts by count descending', () => {
-    const many = (sym: string): string | null =>
+    const sectors = (sym: string): string | null =>
       ({ A: 'a', B: 'b', C: 'c' })[sym] ?? null
-    const f = sectorFlows([s('A', 'B'), s('A', 'B'), s('A', 'C')], many)
+    const f = directedSectorFlows([s('A', 'B'), s('A', 'B'), s('A', 'C')], sectors)
     expect(f[0].count).toBe(2)
     expect(f[1].count).toBe(1)
   })

@@ -202,36 +202,50 @@ export function sectorsTouched(
 }
 
 export interface SectorFlow {
-  a: string
-  b: string
+  /** Supplying sector. */
+  from: string
+  /** Receiving sector. */
+  to: string
   count: number
+  /** A few representative symbol pairs, for explaining the flow. */
+  examples: Array<{ from: string; to: string }>
 }
 
 /**
- * Undirected sector-pair edge counts, ordered so that a <= b.
+ * Directed sector-to-sector flow, over supplier edges only.
  *
- * Returns structured pairs rather than a joined string key on purpose: sector
- * names contain spaces ("Consumer Discretionary"), so a space-joined key is
- * ambiguous and any unambiguous separator has to be an unprintable character.
- * Handing back the two names sidesteps the question entirely.
+ * Direction is the whole point. Competitor and partner edges are symmetric, so
+ * a direction on them would be an artefact of whichever endpoint the chain
+ * generator emitted first; supplier edges carry a real orientation (`from`
+ * supplies `to`), and it is strongly asymmetric in practice — on the live
+ * graph Consumer Staples -> Consumer Discretionary runs 159 one way, while
+ * Materials <-> Industrials is 30 against 29. Summing those into one
+ * undirected number, as the previous version did, discards exactly the
+ * structure worth showing.
  */
-export function sectorFlows(
+export function directedSectorFlows(
   edges: MetricEdge[],
-  sectorOf: (symbol: string) => string | null
+  sectorOf: (symbol: string) => string | null,
+  { relationship = 'supplier', maxExamples = 4 } = {}
 ): SectorFlow[] {
-  const counts = new Map<string, SectorFlow>()
+  const acc = new Map<string, SectorFlow>()
   for (const e of edges) {
-    const sa = sectorOf(e.from)
-    const sb = sectorOf(e.to)
-    if (!sa || !sb || sa === sb) continue
-    const [a, b] = sa <= sb ? [sa, sb] : [sb, sa]
-    // NUL as the internal key separator, matching the convention
-    // clusteredLayout.ts already uses for group pairs. It cannot appear in a
-    // sector name, so the key is unambiguous.
+    if (e.relationship !== relationship) continue
+    const a = sectorOf(e.from)
+    const b = sectorOf(e.to)
+    if (!a || !b || a === b) continue
+    // NUL separator: it cannot occur in a sector name, so the key stays
+    // unambiguous even though sector names contain spaces.
     const key = a + '\u0000' + b
-    const prev = counts.get(key)
-    if (prev) prev.count += 1
-    else counts.set(key, { a, b, count: 1 })
+    let row = acc.get(key)
+    if (!row) {
+      row = { from: a, to: b, count: 0, examples: [] }
+      acc.set(key, row)
+    }
+    row.count += 1
+    if (row.examples.length < maxExamples) {
+      row.examples.push({ from: e.from, to: e.to })
+    }
   }
-  return [...counts.values()].sort((x, y) => y.count - x.count)
+  return [...acc.values()].sort((x, y) => y.count - x.count)
 }

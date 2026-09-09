@@ -66,7 +66,7 @@ import {
   degreeMap,
   pagerank,
   relationshipDegree,
-  sectorFlows,
+  directedSectorFlows,
   sectorsTouched,
   supplierDegrees,
   type MetricEdge,
@@ -417,6 +417,6 @@ function computeMarketGraphStats(): MarketGraphStats {
         .slice(0, RANK_LIMIT)
         .map(([sym, v]) => entry(sym, v))
     },
-    sectorFlows: sectorFlows(metricEdges, sectorOf).slice(0, 20)
+    sectorFlows: directedSectorFlows(metricEdges, sectorOf).slice(0, 24)
   }
 }

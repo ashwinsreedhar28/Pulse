@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MarketGraphNode, MarketGraphPayload, StockQuote } from '../../preload'
 import type { LayoutEdge, LayoutPosition3D } from './forceLayout'
 import { runClusteredLayout3D } from './clusteredLayout'
+import { NEUTRAL_RGB, makeSectorColor } from './sectorPalette'
 
 const R_MIN = 2.5
 const R_MAX = 15
@@ -91,12 +92,6 @@ const EDGE_COLOR: Record<string, string> = {
 }
 const EDGE_FALLBACK = '100,116,139'
 
-const SECTOR_PALETTE = [
-  '56,189,248', '74,222,128', '251,191,36', '232,121,249', '251,113,133',
-  '129,140,248', '251,146,60', '45,212,191', '167,139,250', '163,230,53',
-  '34,211,238', '244,114,182'
-]
-const NEUTRAL_RGB = '113,113,122'
 
 interface Projected {
   node: MarketGraphNode
@@ -222,14 +217,23 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
       .sort((a, b) => b.count - a.count)
   }, [data])
 
-  const sectorRgb = useMemo(() => {
-    const order = sectorOptions.map((s) => s.id).sort()
-    // Precomputed map rather than order.indexOf(id) per lookup — this is
-    // called once per node per frame, so a linear scan inside it was O(nodes ×
-    // sectors) of pure waste in the hot path.
-    const byId = new Map(order.map((id, i) => [id, SECTOR_PALETTE[i % SECTOR_PALETTE.length]]))
-    return (id: string | null): string => (id ? (byId.get(id) ?? NEUTRAL_RGB) : NEUTRAL_RGB)
-  }, [sectorOptions])
+  // Keyed on sector name via the shared palette, so the Analytics Sankey
+  // colours the same sector identically. Precomputed rather than searched:
+  // this is called once per node per frame.
+  const nameById = useMemo(
+    () => new Map(sectorOptions.map((s) => [s.id, s.name])),
+    [sectorOptions]
+  )
+  const colorByName = useMemo(
+    () => makeSectorColor(sectorOptions.map((s) => s.name)),
+    [sectorOptions]
+  )
+  const sectorRgb = useMemo(
+    () =>
+      (id: string | null): string =>
+        id ? colorByName(nameById.get(id) ?? null) : NEUTRAL_RGB,
+    [colorByName, nameById]
+  )
 
   // Nodes with no top-level sector. They render grey and are unreachable from
   // the Sector dropdown, so the legend has to account for them or they read as

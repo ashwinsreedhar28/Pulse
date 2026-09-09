@@ -13,6 +13,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { MarketGraphStats, MarketRankEntry } from '../../preload'
+import SectorFlowSankey from './SectorFlowSankey'
+import { makeSectorColor } from './sectorPalette'
 
 interface Props {
   onSelectSymbol?: (symbol: string, name?: string | null) => void
@@ -142,6 +144,9 @@ export default function MarketAnalytics({ onSelectSymbol }: Props): JSX.Element 
   if (!stats) return <div className="p-8 text-sm text-zinc-400">No graph data.</div>
 
   const { totals, provenance, ranks, sectorFlows } = stats
+  // Same palette and same keying as the graph, so a sector reads identically
+  // in both views.
+  const sectorColor = makeSectorColor(sectorFlows.flatMap((f) => [f.from, f.to]))
 
   return (
     <div className="space-y-4 overflow-y-auto p-4">
@@ -223,33 +228,28 @@ export default function MarketAnalytics({ onSelectSymbol }: Props): JSX.Element 
           onSelectSymbol={onSelectSymbol}
         />
 
-        <div className={CARD}>
-          <div className="mb-1">
-            <h4 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
-              Strongest sector flows
-            </h4>
-            <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
-              Links spanning two top-level sectors — where the economy actually couples.
-            </p>
-          </div>
-          {sectorFlows.length === 0 ? (
-            <div className="py-3 text-[11px] text-zinc-600">No cross-sector links yet.</div>
-          ) : (
-            <ol className="space-y-0.5">
-              {sectorFlows.slice(0, 10).map((f) => (
-                <li
-                  key={`${f.a}>${f.b}`}
-                  className="flex items-baseline gap-2 px-1 py-0.5 text-[10px]"
-                >
-                  <span className="min-w-0 flex-1 truncate text-zinc-400">
-                    {f.a} <span className="text-zinc-600">↔</span> {f.b}
-                  </span>
-                  <span className="shrink-0 tabular-nums text-zinc-300">{f.count}</span>
-                </li>
-              ))}
-            </ol>
-          )}
+      </div>
+
+      {/* Sector flow, as a Sankey. Full width because ribbons need horizontal
+          room to be legible, and this is the only view of the graph's macro
+          structure. */}
+      <div className={CARD}>
+        <div className="mb-2">
+          <h4 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
+            Sector supply flow
+          </h4>
+          <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
+            Directed supplier links between top-level sectors. Left is the supplying side,
+            right the receiving side; a sector&apos;s two totals differ by its net position.
+            Competitor and partner links are excluded — they are symmetric, so a direction
+            on them would be an artefact.
+          </p>
         </div>
+        <SectorFlowSankey
+          flows={sectorFlows}
+          colorOf={sectorColor}
+          onSelectSymbol={onSelectSymbol}
+        />
       </div>
     </div>
   )

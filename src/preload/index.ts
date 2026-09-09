@@ -371,9 +371,13 @@ export interface MarketRankEntry {
 }
 
 export interface MarketSectorFlow {
-  a: string
-  b: string
+  /** Supplying sector. */
+  from: string
+  /** Receiving sector. */
+  to: string
   count: number
+  /** Representative symbol pairs behind the flow. */
+  examples: Array<{ from: string; to: string }>
 }
 
 export interface MarketGraphStats {
