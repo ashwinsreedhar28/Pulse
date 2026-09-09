@@ -2,7 +2,7 @@
 
 Guidance for Claude Code working in this repo. For a product-level overview, read [README.md](README.md).
 
-## Current state (2026-09-07)
+## Current state (2026-09-09)
 
 All 12 original stages plus Stage 13 packaging are done. Since then: sports,
 reels, hyperintelligence, smart lookup, the stock value-chain graph, the
@@ -10,7 +10,21 @@ research/paper subsystem, SEC + FRED ingestion, and the Claude API provider.
 
 Recent work (this branch): durable article archive, persisted market data, the
 3D Market Graph, the research semantic layer, and Phase A1 of the trading
-research. See `trading/PHASE_A1_RESULT.md` for where the alpha work stands.
+research.
+
+Since then (2026-09-09): value chains scoped by graph membership rather than
+watchlist (105 -> ~1,200 symbols, a long generation run); the market graph got
+a real camera (pan + cursor-anchored zoom), density filters, sprite rendering
+and a deterministic layout; a new **Analytics** tab with degree / supplier
+direction / betweenness / PageRank / cross-sector rankings, backed by
+[graphMetrics.ts](src/main/services/graphMetrics.ts) (pure, unit-tested, no
+graph library); research search widened to OpenAlex + arXiv behind its first
+paint, with per-host pacing; and the `market_bars` daily-frequency fix.
+
+**Read `trading/PHASE_A1_RESULT.md` with the market_bars caveat in mind** — its
+5-day excess returns were computed on bars that were monthly or quarterly for
+most symbols, so the MARGINAL verdict needs re-deriving once the corrected
+backfill has run.
 
 **Known open issues** live in [BUGS.md](BUGS.md) — read it before starting. The
 one that bites hardest right now: the Stooq quote fallback is permanently dead
@@ -26,7 +40,7 @@ requirements. `trading/requirements.txt` does.
 
 **Entry points:** [src/main/index.ts](src/main/index.ts) (Electron main — tray, windows, boot orchestration), [src/preload/index.ts](src/preload/index.ts) (typed `window.api` bridge), [src/renderer/](src/renderer/) (React UI). Build config: [electron.vite.config.ts](electron.vite.config.ts) — three renderer entry points (main, popover, splash).
 
-**Database** ([src/main/database/](src/main/database/)): `better-sqlite3` at `app.getPath('userData')/pulse.db`. Schema is at **migration v57** ([src/main/database/migrations.ts](src/main/database/migrations.ts)) — check this file first before adding columns. **62 tables**, grouped roughly as:
+**Database** ([src/main/database/](src/main/database/)): `better-sqlite3` at `app.getPath('userData')/pulse.db`. Schema is at **migration v63** ([src/main/database/migrations.ts](src/main/database/migrations.ts)) — check this file first before adding columns. **68 tables**, grouped roughly as:
 
 - *News:* articles, articles_archive, article_ticker_matches(_archive), articles_fts, feeds, categories
 - *Finance:* tickers, market_bars, ticker_fundamentals, ticker_financials, ticker_estimates, ticker_summaries, earnings_releases, company_profiles
