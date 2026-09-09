@@ -3346,9 +3346,28 @@ function StocksPage({
           // so a 60s tick recolours without re-running the simulation.
           <MarketGraph
             quotes={quotes}
-            onSelectSymbol={(symbol) => {
-              const t = tickers.find((x) => x.symbol === symbol)
-              if (t) setSelectedTickerId(t.id)
+            onSelectSymbol={async (symbol, name) => {
+              // The graph spans the whole ~1,500-symbol universe while
+              // `tickers` is only the ~75-symbol active watchlist, so an
+              // exact find() here silently did nothing for almost every node
+              // you could click. Materialize the row first, exactly as
+              // TickerSearchBox does above.
+              const upper = symbol.toUpperCase()
+              const existing = tickers.find((x) => x.symbol.toUpperCase() === upper)
+              if (existing) {
+                setSelectedTickerId(existing.id)
+                return
+              }
+              try {
+                const t = await window.api.tickers.ensurePassive({
+                  symbol: upper,
+                  companyName: name?.trim() || upper
+                })
+                setTickers(await window.api.tickers.list())
+                setSelectedTickerId(t.id)
+              } catch (err) {
+                console.warn('[graph] could not open', upper, err)
+              }
             }}
           />
         ) : view === 'chain' ? (

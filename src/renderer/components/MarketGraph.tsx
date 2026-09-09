@@ -32,6 +32,13 @@ const R_MAX = 15
 // unit sphere, so ~3.2 frames it with visible perspective without extreme
 // foreshortening at the near edge.
 const FOV = 3.2
+// Labels are drawn at a fixed screen size rather than scaled with node radius:
+// text that shrinks with the geometry is the fastest way to make a graph
+// unreadable exactly when you zoom out to see structure.
+const LABEL_PX = 11
+// Hard ceiling on labels per frame. Past roughly this many, added labels stop
+// carrying information and start being texture.
+const MAX_LABELS = 70
 
 export type SizeMetric = 'marketCap' | 'news' | 'degree' | 'uniform'
 
@@ -69,7 +76,11 @@ interface Projected {
 
 interface Props {
   quotes: StockQuote[] | null
-  onSelectSymbol?: (symbol: string) => void
+  /**
+   * `name` is passed alongside so the caller can materialize a ticker row for
+   * a symbol that isn't on the watchlist without inventing a company name.
+   */
+  onSelectSymbol?: (symbol: string, name?: string | null) => void
 }
 
 export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Element {
@@ -87,31 +98,57 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   // Camera and hover live in refs, not state: they change on every pointer
   // move and must never trigger a React render.
-  const camRef = useRef({ yaw: 0.5, pitch: -0.25, zoom: 1 })
+  //
+  // panX/panY are screen-space translation. Without them the camera had only
+  // yaw/pitch/zoom, so dragging could only orbit and zoom was locked to the
+  // canvas centre — which meant zooming in pushed the thing you were zooming
+  // toward off-screen with no way to reach it.
+  const camRef = useRef({ yaw: 0.5, pitch: -0.25, zoom: 1, panX: 0, panY: 0 })
   const hoverRef = useRef<string | null>(null)
   const projectedRef = useRef<Projected[]>([])
-  const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
+  const dragRef = useRef<{
+    x: number
+    y: number
+    mode: 'orbit' | 'pan'
+    yaw: number
+    pitch: number
+    panX: number
+    panY: number
+  } | null>(null)
   const rafRef = useRef<number | null>(null)
+  // Mirrors dragRef for the cursor only. Reading a ref during render never
+  // re-renders, so the old `dragRef.current ? 'grabbing' : 'grab'` could not
+  // ever change the cursor.
+  const [dragging, setDragging] = useState<'orbit' | 'pan' | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    window.api.graph
-      .getMarketGraph()
-      .then((p) => {
-        if (!cancelled) {
-          setData(p)
-          setError(null)
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+    const load = (initial: boolean): void => {
+      if (initial) setLoading(true)
+      window.api.graph
+        .getMarketGraph()
+        .then((p) => {
+          if (!cancelled) {
+            setData(p)
+            setError(null)
+          }
+        })
+        .catch((err: unknown) => {
+          if (!cancelled && initial) setError(err instanceof Error ? err.message : String(err))
+        })
+        .finally(() => {
+          if (!cancelled && initial) setLoading(false)
+        })
+    }
+    load(true)
+    // The graph used to be fetched exactly once on mount, so it silently went
+    // stale the moment anything grew it — during a chain-generation run that
+    // means watching a snapshot while hundreds of nodes and edges accumulate
+    // behind it. `graph:updated` already exists and GraphUpdatesTab uses it.
+    const off = window.api.graph.onUpdated(() => load(false))
     return () => {
       cancelled = true
+      off()
     }
   }, [])
 
@@ -275,14 +312,22 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
     ctx.fillStyle = bg
     ctx.fillRect(0, 0, w, h)
 
-    const { yaw, pitch, zoom } = camRef.current
+    const { yaw, pitch, zoom, panX, panY } = camRef.current
     const cy = Math.cos(yaw)
     const sy = Math.sin(yaw)
     const cp = Math.cos(pitch)
     const sp = Math.sin(pitch)
-    const cxp = w / 2
-    const cyp = h / 2
+    const cxp = w / 2 + panX
+    const cyp = h / 2 + panY
     const baseScale = Math.min(w, h) * 0.42 * zoom
+    // Node radius is deliberately NOT scaled by `zoom` the way position is.
+    //
+    // When both scale together the ink-to-space ratio is invariant, so zooming
+    // magnifies the hairball instead of resolving it — 6x zoom gave 6x-wider
+    // stars with 6x-wider coronas and exactly the same overlap. Damping the
+    // radius lets separation grow faster than the dots do, which is what makes
+    // zoom actually pull a cluster apart.
+    const radiusZoom = Math.pow(zoom, 0.35)
 
     // Yaw about Y, then pitch about X, then perspective divide.
     const project = (p: LayoutPosition3D): { sx: number; sy: number; depth: number; k: number } => {
@@ -353,8 +398,8 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
         sy: p.sy,
         depth: p.depth,
         // Perspective scaling on the radius is what makes near stars read as
-        // near rather than merely brighter.
-        r: (R_MIN + m * (R_MAX - R_MIN)) * p.k * zoom,
+        // near rather than merely brighter. `radiusZoom` is damped — see above.
+        r: (R_MIN + m * (R_MAX - R_MIN)) * p.k * radiusZoom,
         rgb: sectorRgb(n.topSectorId)
       })
     }
@@ -369,7 +414,11 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
       const alpha = dimmed ? 0.08 : 1
 
       // Corona. A radial gradient per star is what gives the galaxy read.
-      const glowR = Math.max(it.r * 3.2, 6)
+      // Capped in absolute pixels: it used to be pure `r * 3.2`, so at high
+      // zoom a single star's gradient covered a ~290px radius and 1,400
+      // overlapping alpha-blended discs of that size became a fill-rate wall —
+      // zooming in made each frame more expensive, not less.
+      const glowR = Math.min(Math.max(it.r * 3.2, 6), 44)
       const g = ctx.createRadialGradient(it.sx, it.sy, 0, it.sx, it.sy, glowR)
       g.addColorStop(0, `rgba(${it.rgb},${0.55 * alpha})`)
       g.addColorStop(0.35, `rgba(${it.rgb},${0.16 * alpha})`)
@@ -414,21 +463,64 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
         ctx.stroke()
       }
 
-      const labelled =
-        !dimmed &&
-        (it.r > 6 ||
-          hover === it.node.symbol ||
-          isSelected ||
-          (matches?.has(it.node.symbol) ?? false))
-      if (labelled) {
-        ctx.font = `${Math.max(9, Math.min(13, it.r * 0.9))}px ui-sans-serif, system-ui`
-        ctx.textAlign = 'center'
-        ctx.lineWidth = 3
-        ctx.strokeStyle = 'rgba(5,6,10,0.9)'
-        ctx.strokeText(it.node.symbol, it.sx, it.sy + it.r + 11)
-        ctx.fillStyle = 'rgba(228,228,231,0.95)'
-        ctx.fillText(it.node.symbol, it.sx, it.sy + it.r + 11)
+    }
+
+    // Labels, as a separate prioritized pass with collision testing.
+    //
+    // The old rule was inline per node: `it.r > 6 || hovered || selected`. With
+    // radius scaling on zoom that threshold fell below every node's size at
+    // roughly 2.4x, so all ~1,400 labels drew at once, untested for overlap —
+    // ~2,900 text rasterizations a frame producing an unreadable smear. Now the
+    // labels that survive a collision test are the ones worth reading, and the
+    // order decides who wins a contest rather than paint order deciding it.
+    ctx.font = `${LABEL_PX}px ui-sans-serif, system-ui`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'alphabetic'
+    const boxes: Array<{ x1: number; y1: number; x2: number; y2: number }> = []
+    const score = (it: Projected): number => {
+      if (selected?.symbol === it.node.symbol) return 1e9
+      if (hover === it.node.symbol) return 1e8
+      if (matches?.has(it.node.symbol)) return 1e7
+      return it.r
+    }
+    const labelOrder = [...items]
+      .filter((it) => {
+        if (focusSet && !focusSet.has(it.node.symbol)) return false
+        if (matches && !matches.has(it.node.symbol)) return false
+        return true
+      })
+      .sort((a, b) => score(b) - score(a))
+
+    let drawn = 0
+    for (const it of labelOrder) {
+      if (drawn >= MAX_LABELS) break
+      // Off-screen labels cost the same as visible ones and are worth nothing.
+      if (it.sx < -40 || it.sx > w + 40 || it.sy < -20 || it.sy > h + 20) continue
+      const forced =
+        selected?.symbol === it.node.symbol ||
+        hover === it.node.symbol ||
+        (matches?.has(it.node.symbol) ?? false)
+      const text = it.node.symbol
+      const half = ctx.measureText(text).width / 2 + 2
+      const ty = it.sy + it.r + 11
+      const box = { x1: it.sx - half, y1: ty - LABEL_PX, x2: it.sx + half, y2: ty + 3 }
+      if (!forced) {
+        let hit = false
+        for (const b of boxes) {
+          if (box.x1 < b.x2 && box.x2 > b.x1 && box.y1 < b.y2 && box.y2 > b.y1) {
+            hit = true
+            break
+          }
+        }
+        if (hit) continue
       }
+      boxes.push(box)
+      drawn++
+      ctx.lineWidth = 3
+      ctx.strokeStyle = 'rgba(5,6,10,0.9)'
+      ctx.strokeText(text, it.sx, ty)
+      ctx.fillStyle = 'rgba(228,228,231,0.95)'
+      ctx.fillText(text, it.sx, ty)
     }
   }, [
     visible,
@@ -638,7 +730,7 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
         </label>
         <button
           onClick={() => {
-            camRef.current = { yaw: 0.5, pitch: -0.25, zoom: 1 }
+            camRef.current = { yaw: 0.5, pitch: -0.25, zoom: 1, panX: 0, panY: 0 }
             drawNow()
           }}
           className="rounded bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300 ring-1 ring-zinc-800 hover:bg-zinc-800"
@@ -659,15 +751,28 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
           // indefinite link. Pinning it to the relative parent sidesteps the
           // whole class of problem.
           className="absolute inset-0 h-full w-full"
-          style={{ cursor: dragRef.current ? 'grabbing' : 'grab', display: 'block' }}
+          style={{
+            cursor: dragging === 'pan' ? 'grabbing' : dragging ? 'move' : 'grab',
+            display: 'block'
+          }}
           onPointerDown={(e) => {
-            const { yaw, pitch } = camRef.current
-            dragRef.current = { x: e.clientX, y: e.clientY, yaw, pitch }
+            const { yaw, pitch, panX, panY } = camRef.current
+            // Shift-drag or middle-drag pans; plain left-drag still orbits,
+            // which is the right primary gesture for a 3D scene.
+            const mode: 'orbit' | 'pan' = e.shiftKey || e.button === 1 ? 'pan' : 'orbit'
+            dragRef.current = { x: e.clientX, y: e.clientY, mode, yaw, pitch, panX, panY }
+            setDragging(mode)
             e.currentTarget.setPointerCapture(e.pointerId)
           }}
           onPointerMove={(e) => {
             const d = dragRef.current
             if (d) {
+              if (d.mode === 'pan') {
+                camRef.current.panX = d.panX + (e.clientX - d.x)
+                camRef.current.panY = d.panY + (e.clientY - d.y)
+                requestDraw()
+                return
+              }
               // Drag to orbit. Pitch is clamped just shy of the poles so the
               // scene never flips through vertical.
               camRef.current.yaw = d.yaw + (e.clientX - d.x) * 0.006
@@ -691,6 +796,7 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
           onPointerUp={(e) => {
             const d = dragRef.current
             dragRef.current = null
+            setDragging(null)
             e.currentTarget.releasePointerCapture(e.pointerId)
             // Treat a near-stationary press as a click, so orbiting never
             // selects by accident.
@@ -706,10 +812,27 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
             }
           }}
           onWheel={(e) => {
-            camRef.current.zoom = Math.max(
-              0.35,
-              Math.min(6, camRef.current.zoom * (e.deltaY > 0 ? 1 / 1.12 : 1.12))
-            )
+            // Cursor-anchored zoom: whatever sits under the pointer stays
+            // under the pointer. Centre-anchored zoom (the old behaviour) is
+            // what made zooming in feel like losing your place, because the
+            // thing you were aiming at slid off-screen.
+            //
+            // Screen position is `centre + pan + P * baseScale`, and P does not
+            // depend on zoom, so holding the cursor point fixed while
+            // baseScale scales by f gives pan' = pan + (cursor - centre - pan)
+            // * (1 - f). Exact, no iteration.
+            const cam = camRef.current
+            const prev = cam.zoom
+            const next = Math.max(0.35, Math.min(6, prev * (e.deltaY > 0 ? 1 / 1.12 : 1.12)))
+            const f = next / prev
+            if (f !== 1) {
+              const rect = e.currentTarget.getBoundingClientRect()
+              const cx = e.clientX - rect.left - rect.width / 2
+              const cyy = e.clientY - rect.top - rect.height / 2
+              cam.panX += (cx - cam.panX) * (1 - f)
+              cam.panY += (cyy - cam.panY) * (1 - f)
+              cam.zoom = next
+            }
             requestDraw()
           }}
         />
@@ -775,7 +898,7 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
             )}
 
             <button
-              onClick={() => onSelectSymbol?.(selected.symbol)}
+              onClick={() => onSelectSymbol?.(selected.symbol, selected.name)}
               disabled={!onSelectSymbol}
               className="mt-3 w-full rounded bg-emerald-500/15 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-300 ring-1 ring-inset ring-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-40"
             >
@@ -795,7 +918,9 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
             {s.name}
           </span>
         ))}
-        <span className="ml-auto">drag to rotate · scroll to zoom · click a star</span>
+        <span className="ml-auto">
+          drag to rotate · shift-drag to pan · scroll to zoom · click a star
+        </span>
       </div>
     </div>
   )
