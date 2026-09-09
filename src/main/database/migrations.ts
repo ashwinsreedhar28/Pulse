@@ -1982,5 +1982,51 @@ export const migrations: Migration[] = [
         );
       `)
     }
+  },
+  {
+    version: 61,
+    name: 'one primary sector per symbol',
+    // persistClassification deleted only 'legacy_static_graph' and
+    // 'ollama_classify' rows before inserting its own primary, so the
+    // sectorUniverse seed's isPrimary=1 row survived and symbols accumulated
+    // two primaries. buildPrimarySectorIndex builds a symbol -> sectorId map,
+    // so whichever row it read last silently won.
+    //
+    // Keep the classifier's assignment (strictly more informed than the
+    // seed's coarse GICS bucket) and demote the rest. Idempotent.
+    up: (db) => {
+      db.prepare(
+        `UPDATE ticker_sectors
+            SET isPrimary = 0
+          WHERE isPrimary = 1
+            AND source <> 'ollama_classify'
+            AND symbol IN (
+              SELECT symbol FROM ticker_sectors
+               WHERE isPrimary = 1
+               GROUP BY symbol
+              HAVING COUNT(*) > 1
+            )
+            AND symbol IN (
+              SELECT symbol FROM ticker_sectors
+               WHERE isPrimary = 1 AND source = 'ollama_classify'
+            )`
+      ).run()
+      // Any symbol still holding several primaries has no classifier row to
+      // prefer, so keep the lowest sectorId purely for determinism.
+      db.prepare(
+        `UPDATE ticker_sectors
+            SET isPrimary = 0
+          WHERE isPrimary = 1
+            AND symbol IN (
+              SELECT symbol FROM ticker_sectors
+               WHERE isPrimary = 1 GROUP BY symbol HAVING COUNT(*) > 1
+            )
+            AND sectorId <> (
+              SELECT MIN(t2.sectorId) FROM ticker_sectors t2
+               WHERE t2.symbol = ticker_sectors.symbol AND t2.isPrimary = 1
+            )`
+      ).run()
+    }
   }
+
 ]

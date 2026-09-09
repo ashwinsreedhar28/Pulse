@@ -645,8 +645,25 @@ function persistClassification(
      VALUES (?, ?, ?, ?, ?, ?)`
   )
 
+  // Demote any primary row the delete above did not cover.
+  //
+  // The delete filters by source, and that list silently went stale when the
+  // sectorUniverse seed introduced source='sector_universe_seed': its
+  // isPrimary=1 row survived, the classifier inserted its own, and the symbol
+  // ended up with two primaries. On the live DB this reached 234 symbols
+  // during a single universe run — 43 of which resolved to different
+  // top-level sectors, so the graph filed them under whichever row the
+  // primary-sector index happened to read last.
+  //
+  // Enforcing the invariant is the fix rather than extending the source list,
+  // which would just go stale again the next time a source is added.
+  const demote = db.prepare<[string]>(
+    `UPDATE ticker_sectors SET isPrimary = 0 WHERE symbol = ? AND isPrimary = 1`
+  )
+
   const tx = db.transaction(() => {
     del.run(sym)
+    demote.run(sym)
     insert.run(
       sym,
       classification.primary.sectorId,
