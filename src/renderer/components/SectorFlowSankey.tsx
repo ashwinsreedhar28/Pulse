@@ -15,7 +15,7 @@
 // Hand-rolled SVG: the repo carries no charting library by convention, and a
 // two-column Sankey is stacked bars plus bezier ribbons.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MarketSectorFlow } from '../../preload'
 
 interface Props {
@@ -25,6 +25,8 @@ interface Props {
   onSelectSymbol?: (symbol: string, name?: string | null) => void
 }
 
+const MIN_WIDTH = 640
+const MAX_WIDTH = 1600
 const NODE_W = 13
 const NODE_GAP = 6
 const PAD = 8
@@ -47,6 +49,21 @@ export default function SectorFlowSankey({
 }: Props): JSX.Element {
   const [active, setActive] = useState<string | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
+  // Measure the container rather than assuming a width. A fixed 640 left this
+  // occupying about a third of the card on a wide window, which wastes exactly
+  // the horizontal room ribbons need to stay distinguishable.
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const [width, setWidth] = useState(MIN_WIDTH)
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0
+      if (w > 0) setWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.floor(w))))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const model = useMemo(() => {
     if (flows.length === 0) return null
@@ -68,7 +85,9 @@ export default function SectorFlowSankey({
 
     // Height is driven by the busier column so both fit the same canvas.
     const rows = Math.max(left.length, right.length)
-    const height = Math.max(260, grand * 0.42 + rows * NODE_GAP)
+    // Taller when wider: long shallow ribbons are as hard to follow as short
+    // steep ones, so the vertical extent tracks the horizontal.
+    const height = Math.max(320, grand * 0.42 + rows * NODE_GAP, width * 0.34)
     const usable = height - PAD * 2 - (rows - 1) * NODE_GAP
     const unit = usable / grand
 
@@ -105,14 +124,13 @@ export default function SectorFlowSankey({
     }
 
     return { height, leftPos, rightPos, bands, grand }
-  }, [flows])
+  }, [flows, width])
 
   if (!model) {
     return <div className="py-6 text-[11px] text-zinc-600">No cross-sector supply links yet.</div>
   }
 
   const { height, leftPos, rightPos, bands, grand } = model
-  const width = 640
   const x1 = LABEL_W
   const x2 = width - LABEL_W - NODE_W
   const shown = pinned ?? active
@@ -120,13 +138,13 @@ export default function SectorFlowSankey({
   const shownFlow = bands.find((b) => b.key === shown)?.flow ?? null
 
   return (
-    <div>
+    <div ref={wrapRef}>
       <div className="overflow-x-auto">
         <svg
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}
-          className="min-w-[640px]"
+          className="w-full"
           role="img"
           aria-label="Directed supply flow between sectors"
         >

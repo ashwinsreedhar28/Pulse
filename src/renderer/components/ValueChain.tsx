@@ -17,6 +17,7 @@ import type {
 } from '../../preload'
 import graph from '../../data/supplyChainGraph.json'
 import sectorCatalogRaw from '../../data/sectorCatalog.json'
+import { makeSectorColor } from './sectorPalette'
 import { ValueChainDiagram } from './ValueChainDiagram'
 import {
   TransactionCluster,
@@ -1279,6 +1280,22 @@ export function ValueChain({
   }, [focusSymbol, resolvedPrimarySector])
 
   // Display name lookup for the top-level-sector badge.
+  // Symbol -> top-level sector name + colour, using the same palette as the
+  // market graph and the Sankey so a sector looks identical everywhere.
+  const sectorTagBySymbol = useMemo(() => {
+    const names = new Map<string, string>()
+    for (const [sym, primary] of resolvedPrimarySector) {
+      const ancestors = SECTOR_ANCESTORS.get(primary)
+      if (!ancestors) continue
+      const top = TOP_LEVEL_SECTORS.find((t) => ancestors.has(t.id))
+      if (top) names.set(sym, top.name)
+    }
+    const color = makeSectorColor(names.values())
+    const out = new Map<string, { name: string; rgb: string }>()
+    for (const [sym, name] of names) out.set(sym, { name, rgb: color(name) })
+    return out
+  }, [resolvedPrimarySector])
+
   const topLevelNameById = useMemo(() => {
     const m = new Map<string, string>()
     for (const top of TOP_LEVEL_SECTORS) m.set(top.id, top.name)
@@ -1948,6 +1965,39 @@ export function ValueChain({
                 {String(idx + 1).padStart(2, '0')} · {stage.label}
               </div>
               <span className="h-px flex-1 bg-edge/60" />
+              {/* Sector composition of the stage. A value-chain stage is a
+                  functional grouping, not a sector one, so which sectors
+                  actually populate it is real information — "Raw Materials"
+                  being mostly Materials with some Energy says something the
+                  stage label alone does not. */}
+              <span className="flex shrink-0 items-center gap-1.5">
+                {(() => {
+                  const mix = new Map<string, { rgb: string; n: number }>()
+                  for (const n of nodes) {
+                    const tag = sectorTagBySymbol.get(n.symbol.toUpperCase())
+                    if (!tag) continue
+                    const prev = mix.get(tag.name)
+                    if (prev) prev.n += 1
+                    else mix.set(tag.name, { rgb: tag.rgb, n: 1 })
+                  }
+                  return [...mix.entries()]
+                    .sort((a, b) => b[1].n - a[1].n)
+                    .slice(0, 4)
+                    .map(([name, v]) => (
+                      <span
+                        key={name}
+                        className="flex items-center gap-1 text-[9px] tabular-nums text-zinc-600"
+                        title={`${name}: ${v.n}`}
+                      >
+                        <span
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ background: `rgb(${v.rgb})` }}
+                        />
+                        {v.n}
+                      </span>
+                    ))
+                })()}
+              </span>
               <span className="text-[10px] tabular-nums text-zinc-600">
                 {nodes.length}
               </span>
@@ -1980,6 +2030,7 @@ export function ValueChain({
                   >
                     <ValueChainTile
                       symbol={n.symbol}
+                      sector={sectorTagBySymbol.get(upperSym) ?? null}
                       companyName={t?.companyName ?? n.name ?? n.symbol}
                       quote={q}
                       financials={fin}
@@ -2105,6 +2156,7 @@ function SubSectorChip({
 
 function ValueChainTile({
   symbol,
+  sector,
   companyName,
   quote,
   financials,
@@ -2121,6 +2173,8 @@ function ValueChainTile({
   onClick
 }: {
   symbol: string
+  /** Top-level sector, for the colour tag. Null when unclassified. */
+  sector?: { name: string; rgb: string } | null
   companyName: string
   quote: StockQuote | undefined
   financials: FinancialsSnapshot | undefined
@@ -2204,6 +2258,15 @@ function ValueChainTile({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 min-w-0">
+          {/* Sector tag. A dot rather than a text chip: tiles are dense and
+              the colour is already the shared vocabulary used by the market
+              graph and the sector-flow Sankey, so this ties the three views
+              together without costing a line of height. */}
+          <span
+            className="shrink-0 h-1.5 w-1.5 rounded-full ring-1 ring-inset ring-black/30"
+            style={{ background: sector ? `rgb(${sector.rgb})` : 'rgb(82,82,91)' }}
+            title={sector ? sector.name : 'No sector assigned'}
+          />
           <span className={`text-[13px] font-bold tracking-[0.04em] ${symbolColor}`}>{symbol}</span>
           {sessionBadge && (
             <span className="shrink-0 text-[8.5px] font-semibold uppercase tracking-[0.1em] px-1 py-0.5 rounded bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/40">
