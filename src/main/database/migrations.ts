@@ -2053,5 +2053,56 @@ export const migrations: Migration[] = [
           ON paper_embedding_misses(lastAttemptAt);
       `)
     }
+  },
+  {
+    version: 63,
+    name: 'purge downsampled daily bars',
+    // market_bars rows labelled '1d' were mostly not daily.
+    //
+    // backfillBars requested interval=1d&range=max and stored whatever came
+    // back under the requested label. Yahoo downsamples long windows, so most
+    // symbols got monthly or quarterly candles recorded as daily. Measured on
+    // the live database: of 532 symbols with >=5 daily-labelled rows, 284 were
+    // monthly, 155 quarterly, 80 weekly and only 13 genuinely daily. AAPL's
+    // last "daily" closes ran 2026-09-08, 09-04, 09-01, 2026-06-01, 2026-03-01.
+    //
+    // These rows are worse than missing: they look well-formed, and both the
+    // app and trading/lib/db.py consume them as a daily series, so every
+    // return, volatility and beta computed from them would be silently wrong.
+    //
+    // Safe to delete because daily bars are backfillable at any time — unlike
+    // the 1m rows, which are irreplaceable and are left completely untouched
+    // here. Detection is by density rather than by median gap, since SQLite
+    // has no median: a genuine daily series has ~250 bars a year, so anything
+    // under 100 in the last 365 days is downsampled. Validated against the
+    // live data — this catches all 1,391 affected symbols, and the 5 truly
+    // daily symbols it also clears are thin recent listings that simply get
+    // re-fetched.
+    up: (db) => {
+      const row = db
+        .prepare(`SELECT MAX(tsMs) AS maxTs FROM market_bars WHERE intervalLabel = '1d'`)
+        .get() as { maxTs: number | null } | undefined
+      const maxTs = row?.maxTs
+      if (!maxTs) return
+      const cutoff = maxTs - 365 * 24 * 60 * 60 * 1000
+      const res = db
+        .prepare(
+          `DELETE FROM market_bars
+            WHERE intervalLabel = '1d'
+              AND symbol IN (
+                SELECT symbol FROM market_bars
+                 WHERE intervalLabel = '1d'
+                 GROUP BY symbol
+                HAVING SUM(CASE WHEN tsMs >= ? THEN 1 ELSE 0 END) < 100
+              )`
+        )
+        .run(cutoff)
+      if (res.changes > 0) {
+        console.log(
+          `[migration] purged ${res.changes} downsampled daily bars; the backfill ` +
+            `will re-fetch them in bounded windows`
+        )
+      }
+    }
   }
 ]

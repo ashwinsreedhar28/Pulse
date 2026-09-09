@@ -23,9 +23,34 @@ import { shouldDeferOnResume } from './networkStatus'
 const TICK_MS = 30_000
 const BOOT_DELAY_MS = 15 * 60 * 1000
 
-// 'max' on a daily interval is the whole listed history of the symbol and
-// costs exactly one request, so there is no reason to page it.
-const DAILY_RANGE = 'max'
+// Daily history is fetched in bounded windows, NOT with range=max.
+//
+// The previous comment here read: "'max' on a daily interval is the whole
+// listed history of the symbol and costs exactly one request, so there is no
+// reason to page it." That assumption was wrong and quietly corrupted the
+// entire price table. Yahoo downsamples long windows: range=max on
+// interval=1d returns monthly or quarterly candles, and they were stored
+// under the '1d' label. Of 532 symbols with daily-labelled rows, only 13
+// actually had daily spacing.
+//
+// Ten years per request keeps Yahoo returning true daily candles while still
+// covering most listed history in a handful of calls. backfillBars validates
+// the spacing of what comes back and discards it if the response is
+// downsampled anyway, so a wrong window here fails loudly instead of writing
+// fiction.
+// Benchmarks and sector ETFs. Not tickers, so listTickers() never yielded
+// them and market_bars held no index rows at all — which is why
+// trading/scripts/event_study.py re-downloads SPY from yfinance on every run,
+// and why no excess return can be computed inside the app. market_bars has no
+// foreign key to tickers, so these store cleanly alongside everything else.
+const BENCHMARKS = [
+  'SPY', 'QQQ', 'IWM', 'DIA',
+  'XLK', 'XLF', 'XLE', 'XLV', 'XLI', 'XLY', 'XLP', 'XLU', 'XLB', 'XLRE', 'XLC'
+]
+
+const WINDOW_YEARS = 10
+const MAX_WINDOWS_PER_SYMBOL = 5
+const SECONDS_PER_YEAR = 365.25 * 24 * 60 * 60
 
 let timer: ReturnType<typeof setInterval> | null = null
 let bootTimer: ReturnType<typeof setTimeout> | null = null
@@ -56,7 +81,9 @@ async function tick(): Promise<void> {
 
   let symbols: string[]
   try {
-    symbols = listTickers().map((t) => t.symbol)
+    // Benchmarks first: they are the smallest set and everything else is
+    // measured relative to them, so they should exist before the long tail.
+    symbols = [...BENCHMARKS, ...listTickers().map((t) => t.symbol)]
   } catch (err) {
     console.warn('[backfill] listTickers failed:', err instanceof Error ? err.message : err)
     return
@@ -74,7 +101,17 @@ async function tick(): Promise<void> {
 
   const symbol = symbols[cursor++]
   try {
-    const written = await backfillBars(symbol, '1d', DAILY_RANGE)
+    // Walk backwards in ten-year windows until a window returns nothing,
+    // which means we have reached the start of the symbol's listed history.
+    let written = 0
+    let period2 = Math.floor(Date.now() / 1000)
+    for (let i = 0; i < MAX_WINDOWS_PER_SYMBOL; i++) {
+      const period1 = Math.floor(period2 - WINDOW_YEARS * SECONDS_PER_YEAR)
+      const n = await backfillBars(symbol, '1d', '', { period1, period2 })
+      written += n
+      if (n === 0) break
+      period2 = period1
+    }
     if (written > 0) console.log(`[backfill] ${symbol}: +${written} daily bars`)
   } catch (err) {
     // backfillBars already swallows its own errors; this is belt-and-braces

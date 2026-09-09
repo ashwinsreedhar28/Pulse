@@ -173,14 +173,51 @@ export async function getHistory(symbol: string, range: HistoryRange): Promise<H
 //   1d  — effectively unlimited
 //   1h  — ~730 days
 //   1m  — ~30 days (which is why the live poll persists them minute by minute)
+// Maximum tolerated median spacing, in days, for each interval label.
+//
+// Yahoo silently downsamples when the requested window is long: asking for
+// `interval=1d&range=max` returns MONTHLY or QUARTERLY candles for most
+// symbols, and the old code wrote whatever came back under the label it had
+// asked for. Measured on the live database before this fix, of 532 symbols
+// holding rows labelled `1d`, only 13 actually had daily spacing — 284 were
+// monthly and 155 quarterly. AAPL's most recent "daily" closes ran
+// 2026-09-08, 09-04, 09-01, 2026-06-01, 2026-03-01, 2025-12-01.
+//
+// Nothing downstream could detect this: the rows look perfectly well-formed,
+// and trading/lib/db.py reads them as daily. Validating spacing before the
+// write is the only place that catches it.
+const MAX_MEDIAN_GAP_DAYS: Record<BarInterval, number> = {
+  '1m': 1 / 24 / 60 * 5, // 5 minutes of slack for a 1-minute series
+  '5m': 1 / 24 / 60 * 20,
+  '1h': 1 / 24 * 5,
+  '1d': 5 // weekends and holidays, but nothing like a month
+}
+
+/** Median gap between consecutive timestamps, in days. */
+function medianGapDays(tsSeconds: number[]): number | null {
+  if (tsSeconds.length < 3) return null
+  const gaps: number[] = []
+  for (let i = 1; i < tsSeconds.length; i++) {
+    gaps.push((tsSeconds[i] - tsSeconds[i - 1]) / 86_400)
+  }
+  gaps.sort((a, b) => a - b)
+  return gaps[Math.floor(gaps.length / 2)]
+}
+
 export async function backfillBars(
   symbol: string,
   intervalLabel: BarInterval,
-  range: string
+  range: string,
+  // Explicit window, in seconds. Preferred over `range` for daily bars:
+  // bounded windows are what stop Yahoo from downsampling.
+  window?: { period1: number; period2: number }
 ): Promise<number> {
   const sym = symbol.trim().toUpperCase()
   if (!sym) return 0
-  const url = `${YAHOO_BASE}${encodeURIComponent(sym)}?interval=${intervalLabel}&range=${range}`
+  const url = window
+    ? `${YAHOO_BASE}${encodeURIComponent(sym)}?interval=${intervalLabel}` +
+      `&period1=${Math.floor(window.period1)}&period2=${Math.floor(window.period2)}`
+    : `${YAHOO_BASE}${encodeURIComponent(sym)}?interval=${intervalLabel}&range=${range}`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
@@ -194,6 +231,19 @@ export async function backfillBars(
     const ts = result?.timestamp ?? []
     const q = result?.indicators?.quote?.[0]
     if (ts.length === 0 || !q) return 0
+
+    // Reject a response whose spacing does not match the label we asked for,
+    // rather than storing a lie. Returning 0 lets the caller narrow its window
+    // and retry; writing the rows would poison every return computed later.
+    const median = medianGapDays(ts)
+    const limit = MAX_MEDIAN_GAP_DAYS[intervalLabel]
+    if (median !== null && median > limit) {
+      console.warn(
+        `[yahoo] ${sym}: asked for ${intervalLabel} but got ~${median.toFixed(1)}d spacing ` +
+          `(limit ${limit}d) — discarding ${ts.length} downsampled bars`
+      )
+      return 0
+    }
 
     const num = (v: number | null | undefined): number | null =>
       typeof v === 'number' && Number.isFinite(v) ? v : null
