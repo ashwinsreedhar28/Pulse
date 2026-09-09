@@ -1194,6 +1194,13 @@ export function registerDbIpc(): void {
   // different top-level parents are "cross-sector").
   // Whole-market graph — nodes, edges, sector ancestry, sizing metrics and
   // news co-mentions in one round-trip. See marketGraphService.
+  // Separate from getMarketGraph: betweenness is O(V·E) and the graph payload
+  // is refetched on every graph:updated push, so the cost belongs behind an
+  // explicit request from the Analytics tab.
+  ipcMain.handle('graph:getMarketStats', async () => {
+    const { getMarketGraphStats } = await import('../services/marketGraphService')
+    return getMarketGraphStats()
+  })
   ipcMain.handle('graph:getMarketGraph', async () => {
     const { getMarketGraph } = await import('../services/marketGraphService')
     return getMarketGraph()

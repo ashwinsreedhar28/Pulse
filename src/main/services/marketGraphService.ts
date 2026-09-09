@@ -60,6 +60,19 @@ export interface MarketGraphPayload {
   sectors: Array<{ id: string; name: string }>
 }
 
+import {
+  adjacency,
+  betweenness,
+  degreeMap,
+  pagerank,
+  relationshipDegree,
+  sectorFlows,
+  sectorsTouched,
+  supplierDegrees,
+  type MetricEdge,
+  type SectorFlow
+} from './graphMetrics'
+
 // Floor for the news co-mention overlay. Below three shared articles the
 // pairing is usually one syndicated market-wrap rather than a real
 // relationship — the same threshold graphCandidatesService uses.
@@ -219,5 +232,155 @@ function computeCoMentions(symbols: Set<string>): MarketCoMention[] {
       .map((r) => ({ from: r.a.toUpperCase(), to: r.b.toUpperCase(), count: r.n }))
   } catch {
     return []
+  }
+}
+
+// ---- statistics -----------------------------------------------------------
+//
+// On its own IPC channel rather than folded into getMarketGraph(), because
+// betweenness is O(V·E) and the graph payload is fetched on every mount and on
+// every graph:updated push. The Analytics tab asks for this when it opens.
+
+export interface MarketRankEntry {
+  symbol: string
+  name: string | null
+  sectorName: string | null
+  value: number
+  /** Edges touching this symbol that carry a filing or article citation. */
+  cited: number
+  /** Total edges touching this symbol. */
+  total: number
+}
+
+export interface MarketGraphStats {
+  totals: {
+    nodes: number
+    connected: number
+    edges: number
+    supplier: number
+    competitor: number
+    partner: number
+  }
+  /**
+   * Edge provenance. `corroborated` means more than one DISTINCT source class,
+   * not more than one source tag — the tags are chain_gen_<FOCUS>, so counting
+   * tags would score the same Claude prompt run from different focus tickers
+   * as independent agreement.
+   */
+  provenance: { corroborated: number; cited: number; uncited: number; total: number }
+  ranks: {
+    degree: MarketRankEntry[]
+    suppliesTo: MarketRankEntry[]
+    dependsOn: MarketRankEntry[]
+    competitors: MarketRankEntry[]
+    partners: MarketRankEntry[]
+    bridges: MarketRankEntry[]
+    betweenness: MarketRankEntry[]
+    pagerank: MarketRankEntry[]
+  }
+  sectorFlows: SectorFlow[]
+}
+
+const RANK_LIMIT = 25
+
+export function getMarketGraphStats(): MarketGraphStats {
+  const graph = getMarketGraph()
+  const metricEdges: MetricEdge[] = graph.edges.map((e) => ({
+    from: e.from,
+    to: e.to,
+    relationship: e.relationship
+  }))
+
+  const nodeBySymbol = new Map(graph.nodes.map((n) => [n.symbol, n]))
+  const sectorOf = (symbol: string): string | null =>
+    nodeBySymbol.get(symbol)?.topSectorName ?? null
+
+  // Per-symbol citation coverage, so every ranking can carry its own
+  // provenance rather than presenting a model's opinion as a measurement.
+  const citedBySymbol = new Map<string, number>()
+  const totalBySymbol = new Map<string, number>()
+  let corroborated = 0
+  let citedEdges = 0
+  const bump = (m: Map<string, number>, k: string): void => {
+    m.set(k, (m.get(k) ?? 0) + 1)
+  }
+
+  for (const row of listEdgeOverrides()) {
+    const from = row.fromSymbol.toUpperCase()
+    const to = row.toSymbol.toUpperCase()
+    bump(totalBySymbol, from)
+    bump(totalBySymbol, to)
+    const hasCite = (row.citations ?? []).some(
+      (c) => c.kind === 'filing' || c.kind === 'article'
+    )
+    if (hasCite) {
+      citedEdges++
+      bump(citedBySymbol, from)
+      bump(citedBySymbol, to)
+    }
+    const classes = new Set(
+      row.source.split(',').map((t) => (t.trim().startsWith('chain_gen') ? 'chain_gen' : t.trim()))
+    )
+    if (classes.size > 1) corroborated++
+  }
+
+  const entry = (symbol: string, value: number): MarketRankEntry => {
+    const n = nodeBySymbol.get(symbol)
+    return {
+      symbol,
+      // Fall back to the graph node's own name: some symbols have a node
+      // override with no matching tickers row, which otherwise renders a
+      // blank cell in a ranked table.
+      name: n?.name ?? null,
+      sectorName: n?.topSectorName ?? null,
+      value,
+      cited: citedBySymbol.get(symbol) ?? 0,
+      total: totalBySymbol.get(symbol) ?? 0
+    }
+  }
+
+  const top = (m: Map<string, number>, round = false): MarketRankEntry[] =>
+    [...m.entries()]
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, RANK_LIMIT)
+      .map(([sym, v]) => entry(sym, round ? Math.round(v) : v))
+
+  const { suppliesTo, dependsOn } = supplierDegrees(metricEdges)
+  const touched = sectorsTouched(metricEdges, sectorOf)
+  const bridgeCounts = new Map([...touched.entries()].map(([k, v]) => [k, v.size]))
+
+  const relCount = (r: string): number =>
+    metricEdges.filter((e) => e.relationship === r).length
+
+  return {
+    totals: {
+      nodes: graph.nodes.length,
+      connected: adjacency(metricEdges).size,
+      edges: metricEdges.length,
+      supplier: relCount('supplier'),
+      competitor: relCount('competitor'),
+      partner: relCount('partner')
+    },
+    provenance: {
+      corroborated,
+      cited: citedEdges,
+      uncited: metricEdges.length - citedEdges,
+      total: metricEdges.length
+    },
+    ranks: {
+      degree: top(degreeMap(metricEdges)),
+      suppliesTo: top(suppliesTo),
+      dependsOn: top(dependsOn),
+      competitors: top(relationshipDegree(metricEdges, 'competitor')),
+      partners: top(relationshipDegree(metricEdges, 'partner')),
+      bridges: top(bridgeCounts),
+      betweenness: top(betweenness(metricEdges), true),
+      pagerank: [...pagerank(metricEdges).entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, RANK_LIMIT)
+        .map(([sym, v]) => entry(sym, v))
+    },
+    sectorFlows: sectorFlows(metricEdges, sectorOf).slice(0, 20)
   }
 }

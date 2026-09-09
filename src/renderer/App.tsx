@@ -12,6 +12,7 @@ import { ResearchPage } from './components/ResearchPage'
 import { CollapseChevron, useCollapsedSection } from './components/collapseUI'
 import { ValueChain } from './components/ValueChain'
 import MarketGraph from './components/MarketGraph'
+import MarketAnalytics from './components/MarketAnalytics'
 import { UnifiedValueChainCard } from './components/UnifiedValueChainCard'
 import { ValueChainDiagram } from './components/ValueChainDiagram'
 import { MorningBrief } from './components/MorningBrief'
@@ -3162,7 +3163,35 @@ function StocksPage({
   const [busy, setBusy] = useState(false)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
   const [selectedTickerId, setSelectedTickerId] = useState<number | null>(null)
-  const [view, setView] = useState<'holdings' | 'chain' | 'graph'>('holdings')
+  const [view, setView] = useState<'holdings' | 'chain' | 'graph' | 'analytics'>('holdings')
+
+  // Opening a symbol from the graph or the analytics rankings.
+  //
+  // These surfaces span the whole ~1,500-symbol universe while `tickers` holds
+  // only the ~75-symbol active watchlist, so an exact find() silently did
+  // nothing for almost everything you could click. Materialize the row first,
+  // the same way TickerSearchBox does.
+  const openGraphSymbol = useCallback(
+    async (symbol: string, name?: string | null): Promise<void> => {
+      const upper = symbol.toUpperCase()
+      const existing = tickers.find((x) => x.symbol.toUpperCase() === upper)
+      if (existing) {
+        setSelectedTickerId(existing.id)
+        return
+      }
+      try {
+        const t = await window.api.tickers.ensurePassive({
+          symbol: upper,
+          companyName: name?.trim() || upper
+        })
+        setTickers(await window.api.tickers.list())
+        setSelectedTickerId(t.id)
+      } catch (err) {
+        console.warn('[graph] could not open', upper, err)
+      }
+    },
+    [tickers]
+  )
   // Symbol handed to ValueChain when the user searches while the chain
   // view is active. Cleared by ValueChain once it accepts the request
   // (via onExternalFocusHandled) so subsequent searches fire cleanly.
@@ -3267,6 +3296,11 @@ function StocksPage({
             <StocksViewTab label="Holdings" active={view === 'holdings'} onClick={() => setView('holdings')} />
             <StocksViewTab label="Value Chain" active={view === 'chain'} onClick={() => setView('chain')} />
             <StocksViewTab label="Graph" active={view === 'graph'} onClick={() => setView('graph')} />
+            <StocksViewTab
+              label="Analytics"
+              active={view === 'analytics'}
+              onClick={() => setView('analytics')}
+            />
           </div>
           <Stat label="Holdings" value={tickers.filter((t) => t.isActive).length} />
           <Stat label="Gainers" value={gainers} tone="accent" />
@@ -3340,36 +3374,13 @@ function StocksPage({
             />
           </CollapsibleSection>
         </div>
-        {view === 'graph' ? (
+        {view === 'analytics' ? (
+          <MarketAnalytics onSelectSymbol={openGraphSymbol} />
+        ) : view === 'graph' ? (
           // Whole-universe relationship graph. Quotes are passed for the
           // live change tint only — MarketGraph never lays out from them,
           // so a 60s tick recolours without re-running the simulation.
-          <MarketGraph
-            quotes={quotes}
-            onSelectSymbol={async (symbol, name) => {
-              // The graph spans the whole ~1,500-symbol universe while
-              // `tickers` is only the ~75-symbol active watchlist, so an
-              // exact find() here silently did nothing for almost every node
-              // you could click. Materialize the row first, exactly as
-              // TickerSearchBox does above.
-              const upper = symbol.toUpperCase()
-              const existing = tickers.find((x) => x.symbol.toUpperCase() === upper)
-              if (existing) {
-                setSelectedTickerId(existing.id)
-                return
-              }
-              try {
-                const t = await window.api.tickers.ensurePassive({
-                  symbol: upper,
-                  companyName: name?.trim() || upper
-                })
-                setTickers(await window.api.tickers.list())
-                setSelectedTickerId(t.id)
-              } catch (err) {
-                console.warn('[graph] could not open', upper, err)
-              }
-            }}
-          />
+          <MarketGraph quotes={quotes} onSelectSymbol={openGraphSymbol} />
         ) : view === 'chain' ? (
           <ValueChain
             tickers={tickers}

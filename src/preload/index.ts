@@ -359,6 +359,52 @@ export interface MarketGraphPayload {
   sectors: Array<{ id: string; name: string }>
 }
 
+export interface MarketRankEntry {
+  symbol: string
+  name: string | null
+  sectorName: string | null
+  value: number
+  /** Edges touching this symbol backed by a filing or article citation. */
+  cited: number
+  /** Total edges touching this symbol. */
+  total: number
+}
+
+export interface MarketSectorFlow {
+  a: string
+  b: string
+  count: number
+}
+
+export interface MarketGraphStats {
+  totals: {
+    nodes: number
+    connected: number
+    edges: number
+    supplier: number
+    competitor: number
+    partner: number
+  }
+  /**
+   * `corroborated` counts edges with more than one distinct source CLASS, not
+   * more than one source tag — tags are chain_gen_<FOCUS>, so counting them
+   * would treat the same model prompt run from different focus tickers as
+   * independent agreement.
+   */
+  provenance: { corroborated: number; cited: number; uncited: number; total: number }
+  ranks: {
+    degree: MarketRankEntry[]
+    suppliesTo: MarketRankEntry[]
+    dependsOn: MarketRankEntry[]
+    competitors: MarketRankEntry[]
+    partners: MarketRankEntry[]
+    bridges: MarketRankEntry[]
+    betweenness: MarketRankEntry[]
+    pagerank: MarketRankEntry[]
+  }
+  sectorFlows: MarketSectorFlow[]
+}
+
 export interface StockQuote {
   symbol: string
   price: number | null
@@ -2172,6 +2218,10 @@ const api = {
     // Whole-market graph in one call — see marketGraphService.
     getMarketGraph: (): Promise<MarketGraphPayload> =>
       invoke<MarketGraphPayload>('graph:getMarketGraph'),
+    // Rankings and centrality over the same graph. Separate channel because
+    // betweenness is O(V·E) and should not ride along with every refresh.
+    getMarketStats: (): Promise<MarketGraphStats> =>
+      invoke<MarketGraphStats>('graph:getMarketStats'),
     undoNodeOverride: (
       symbol: string,
       candidateId?: number | null
