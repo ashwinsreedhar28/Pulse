@@ -283,7 +283,43 @@ export interface MarketGraphStats {
 
 const RANK_LIMIT = 25
 
+// Memoized across calls. Betweenness is O(V·E) — ~760ms on the live graph —
+// and the Analytics tab unmounts whenever the user switches away, so without
+// this every visit recomputed the whole thing from scratch.
+//
+// The fingerprint is the edge count plus the newest acceptedAt: edges are
+// insert-mostly and carry a timestamp, so any growth or replacement moves one
+// of the two. Cheap enough (one indexed aggregate) to check on every call.
+let statsCache: { fingerprint: string; value: MarketGraphStats } | null = null
+
+function statsFingerprint(): string {
+  try {
+    const row = getDb()
+      .prepare<[], { n: number; newest: number | null }>(
+        `SELECT COUNT(*) AS n, MAX(acceptedAt) AS newest FROM graph_edge_overrides`
+      )
+      .get()
+    return `${row?.n ?? 0}:${row?.newest ?? 0}`
+  } catch {
+    // No table yet — a constant fingerprint is fine; the payload is empty too.
+    return 'none'
+  }
+}
+
+/** Clears the memo. Exposed for callers that mutate the graph directly. */
+export function invalidateMarketGraphStats(): void {
+  statsCache = null
+}
+
 export function getMarketGraphStats(): MarketGraphStats {
+  const fingerprint = statsFingerprint()
+  if (statsCache && statsCache.fingerprint === fingerprint) return statsCache.value
+  const computed = computeMarketGraphStats()
+  statsCache = { fingerprint, value: computed }
+  return computed
+}
+
+function computeMarketGraphStats(): MarketGraphStats {
   const graph = getMarketGraph()
   const metricEdges: MetricEdge[] = graph.edges.map((e) => ({
     from: e.from,

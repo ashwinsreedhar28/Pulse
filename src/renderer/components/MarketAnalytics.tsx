@@ -101,16 +101,25 @@ function RankCard({
   )
 }
 
-export default function MarketAnalytics({ onSelectSymbol }: Props): JSX.Element {
-  const [stats, setStats] = useState<MarketGraphStats | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+// Survives unmount. Switching to another Stocks tab tears this component
+// down, so without it every visit showed "Computing graph statistics…" again
+// even though the answer had not changed. The main process memoizes too; this
+// is what makes the tab paint instantly rather than after a round-trip.
+let lastStats: MarketGraphStats | null = null
 
-  const load = useCallback(() => {
-    setLoading(true)
+export default function MarketAnalytics({ onSelectSymbol }: Props): JSX.Element {
+  const [stats, setStats] = useState<MarketGraphStats | null>(lastStats)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(lastStats === null)
+
+  const load = useCallback((force: boolean) => {
+    // Only show the loading state when there is nothing to show. A refresh
+    // over existing numbers should not blank the page.
+    if (force || lastStats === null) setLoading(true)
     window.api.graph
       .getMarketStats()
       .then((s) => {
+        lastStats = s
         setStats(s)
         setError(null)
       })
@@ -119,7 +128,9 @@ export default function MarketAnalytics({ onSelectSymbol }: Props): JSX.Element 
   }, [])
 
   useEffect(() => {
-    load()
+    // Revalidate in the background even when a cached copy is on screen, so
+    // the numbers keep up with a graph that is still growing.
+    load(false)
   }, [load])
 
   if (loading && !stats) {
@@ -142,7 +153,7 @@ export default function MarketAnalytics({ onSelectSymbol }: Props): JSX.Element 
           {totals.competitor} competitor · {totals.partner} partner)
         </span>
         <button
-          onClick={load}
+          onClick={() => load(true)}
           disabled={loading}
           className="ml-auto rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400 ring-1 ring-inset ring-zinc-700 hover:bg-surface-2 hover:text-zinc-100 disabled:opacity-50"
         >
