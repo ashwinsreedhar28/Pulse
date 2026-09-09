@@ -840,7 +840,18 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('research:coCited', async (_e, paperId: string, limit?: number) => {
     const { findCoCited } = await import('../services/researchGraphService')
-    return findCoCited(paperId, limit ?? 15)
+    const { getGraphNode } = await import('../database/researchGraph')
+    // Hydrated for the same reason as research:similar — a bare paperId is
+    // not something a person can read.
+    return findCoCited(paperId, limit ?? 15).map((r) => {
+      const n = getGraphNode(r.paperId)
+      return {
+        ...r,
+        title: n?.title ?? null,
+        year: n?.year ?? null,
+        citationCount: n?.citationCount ?? null
+      }
+    })
   })
 
   // Multi-source search. S2 first so its richer metadata wins the merge.
@@ -859,6 +870,30 @@ export function registerDbIpc(): void {
       concepts: openalex.concepts
     }
   })
+
+  // OpenAlex + arXiv only, merged against results the caller already has.
+  //
+  // searchAll re-runs the S2 search internally, which is the wrong shape for
+  // the UI: the search flow already renders S2 results at ~2s and would be
+  // paying a second S2 call (against a ~1 RPS shared budget) purely to get
+  // back what it is already showing. Passing the known papers in keeps the
+  // dedupe in mergePaperSources, where the title-normalization lives.
+  ipcMain.handle(
+    'research:searchCorpus',
+    async (_e, query: string, known: import('../../preload').ResearchPaper[] = []) => {
+      const { searchOpenAlex, searchArxiv, mergePaperSources } = await import(
+        '../services/corpusService'
+      )
+      const [openalex, arxiv] = await Promise.all([
+        searchOpenAlex(query).catch(() => ({ papers: [], concepts: [] })),
+        searchArxiv(query).catch(() => [])
+      ])
+      return {
+        papers: mergePaperSources(known, openalex.papers, arxiv),
+        concepts: openalex.concepts
+      }
+    }
+  )
 
   // Research <-> finance bridge.
   ipcMain.handle(

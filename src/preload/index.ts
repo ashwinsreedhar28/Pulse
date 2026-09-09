@@ -1274,6 +1274,15 @@ export interface MorningBriefRow {
 // optional external refs the renderer uses to deep-link to PDFs.
 
 // ---- Research: semantic layer, unified graph, finance bridge ---------------
+export interface CoCitedPaper {
+  paperId: string
+  /** Number of references this paper shares with the focus paper. */
+  shared: number
+  title?: string | null
+  year?: number | null
+  citationCount?: number | null
+}
+
 export interface SimilarPaper {
   paperId: string
   score: number
@@ -2067,11 +2076,21 @@ const api = {
       invoke<GraphExpansionResult>('research:expandGraph', papers),
     expandFromPaper: (paperId: string): Promise<GraphExpansionResult> =>
       invoke<GraphExpansionResult>('research:expandFromPaper', paperId),
-    coCited: (paperId: string, limit?: number): Promise<Array<{ paperId: string; shared: number }>> =>
-      invoke<Array<{ paperId: string; shared: number }>>('research:coCited', paperId, limit),
+    coCited: (paperId: string, limit?: number): Promise<CoCitedPaper[]> =>
+      invoke<CoCitedPaper[]>('research:coCited', paperId, limit),
     // S2 + OpenAlex + arXiv, merged and deduped on title.
     searchAll: (query: string): Promise<MultiSourceSearchResult> =>
       invoke<MultiSourceSearchResult>('research:searchAll', query),
+    /**
+     * OpenAlex + arXiv, merged against papers the caller already has.
+     * Lets the UI keep its fast S2-first paint and widen the result set
+     * afterwards without paying a second S2 call.
+     */
+    searchCorpus: (
+      query: string,
+      known: ResearchPaper[]
+    ): Promise<MultiSourceSearchResult> =>
+      invoke<MultiSourceSearchResult>('research:searchCorpus', query, known),
     linkTickers: (input: {
       paperId: string
       title: string

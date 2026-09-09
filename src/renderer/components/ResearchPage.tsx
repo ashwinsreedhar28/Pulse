@@ -18,6 +18,7 @@ import type {
   ResearchBriefPayload,
   ResearchBriefSection,
   ResearchPaper,
+  CoCitedPaper,
   SimilarPaper,
   PaperTickerLink,
   ResearchTopic
@@ -45,6 +46,9 @@ interface ViewState {
   // When kind='topic', the topicId being viewed (so refresh routes
   // to the right row).
   topicId: number | null
+  // OpenAlex subject concepts for the current query, aggregated across hits.
+  // S2 has no equivalent, so this only appears once the corpus widen lands.
+  concepts?: Array<{ name: string; score: number }>
 }
 
 // In-window PDF reader state. When non-null, the right detail pane
@@ -345,6 +349,23 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
       setView({ kind: 'results', query: q, brief: null, papers, topicId: null })
       if (papers.length === 0) return
 
+      // Widen to OpenAlex + arXiv behind the first paint. S2 alone was the
+      // whole corpus the UI ever saw, which caps coverage of very recent
+      // preprints and makes one rate-limited source a single point of failure.
+      // Fire-and-forget: extra breadth is a bonus, never a reason for the
+      // search to appear slower or to fail.
+      void window.api.research
+        .searchCorpus(q, papers)
+        .then((wider) => {
+          if (wider.papers.length <= papers.length) return
+          setView((prev) =>
+            prev.query === q && prev.kind === 'results'
+              ? { ...prev, papers: wider.papers, concepts: wider.concepts }
+              : prev
+          )
+        })
+        .catch((err) => console.warn('[research] corpus widen failed:', err))
+
       const brief = await window.api.research.synthesize(q, papers)
       // Only apply the brief if the user is still looking at this query —
       // a slow synthesis must not overwrite a newer search's results.
@@ -598,6 +619,28 @@ export function ResearchPage({ onClose, onOpenURL }: Props): JSX.Element {
           {view.kind === 'loading' && (
             <div className="mt-12 text-center text-[12px] text-zinc-500">
               Searching Semantic Scholar…
+            </div>
+          )}
+
+          {/* OpenAlex subject concepts. Arrives with the corpus widen, so it
+              appears a beat after the papers do. Clicking one searches it. */}
+          {view.kind === 'results' && (view.concepts?.length ?? 0) > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-[0.16em] text-zinc-600">
+                Concepts
+              </span>
+              {view.concepts?.slice(0, 10).map((c) => (
+                <button
+                  key={c.name}
+                  onClick={() => {
+                    setDraft(c.name)
+                    void runSearch(c.name)
+                  }}
+                  className="rounded-full bg-surface-1 px-2 py-0.5 text-[10px] text-zinc-400 ring-1 ring-inset ring-edge/60 hover:text-zinc-100"
+                >
+                  {c.name}
+                </button>
+              ))}
             </div>
           )}
 
@@ -1395,6 +1438,7 @@ function PaperDetailPanel({
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
   // Semantic neighbours (SPECTER2) and the research/finance bridge.
   const [similar, setSimilar] = useState<SimilarPaper[] | null>(null)
+  const [coCited, setCoCited] = useState<CoCitedPaper[] | null>(null)
   const [tickerLinks, setTickerLinks] = useState<PaperTickerLink[] | null>(null)
   const [linking, setLinking] = useState(false)
   useEffect(() => {
@@ -1430,6 +1474,20 @@ function PaperDetailPanel({
       })
       .catch(() => {
         if (!cancelled) setSimilar([])
+      })
+
+    // Co-citation: papers that cite the same works this one does. Pure local
+    // self-join over the stored edge table, so it costs no network at all —
+    // and it finds neighbours by shared intellectual ancestry rather than by
+    // text, which is a different and often better signal than embeddings.
+    setCoCited(null)
+    void window.api.research
+      .coCited(paper.paperId, 6)
+      .then((list) => {
+        if (!cancelled) setCoCited(list)
+      })
+      .catch(() => {
+        if (!cancelled) setCoCited([])
       })
     // Existing company links only — generating them costs a Claude call, so
     // that stays behind an explicit button.
@@ -1711,6 +1769,47 @@ function PaperDetailPanel({
                       {s.citationCount.toLocaleString()}
                     </span>
                   )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Co-citation. Complements the semantic list above: SPECTER2 finds
+            papers that read alike, this finds papers built on the same
+            foundations. They disagree usefully. */}
+        {coCited && coCited.length > 0 && (
+          <section className="mt-4">
+            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300">
+              Frequently co-cited
+            </h4>
+            <p className="mt-0.5 text-[10px] text-zinc-500">
+              Papers that cite the same works — shared intellectual ancestry
+            </p>
+            <ul className="mt-1.5 space-y-1">
+              {coCited.map((c) => (
+                <li key={c.paperId} className="flex items-baseline gap-2 text-[11px]">
+                  <span
+                    className="shrink-0 tabular-nums text-zinc-500"
+                    title={`${c.shared} shared references`}
+                  >
+                    {c.shared}×
+                  </span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const full = await window.api.research.getPaper(c.paperId)
+                        if (full) onSelectPaper(full)
+                      } catch (err) {
+                        console.warn('[research] could not open co-cited paper:', err)
+                      }
+                    }}
+                    className="min-w-0 flex-1 truncate text-left text-zinc-300 hover:text-indigo-200"
+                    title={c.title ?? c.paperId}
+                  >
+                    {c.title ?? c.paperId}
+                    {c.year ? <span className="text-zinc-600"> · {c.year}</span> : null}
+                  </button>
                 </li>
               ))}
             </ul>

@@ -16,6 +16,7 @@
 // the research UI needs no knowledge of where a paper came from.
 
 import type { ResearchPaper } from '../../preload'
+import { arxivSchedule, openAlexSchedule } from './hostRateLimit'
 
 const OPENALEX_BASE = 'https://api.openalex.org/works'
 const ARXIV_BASE = 'https://export.arxiv.org/api/query'
@@ -27,24 +28,43 @@ const FETCH_TIMEOUT_MS = 15_000
 const CONTACT = 'ashwin.sreedhar2003@gmail.com'
 const UA = `Pulse/0.1 (research; ${CONTACT})`
 
-async function fetchText(url: string, accept: string): Promise<string | null> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+// Pacing is chosen from the URL rather than passed by the caller, so no call
+// site can forget it. Neither of these hosts was paced at all before: every
+// S2 path goes through s2Schedule, but OpenAlex and arXiv were called
+// directly, which was survivable only because nothing in the UI reached them.
+// Surfacing multi-source search changes that.
+function limiterFor(url: string): (t: () => Promise<string | null>) => Promise<string | null> {
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': UA, Accept: accept },
-      signal: controller.signal,
-      // arXiv 301-redirects plain http to https.
-      redirect: 'follow'
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return await res.text()
-  } catch (err) {
-    console.warn('[corpus] fetch failed:', err instanceof Error ? err.message : err)
-    return null
-  } finally {
-    clearTimeout(timer)
+    const host = new URL(url).hostname
+    if (host.endsWith('arxiv.org')) return arxivSchedule
+    if (host.endsWith('openalex.org')) return openAlexSchedule
+  } catch {
+    // Unparseable URL — fall through to the OpenAlex pacing, which is the
+    // more conservative of the two defaults for an unknown host.
   }
+  return openAlexSchedule
+}
+
+async function fetchText(url: string, accept: string): Promise<string | null> {
+  return limiterFor(url)(async () => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': UA, Accept: accept },
+        signal: controller.signal,
+        // arXiv 301-redirects plain http to https.
+        redirect: 'follow'
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return await res.text()
+    } catch (err) {
+      console.warn('[corpus] fetch failed:', err instanceof Error ? err.message : err)
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
+  })
 }
 
 // ---- OpenAlex --------------------------------------------------------------
