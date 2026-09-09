@@ -776,12 +776,13 @@ export function registerDbIpc(): void {
   // SPECTER2 nearest neighbours. Fetches any missing vectors first, so the
   // first call on a paper pays one S2 batch request and later ones are local.
   ipcMain.handle('research:similar', async (_e, paperId: string, limit?: number) => {
-    const { ensureEmbeddings, findSimilar } = await import(
+    const { ensureEmbeddings, findSimilar, hydrateSimilar } = await import(
       '../services/paperSimilarityService'
     )
     const { getBookmarkedPaperIds } = await import('../database/researchBookmarks')
     await ensureEmbeddings([paperId, ...getBookmarkedPaperIds()])
-    return findSimilar(paperId, limit ?? 10)
+    // Hydrated so the renderer has titles to show instead of hex ids.
+    return hydrateSimilar(findSimilar(paperId, limit ?? 10))
   })
 
   // Rank candidates against the centroid of the saved library — a

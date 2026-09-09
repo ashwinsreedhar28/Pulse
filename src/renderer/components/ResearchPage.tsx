@@ -1678,15 +1678,39 @@ function PaperDetailPanel({
               Semantically similar
             </h4>
             <p className="mt-0.5 text-[10px] text-zinc-500">
-              Nearest SPECTER2 neighbours in your library — related work, not citations
+              {/* Not "in your library" — findSimilar scans the whole embedding
+                  pool, which is thousands of papers, not the saved handful. */}
+              Nearest SPECTER2 neighbours across the corpus — related work, not citations
             </p>
             <ul className="mt-1.5 space-y-1">
               {similar.map((s) => (
-                <li key={s.paperId} className="flex items-center gap-2 text-[11px]">
+                <li key={s.paperId} className="flex items-baseline gap-2 text-[11px]">
                   <span className="shrink-0 tabular-nums text-zinc-500">
                     {(s.score * 100).toFixed(0)}%
                   </span>
-                  <span className="truncate text-zinc-300">{s.paperId}</span>
+                  <button
+                    onClick={async () => {
+                      // Hydrate to a full ResearchPaper rather than
+                      // synthesizing a partial one, so the detail panel opens
+                      // with an abstract and links like any other paper.
+                      try {
+                        const full = await window.api.research.getPaper(s.paperId)
+                        if (full) onSelectPaper(full)
+                      } catch (err) {
+                        console.warn('[research] could not open similar paper:', err)
+                      }
+                    }}
+                    className="min-w-0 flex-1 truncate text-left text-zinc-300 hover:text-sky-200"
+                    title={s.title ?? s.paperId}
+                  >
+                    {s.title ?? s.paperId}
+                    {s.year ? <span className="text-zinc-600"> · {s.year}</span> : null}
+                  </button>
+                  {typeof s.citationCount === 'number' && (
+                    <span className="shrink-0 tabular-nums text-[10px] text-zinc-600">
+                      {s.citationCount.toLocaleString()}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

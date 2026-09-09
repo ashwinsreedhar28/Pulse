@@ -20,6 +20,11 @@ import {
   listEmbeddings,
   upsertEmbeddings
 } from '../database/paperEmbeddings'
+import {
+  listSuppressedMissIds,
+  recordEmbeddingMisses
+} from '../database/paperEmbeddingMisses'
+import { getGraphNode, type ResearchGraphNodeRow } from '../database/researchGraph'
 import { getBookmarkedPaperIds } from '../database/researchBookmarks'
 import { getPreferences } from '../database/preferences'
 import { s2Schedule } from './s2RateLimit'
@@ -100,22 +105,100 @@ export async function ensureEmbeddings(paperIds: string[]): Promise<number> {
     }
 
     const batch: Array<{ paperId: string; vector: number[] }> = []
+    const returned = new Set<string>()
     for (const row of rows ?? []) {
       const vec = row?.embedding?.vector
       const id = row?.paperId
       // S2 returns null for ids it can't resolve, and omits embeddings for
       // papers it hasn't embedded (very new or very obscure ones).
+      if (id) returned.add(id)
       if (!id || !Array.isArray(vec) || vec.length !== EMBEDDING_DIMS) continue
       batch.push({ paperId: id, vector: vec })
     }
     stored += upsertEmbeddings(batch)
+
+    // Record everything we asked for and did not get a usable vector back for.
+    //
+    // Dropping these silently is what wedged the backfill: the caller selects
+    // "graph nodes without an embedding" in a stable order, so an unembeddable
+    // head of that list was re-requested on every tick forever and coverage
+    // never moved past it. A miss is not permanent — S2 embeds papers later —
+    // so it only suppresses retries for MISS_RETRY_MS.
+    const got = new Set(batch.map((b) => b.paperId))
+    const missed = chunk.filter((id) => !got.has(id))
+    if (missed.length > 0) {
+      try {
+        recordEmbeddingMisses(missed)
+      } catch (err) {
+        console.warn(
+          '[similarity] could not record embedding misses:',
+          err instanceof Error ? err.message : err
+        )
+      }
+    }
   }
   return stored
+}
+
+/**
+ * Graph papers still worth asking S2 about: no stored embedding, and no recent
+ * recorded miss. `limit` is applied after both exclusions, so the slice always
+ * advances instead of re-selecting the same unembeddable head.
+ */
+export function selectEmbeddingCandidates(allIds: string[], limit: number): string[] {
+  const have = listEmbeddedIds()
+  const suppressed = listSuppressedMissIds()
+  const out: string[] = []
+  for (const id of allIds) {
+    if (have.has(id) || suppressed.has(id)) continue
+    out.push(id)
+    if (out.length >= limit) break
+  }
+  return out
 }
 
 export interface SimilarPaper {
   paperId: string
   score: number
+  /**
+   * Populated by hydrateSimilar from research_graph_nodes where available.
+   *
+   * Without it the UI has nothing to render but a 40-character hex id, which
+   * is what the "Semantically similar" panel was showing — a working feature
+   * that was unusable purely for want of this join.
+   */
+  title?: string | null
+  year?: number | null
+  authors?: string[]
+  venue?: string | null
+  citationCount?: number
+}
+
+/**
+ * Attach titles to similarity results.
+ *
+ * Kept separate from findSimilar so the scoring path stays a pure numeric
+ * operation, and so callers that only need ids don't pay for the lookup.
+ */
+export function hydrateSimilar(rows: SimilarPaper[]): SimilarPaper[] {
+  if (rows.length === 0) return rows
+  const byId = new Map<string, ResearchGraphNodeRow>()
+  for (const id of rows.map((r) => r.paperId)) {
+    const n = getGraphNode(id)
+    if (n) byId.set(id, n)
+  }
+  return rows.map((r) => {
+    const n = byId.get(r.paperId)
+    if (!n) return r
+    return {
+      ...r,
+      title: n.title,
+      year: n.year,
+      authors: n.authors,
+      venue: n.venue,
+      citationCount: n.citationCount
+    }
+  })
 }
 
 // Nearest neighbours to a single paper. Linear scan over the stored set:

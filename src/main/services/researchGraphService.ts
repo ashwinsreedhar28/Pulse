@@ -59,7 +59,21 @@ export interface ResearchGraphPayload {
   stats: { nodes: number; edges: number; expanded: number }
 }
 
-export function getResearchGraph(): ResearchGraphPayload {
+/**
+ * @param withClusters Compute semantic clusters for `node.cluster`.
+ *
+ * Off by default, and that default matters. Clustering is greedy
+ * agglomerative over 768-dim vectors — O(n²·d), roughly 3.9 billion float ops
+ * at current corpus size, on top of a `SELECT ... IN (?,…)` with one bind
+ * parameter per node. It used to run unconditionally, and because
+ * getPaperNeighborhood() calls this function in full, every graph open, every
+ * hop change and every "centre on this paper" paid that cost — to populate a
+ * field no renderer reads. Ask for it explicitly when something actually
+ * consumes it (the corpus map will).
+ */
+export function getResearchGraph(
+  { withClusters = false }: { withClusters?: boolean } = {}
+): ResearchGraphPayload {
   const nodeRows = listGraphNodes()
   const edges: ResearchGraphEdge[] = listGraphEdges().map((e) => ({
     from: e.fromPaperId,
@@ -106,12 +120,14 @@ export function getResearchGraph(): ResearchGraphPayload {
   // Semantic clusters where embeddings exist. Papers without one get null
   // rather than being forced into a bucket they may not belong to.
   const clusterOf = new Map<string, number>()
-  try {
-    for (const c of clusterLibrary(nodeRows.map((n) => n.paperId))) {
-      for (const m of c.members) clusterOf.set(m, c.id)
+  if (withClusters) {
+    try {
+      for (const c of clusterLibrary(nodeRows.map((n) => n.paperId))) {
+        for (const m of c.members) clusterOf.set(m, c.id)
+      }
+    } catch {
+      // No embeddings fetched yet — the graph still renders, coloured by field.
     }
-  } catch {
-    // No embeddings fetched yet — the graph still renders, coloured by field.
   }
 
   const nodes: ResearchGraphNode[] = nodeRows.map((n) => ({

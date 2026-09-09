@@ -1277,6 +1277,12 @@ export interface MorningBriefRow {
 export interface SimilarPaper {
   paperId: string
   score: number
+  /** Present when the paper is in the citation graph; absent otherwise. */
+  title?: string | null
+  year?: number | null
+  authors?: string[]
+  venue?: string | null
+  citationCount?: number
 }
 export interface PaperTickerLink {
   paperId: string

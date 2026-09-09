@@ -16,9 +16,8 @@
 
 import { expandGraph } from './researchGraphExpander'
 import { refreshDiscover } from './researchDiscoverService'
-import { ensureEmbeddings } from './paperSimilarityService'
+import { ensureEmbeddings, selectEmbeddingCandidates } from './paperSimilarityService'
 import { listGraphNodes } from '../database/researchGraph'
-import { listEmbeddedIds } from '../database/paperEmbeddings'
 import { shouldDeferOnResume } from './networkStatus'
 
 // Papers per tick. At ~2.2s each (two rate-limited calls) this is roughly
@@ -71,11 +70,17 @@ async function tick(): Promise<void> {
     // them the graph can only be coloured by field — which is useless here,
     // since the corpus is overwhelmingly one field.
     try {
-      const have = listEmbeddedIds()
-      const missing = listGraphNodes()
-        .map((n) => n.paperId)
-        .filter((id) => !have.has(id))
-        .slice(0, EMBED_PER_TICK)
+      // selectEmbeddingCandidates excludes both stored embeddings AND papers
+      // S2 has recently told us it has no vector for. Filtering only on
+      // "already embedded" is what wedged this: listGraphNodes() has no ORDER
+      // BY, so it returns stable rowid order, and slicing the first 300
+      // un-embedded ids re-requested the identical unembeddable set every tick
+      // — coverage sat at exactly 2,250 of 11,477 while the corpus kept
+      // growing underneath it.
+      const missing = selectEmbeddingCandidates(
+        listGraphNodes().map((n) => n.paperId),
+        EMBED_PER_TICK
+      )
       if (missing.length > 0) {
         const stored = await ensureEmbeddings(missing)
         if (stored > 0) console.log(`[research-graph] +${stored} embeddings`)

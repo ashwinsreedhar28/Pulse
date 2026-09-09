@@ -2027,6 +2027,31 @@ export const migrations: Migration[] = [
             )`
       ).run()
     }
+  },
+  {
+    version: 62,
+    name: 'paper_embedding_misses',
+    // Papers Semantic Scholar has no SPECTER2 vector for.
+    //
+    // Without this the backfill wedges permanently: listGraphNodes() has no
+    // ORDER BY so it returns stable rowid order, and the scheduler takes
+    // `.filter(not embedded).slice(0, 300)` — the same 300 unembeddable papers
+    // every tick, forever. Observed live: coverage frozen at exactly 2,250 of
+    // 11,477 while the node count kept growing, across ~13 ticks that should
+    // each have added up to 300.
+    //
+    // Recording a miss lets the cursor advance. `attempts` and lastAttemptAt
+    // allow an occasional retry, since S2 does embed papers later.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS paper_embedding_misses (
+          paperId TEXT PRIMARY KEY,
+          attempts INTEGER NOT NULL DEFAULT 1,
+          lastAttemptAt INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_paper_embedding_misses_last
+          ON paper_embedding_misses(lastAttemptAt);
+      `)
+    }
   }
-
 ]
