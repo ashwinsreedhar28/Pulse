@@ -36,6 +36,40 @@ const FOV = 3.2
 // text that shrinks with the geometry is the fastest way to make a graph
 // unreadable exactly when you zoom out to see structure.
 const LABEL_PX = 11
+// Star sprites are rendered once per sector colour and blitted, instead of
+// building two radial gradients per node per frame. At ~1,400 nodes that was
+// ~2,900 gradient objects (each a heap allocation plus a Skia shader) every
+// frame — roughly 177k/second during a drag, which alone blew the frame budget.
+const SPRITE_PX = 64
+
+function buildSprite(rgb: string, kind: 'glow' | 'core'): HTMLCanvasElement {
+  const c = document.createElement('canvas')
+  c.width = SPRITE_PX
+  c.height = SPRITE_PX
+  const g = c.getContext('2d')
+  if (!g) return c
+  const half = SPRITE_PX / 2
+  if (kind === 'glow') {
+    const grad = g.createRadialGradient(half, half, 0, half, half, half)
+    grad.addColorStop(0, `rgba(${rgb},0.55)`)
+    grad.addColorStop(0.35, `rgba(${rgb},0.16)`)
+    grad.addColorStop(1, `rgba(${rgb},0)`)
+    g.fillStyle = grad
+    g.fillRect(0, 0, SPRITE_PX, SPRITE_PX)
+    return c
+  }
+  // Core keeps the off-centre hot spot that made stars read as lit rather
+  // than as flat discs.
+  const grad = g.createRadialGradient(half * 0.7, half * 0.7, half * 0.1, half, half, half)
+  grad.addColorStop(0, 'rgba(255,255,255,0.95)')
+  grad.addColorStop(0.4, `rgba(${rgb},1)`)
+  grad.addColorStop(1, `rgba(${rgb},0.65)`)
+  g.fillStyle = grad
+  g.beginPath()
+  g.arc(half, half, half, 0, Math.PI * 2)
+  g.fill()
+  return c
+}
 // Hard ceiling on labels per frame. Past roughly this many, added labels stop
 // carrying information and start being texture.
 const MAX_LABELS = 70
@@ -91,6 +125,10 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
   const [sectorFilter, setSectorFilter] = useState<string>('all')
   const [showCoMentions, setShowCoMentions] = useState(false)
   const [showEdges, setShowEdges] = useState(true)
+  const [relSupplier, setRelSupplier] = useState(true)
+  const [relCompetitor, setRelCompetitor] = useState(true)
+  const [relPartner, setRelPartner] = useState(true)
+  const [minDegree, setMinDegree] = useState(1)
   const [autoOrbit, setAutoOrbit] = useState(false)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<MarketGraphNode | null>(null)
@@ -116,6 +154,11 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
     panY: number
   } | null>(null)
   const rafRef = useRef<number | null>(null)
+  // Sector colours are a fixed small palette, so sprites are built at most
+  // once per colour for the life of the component.
+  const spriteCacheRef = useRef(
+    new Map<string, { glow: HTMLCanvasElement; core: HTMLCanvasElement }>()
+  )
   // Mirrors dragRef for the cursor only. Reading a ref during render never
   // re-renders, so the old `dragRef.current ? 'grabbing' : 'grab'` could not
   // ever change the cursor.
@@ -176,26 +219,71 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
 
   const sectorRgb = useMemo(() => {
     const order = sectorOptions.map((s) => s.id).sort()
-    return (id: string | null): string => {
-      if (!id) return NEUTRAL_RGB
-      const i = order.indexOf(id)
-      return i === -1 ? NEUTRAL_RGB : SECTOR_PALETTE[i % SECTOR_PALETTE.length]
-    }
+    // Precomputed map rather than order.indexOf(id) per lookup — this is
+    // called once per node per frame, so a linear scan inside it was O(nodes ×
+    // sectors) of pure waste in the hot path.
+    const byId = new Map(order.map((id, i) => [id, SECTOR_PALETTE[i % SECTOR_PALETTE.length]]))
+    return (id: string | null): string => (id ? (byId.get(id) ?? NEUTRAL_RGB) : NEUTRAL_RGB)
   }, [sectorOptions])
+
+  // Nodes with no top-level sector. They render grey and are unreachable from
+  // the Sector dropdown, so the legend has to account for them or they read as
+  // a rendering fault.
+  const unclassifiedCount = useMemo(
+    () => (data ? data.nodes.filter((n) => !n.topSectorId).length : 0),
+    [data]
+  )
 
   const visible = useMemo(() => {
     if (!data) return { nodes: [], edges: [], coMentions: [] }
-    const nodes =
-      sectorFilter === 'all'
-        ? data.nodes
-        : data.nodes.filter((n) => n.topSectorId === sectorFilter)
+
+    // Relationship gate first — it is the biggest single lever on density
+    // (competitor edges alone are ~39% of the graph).
+    const relOk = (r: string): boolean =>
+      r === 'supplier' ? relSupplier : r === 'competitor' ? relCompetitor : r === 'partner' ? relPartner : true
+    let edges = data.edges.filter((e) => relOk(e.relationship))
+
+    // Sector gate. Keeping only edges with BOTH endpoints inside the sector
+    // deleted every cross-sector link, which is precisely the interesting part
+    // of a supply chain — a semiconductor filter that hides who the chips go
+    // to answers the wrong question. One endpoint inside is enough; the node
+    // set is widened to include whatever those edges reach.
+    let nodes = data.nodes
+    if (sectorFilter !== 'all') {
+      const inSector = new Set(
+        data.nodes.filter((n) => n.topSectorId === sectorFilter).map((n) => n.symbol)
+      )
+      edges = edges.filter((e) => inSector.has(e.from) || inSector.has(e.to))
+      const reachable = new Set(inSector)
+      for (const e of edges) {
+        reachable.add(e.from)
+        reachable.add(e.to)
+      }
+      nodes = data.nodes.filter((n) => reachable.has(n.symbol))
+    }
+
+    // Minimum-degree gate. Weight would be the obvious knob here and is
+    // useless: chainAbsorberService hardcodes 0.65, so 95% of edges carry the
+    // identical value and a weight slider filters nothing. Degree actually
+    // discriminates — measured on the live graph, deg>=2 drops 30% of nodes
+    // and deg>=3 drops 45%, and what it drops is leaves that add ink without
+    // structure.
+    if (minDegree > 1) {
+      const deg = new Map<string, number>()
+      for (const e of edges) {
+        deg.set(e.from, (deg.get(e.from) ?? 0) + 1)
+        deg.set(e.to, (deg.get(e.to) ?? 0) + 1)
+      }
+      nodes = nodes.filter((n) => (deg.get(n.symbol) ?? 0) >= minDegree)
+    }
+
     const keep = new Set(nodes.map((n) => n.symbol))
     return {
       nodes,
-      edges: data.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
+      edges: edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
       coMentions: data.coMentions.filter((c) => keep.has(c.from) && keep.has(c.to))
     }
-  }, [data, sectorFilter])
+  }, [data, sectorFilter, relSupplier, relCompetitor, relPartner, minDegree])
 
   const degree = useMemo(() => {
     const d = new Map<string, number>()
@@ -345,8 +433,13 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
       if (p) proj.set(n.symbol, project(p))
     }
 
+    const spriteCache = spriteCacheRef.current
     const hover = hoverRef.current
-    const focusSet = hover ? new Set([hover, ...(adjacency.get(hover) ?? [])]) : null
+    // Focus + context. Hover is transient exploration; a selected node holds
+    // the isolation so you can actually read a company's neighbourhood without
+    // keeping the mouse perfectly still. Hover wins while it is active.
+    const anchor = hover ?? selected?.symbol ?? null
+    const focusSet = anchor ? new Set([anchor, ...(adjacency.get(anchor) ?? [])]) : null
 
     // Edges first, behind the stars.
     if (showEdges) {
@@ -413,37 +506,35 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
       const isSelected = selected?.symbol === it.node.symbol
       const alpha = dimmed ? 0.08 : 1
 
-      // Corona. A radial gradient per star is what gives the galaxy read.
-      // Capped in absolute pixels: it used to be pure `r * 3.2`, so at high
-      // zoom a single star's gradient covered a ~290px radius and 1,400
+      // Corona. Capped in absolute pixels: it used to be pure `r * 3.2`, so at
+      // high zoom a single star's gradient covered a ~290px radius and 1,400
       // overlapping alpha-blended discs of that size became a fill-rate wall —
       // zooming in made each frame more expensive, not less.
       const glowR = Math.min(Math.max(it.r * 3.2, 6), 44)
-      const g = ctx.createRadialGradient(it.sx, it.sy, 0, it.sx, it.sy, glowR)
-      g.addColorStop(0, `rgba(${it.rgb},${0.55 * alpha})`)
-      g.addColorStop(0.35, `rgba(${it.rgb},${0.16 * alpha})`)
-      g.addColorStop(1, `rgba(${it.rgb},0)`)
-      ctx.fillStyle = g
-      ctx.beginPath()
-      ctx.arc(it.sx, it.sy, glowR, 0, Math.PI * 2)
-      ctx.fill()
+      const cr = Math.max(it.r, 0.6)
 
-      // Core, with a hot centre offset toward the light.
-      const core = ctx.createRadialGradient(
-        it.sx - it.r * 0.3,
-        it.sy - it.r * 0.3,
-        it.r * 0.1,
-        it.sx,
-        it.sy,
-        Math.max(it.r, 0.6)
-      )
-      core.addColorStop(0, `rgba(255,255,255,${0.95 * alpha})`)
-      core.addColorStop(0.4, `rgba(${it.rgb},${alpha})`)
-      core.addColorStop(1, `rgba(${it.rgb},${0.65 * alpha})`)
-      ctx.fillStyle = core
-      ctx.beginPath()
-      ctx.arc(it.sx, it.sy, Math.max(it.r, 0.6), 0, Math.PI * 2)
-      ctx.fill()
+      // Off-screen rejection. Nothing checked this before, so every node was
+      // fully rasterized whether or not it was in frame — and panning or
+      // zooming in put most of them out of frame.
+      if (
+        it.sx + glowR < 0 ||
+        it.sx - glowR > w ||
+        it.sy + glowR < 0 ||
+        it.sy - glowR > h
+      ) {
+        continue
+      }
+
+      let sprites = spriteCache.get(it.rgb)
+      if (!sprites) {
+        sprites = { glow: buildSprite(it.rgb, 'glow'), core: buildSprite(it.rgb, 'core') }
+        spriteCache.set(it.rgb, sprites)
+      }
+
+      ctx.globalAlpha = alpha
+      ctx.drawImage(sprites.glow, it.sx - glowR, it.sy - glowR, glowR * 2, glowR * 2)
+      ctx.drawImage(sprites.core, it.sx - cr, it.sy - cr, cr * 2, cr * 2)
+      ctx.globalAlpha = 1
 
       // Live quote ring — the only thing a 60s tick changes.
       const pct = quoteBySymbol.get(it.node.symbol)?.changePct ?? null
@@ -705,6 +796,37 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
           </select>
         </label>
         <label className="flex items-center gap-1 text-xs text-zinc-400">
+          Min links
+          <select
+            value={minDegree}
+            onChange={(e) => setMinDegree(Number(e.target.value))}
+            title="Hide weakly-connected nodes. Leaves are most of the node count and little of the structure."
+            className="rounded bg-zinc-900 px-1 py-1 text-xs text-zinc-200 ring-1 ring-zinc-800"
+          >
+            {[1, 2, 3, 5, 8, 12].map((k) => (
+              <option key={k} value={k}>
+                {k === 1 ? 'any' : `${k}+`}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* Relationship gate. Competitor edges alone are ~39% of the graph, so
+            these are the strongest density control available. */}
+        <span className="flex items-center gap-2 rounded bg-zinc-900/60 px-2 py-1 ring-1 ring-zinc-800">
+          {(
+            [
+              ['supplier', relSupplier, setRelSupplier],
+              ['competitor', relCompetitor, setRelCompetitor],
+              ['partner', relPartner, setRelPartner]
+            ] as const
+          ).map(([label, on, set]) => (
+            <label key={label} className="flex items-center gap-1 text-[11px] text-zinc-400">
+              <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} />
+              <span style={{ color: `rgb(${EDGE_COLOR[label] ?? EDGE_FALLBACK})` }}>{label}</span>
+            </label>
+          ))}
+        </span>
+        <label className="flex items-center gap-1 text-xs text-zinc-400">
           <input
             type="checkbox"
             checked={showEdges}
@@ -909,7 +1031,10 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-t border-zinc-800 px-4 py-1.5 text-[10px] text-zinc-500">
-        {palette.slice(0, 8).map((s) => (
+        {/* Every sector, not the first 8. With 11-12 top-level sectors the
+            slice meant 3-4 colours appeared on the canvas with nothing
+            explaining them. */}
+        {palette.map((s) => (
           <span key={s.id} className="flex items-center gap-1">
             <span
               className="inline-block h-2 w-2 rounded-full"
@@ -918,6 +1043,18 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
             {s.name}
           </span>
         ))}
+        {unclassifiedCount > 0 && (
+          <span
+            className="flex items-center gap-1"
+            title="No sector assignment yet — these are grey on the canvas and absent from the Sector filter."
+          >
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ background: `rgb(${NEUTRAL_RGB})` }}
+            />
+            unclassified ({unclassifiedCount})
+          </span>
+        )}
         <span className="ml-auto">
           drag to rotate · shift-drag to pan · scroll to zoom · click a star
         </span>
