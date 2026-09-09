@@ -34,7 +34,8 @@ import {
 import { forceRefreshFilings } from '../services/secFilingsService'
 import {
   getFilingsForSymbol,
-  getRecentFilingsForSymbols
+  getRecentFilingsForSymbols,
+  type SecFiling
 } from '../database/secFilings'
 import {
   buildFilingUrl,
@@ -491,6 +492,27 @@ export function registerDbIpc(): void {
         Number.isFinite(filingsSinceMs) && filingsSinceMs > 0
           ? filingsSinceMs
           : Date.now() - 72 * 60 * 60 * 1000
+      // Each slice fails independently.
+      //
+      // This was one Promise.all over eight reads, seven of them local and one
+      // (earnings badges) a Yahoo call. A single rejection took down the whole
+      // bundle, the renderer's catch left every field at its initial empty
+      // value, and the visible symptom was unrelated to the cause: the sector
+      // tab strip collapsed to just "All", because sectorsWithContent — a pure
+      // SQLite read that cannot fail — never arrived. Yahoo 429s under the
+      // current fan-out (see BUGS.md) make that failure routine, not rare.
+      const safe = async <T,>(label: string, run: () => T | Promise<T>, fallback: T): Promise<T> => {
+        try {
+          return await run()
+        } catch (err) {
+          console.warn(
+            `[valueChain] mount bundle: ${label} failed —`,
+            err instanceof Error ? err.message : err
+          )
+          return fallback
+        }
+      }
+
       const [
         financials,
         earnings,
@@ -501,16 +523,20 @@ export function registerDbIpc(): void {
         nodeOverrides,
         generatedChainSymbols
       ] = await Promise.all([
-        Promise.resolve(computeSnapshotsForSymbols(symbols)),
-        getEarningsBadgesForSymbols(symbols),
-        Promise.resolve(getEstimatesSnapshotsForSymbols(symbols)),
-        Promise.resolve(listSectorsWithContent()),
-        Promise.resolve(buildPrimarySectorIndex()),
-        Promise.resolve(listEdgeOverrides()),
-        Promise.resolve(listNodeOverrides()),
-        Promise.resolve(listCompanyValueChainSymbols())
+        safe('financials', () => computeSnapshotsForSymbols(symbols), []),
+        safe('earnings', () => getEarningsBadgesForSymbols(symbols), []),
+        safe('estimates', () => getEstimatesSnapshotsForSymbols(symbols), []),
+        safe('sectors', () => listSectorsWithContent(), []),
+        safe('primaryIndex', () => buildPrimarySectorIndex(), {}),
+        safe('edgeOverrides', () => listEdgeOverrides(), []),
+        safe('nodeOverrides', () => listNodeOverrides(), []),
+        safe('chainSymbols', () => listCompanyValueChainSymbols(), [])
       ])
-      const filingsMap = getRecentFilingsForSymbols(symbols, sinceMs, INTERESTING_FORMS)
+      const filingsMap = await safe(
+        'filings',
+        () => getRecentFilingsForSymbols(symbols, sinceMs, INTERESTING_FORMS),
+        new Map<string, SecFiling[]>()
+      )
       const recentFilings: Record<string, unknown[]> = {}
       for (const [sym, list] of filingsMap) {
         recentFilings[sym] = list.map((f) => ({

@@ -406,7 +406,13 @@ export function ValueChain({
         setGeneratedChainSymbols(
           new Set(bundle.generatedChainSymbols.map((s) => s.toUpperCase()))
         )
-        setSectorsWithContent(bundle.sectorsWithContent)
+        // Only overwrite when the bundle actually carried sectors. An empty
+        // array here is indistinguishable from "this slice degraded", and
+        // blanking the tab strip is a much worse outcome than keeping a
+        // slightly stale one.
+        if (bundle.sectorsWithContent.length > 0) {
+          setSectorsWithContent(bundle.sectorsWithContent)
+        }
         setPrimaryIndex(bundle.primaryIndex)
         const filings = new Map<string, SecFiling[]>()
         for (const sym of Object.keys(bundle.recentFilings)) {
@@ -477,6 +483,18 @@ export function ValueChain({
         })
     })
   }, [])
+  // The sector tab strip is driven by a pure SQLite read, so it should not be
+  // coupled to the mount bundle's network-touching slices at all. Fetched
+  // directly on mount as well; whichever answers first wins.
+  useEffect(() => {
+    window.api.sectors
+      .listWithContent()
+      .then((rows) => {
+        if (rows.length > 0) setSectorsWithContent(rows)
+      })
+      .catch((err) => console.warn('[valueChain] sector list failed', err))
+  }, [])
+
   useEffect(() => {
     return window.api.graph.onUpdated(() => {
       // Refetch overrides + sector rollup. Chain generation absorbs new
