@@ -154,6 +154,11 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
     panY: number
   } | null>(null)
   const rafRef = useRef<number | null>(null)
+  // Layout results keyed by content hash — see the layout memo below.
+  const layoutCacheRef = useRef<{
+    key: string
+    value: Map<string, LayoutPosition3D>
+  } | null>(null)
   // Sector colours are a fixed small palette, so sprites are built at most
   // once per colour for the life of the component.
   const spriteCacheRef = useRef(
@@ -345,8 +350,23 @@ export default function MarketGraph({ quotes, onSelectSymbol }: Props): JSX.Elem
     const ids = visible.nodes.map((n) => n.symbol)
     const sectorById = new Map(visible.nodes.map((n) => [n.symbol, n.topSectorId ?? 'unknown']))
     const edges: LayoutEdge[] = visible.edges.map((e) => ({ from: e.from, to: e.to }))
+
+    // Cache on the actual content, not on array identity.
+    //
+    // `visible` is rebuilt whenever any filter changes, so the useMemo alone
+    // re-ran the whole simulation on every dropdown or checkbox — hundreds of
+    // milliseconds of frozen UI each time, and toggling a filter back paid it
+    // twice. Layout is deterministic now, so the same content always yields
+    // the same positions and the cached result is exactly what would be
+    // recomputed.
+    const key = `${ids.length}:${edges.length}:${ids.join(',')}`
+    const cached = layoutCacheRef.current
+    if (cached && cached.key === key) return cached.value
+
     const pos = runClusteredLayout3D(ids, edges, (id) => sectorById.get(id) ?? 'unknown')
-    return new Map(pos.map((p) => [p.id, p]))
+    const value = new Map(pos.map((p) => [p.id, p]))
+    layoutCacheRef.current = { key, value }
+    return value
   }, [visible.nodes, visible.edges])
 
   const matches = useMemo(() => {
