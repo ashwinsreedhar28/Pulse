@@ -98,8 +98,7 @@ export function ResearchGraph({
       // No focus yet: offer the best-connected papers as entry points, since
       // those produce the most informative lineage.
       try {
-        const g = await window.api.research.graph()
-        setPicker(g.hubs.slice(0, 12))
+        setPicker(await window.api.research.hubs(12))
       } catch {
         setPicker([])
       }

@@ -864,6 +864,17 @@ export function registerDbIpc(): void {
     return expandFromPaper(paperId)
   })
 
+  // Entry-point picker data.
+  //
+  // The renderer used to call research:graph and keep hubs.slice(0, 12) — a
+  // ~40 MB structured clone of every node (abstracts included) and every edge,
+  // discarded to render twelve buttons. This computes the same twelve rows in
+  // SQL and returns ~2 KB.
+  ipcMain.handle('research:hubs', async (_e, limit?: number) => {
+    const { topHubs } = await import('../database/researchGraph')
+    return topHubs(limit ?? 12)
+  })
+
   ipcMain.handle('research:coCited', async (_e, paperId: string, limit?: number) => {
     const { findCoCited } = await import('../services/researchGraphService')
     const { getGraphNode } = await import('../database/researchGraph')

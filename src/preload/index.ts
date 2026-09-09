@@ -1349,7 +1349,10 @@ export interface ResearchGraphEdge {
   intent: string | null
 }
 export interface NeighborhoodNode extends ResearchGraphNode {
+  /** Hops from focus. Negative = ancestor, positive = descendant. */
   generation: number
+  /** Degree across the whole graph, vs `degree` which counts the scene. */
+  globalDegree: number
 }
 export interface NeighborhoodPayload {
   focusPaperId: string
@@ -2080,6 +2083,9 @@ const api = {
       invoke<GraphExpansionResult>('research:expandGraph', papers),
     expandFromPaper: (paperId: string): Promise<GraphExpansionResult> =>
       invoke<GraphExpansionResult>('research:expandFromPaper', paperId),
+    /** Highest-degree papers, for the graph's entry-point picker. */
+    hubs: (limit?: number): Promise<Array<{ paperId: string; title: string; degree: number }>> =>
+      invoke('research:hubs', limit),
     coCited: (paperId: string, limit?: number): Promise<CoCitedPaper[]> =>
       invoke<CoCitedPaper[]>('research:coCited', paperId, limit),
     // S2 + OpenAlex + arXiv, merged and deduped on title.

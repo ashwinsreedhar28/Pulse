@@ -17,7 +17,17 @@
 
 import { getDb } from '../database/connection'
 import { getBookmarkedPaperIds } from '../database/researchBookmarks'
-import { listGraphEdges, listGraphNodes, graphStats } from '../database/researchGraph'
+import {
+  edgesFrom,
+  edgesTo,
+  edgesWithin,
+  getGraphNode,
+  getGraphNodesByIds,
+  globalDegreesFor,
+  listGraphEdges,
+  listGraphNodes,
+  graphStats
+} from '../database/researchGraph'
 import { clusterLibrary } from './paperSimilarityService'
 
 export interface ResearchGraphNode {
@@ -215,6 +225,14 @@ export function findCoCited(
 export interface NeighborhoodNode extends ResearchGraphNode {
   /** Hops from focus. Negative = ancestor, positive = descendant. */
   generation: number
+  /**
+   * Degree across the WHOLE graph, not just the returned scope.
+   *
+   * `degree` counts links inside the scene; this counts everything known.
+   * The gap between them is what the UI needs to say "showing 22 of 214
+   * known links" rather than presenting a scene count as if it were total.
+   */
+  globalDegree: number
 }
 
 export interface NeighborhoodPayload {
@@ -225,14 +243,21 @@ export interface NeighborhoodPayload {
   needsExpansion: boolean
 }
 
-// Cap per generation (not per parent), so a band stays readable however many
-// parents feed it. Ranked by influence, so the slice that survives is the
-// meaningful one.
+// Nodes per generation.
 //
-// 10 rather than 18: at 18 the labels collide into an unreadable smear no
-// matter how they are laid out, and a band you cannot read carries no
-// information. Ten influential papers per direction is a legible summary;
-// "Fetch more" and the hop control are there for anyone who wants depth.
+// Still 10, deliberately, even though the data supports far more: measured
+// uncapped, a two-hop neighbourhood of a high-degree paper is 340-703 nodes,
+// and at a cap of 150 the scene lands at 186-265 — the "few hundred, well
+// chosen" the redesign targets.
+//
+// The cap stays here until the canvas can render that many. Today a band is
+// laid out at NODE_GAP = 300 virtual px per node, so a 150-node band would be
+// 45,000px wide against a ~1,400px viewport. Raising this without the layout
+// work would replace a readable 41-node view with an unreadable one, and would
+// change the picture and its data source in the same step — leaving no way to
+// tell which of the two broke when something looks wrong.
+//
+// Raise it with the layout, not before.
 const PER_GENERATION = 10
 
 export function getPaperNeighborhood(
@@ -240,76 +265,112 @@ export function getPaperNeighborhood(
   hops = 2
 ): NeighborhoodPayload {
   const focus = paperId.trim()
-  const all = getResearchGraph()
-  const byId = new Map(all.nodes.map((n) => [n.paperId, n]))
-  if (!byId.has(focus)) {
+  if (!focus || !getGraphNode(focus)) {
     return { focusPaperId: focus, nodes: [], edges: [], needsExpansion: true }
   }
 
-  // Adjacency split by direction so the walk can keep ancestors and
-  // descendants apart. A single undirected walk would mix "what this builds
-  // on" with "what builds on it" and lose the whole point.
-  const outgoing = new Map<string, string[]>() // from -> to  (cites)
-  const incoming = new Map<string, string[]>() // to -> from  (cited by)
-  for (const e of all.edges) {
-    const o = outgoing.get(e.from)
-    if (o) o.push(e.to)
-    else outgoing.set(e.from, [e.to])
-    const i = incoming.get(e.to)
-    if (i) i.push(e.from)
-    else incoming.set(e.to, [e.from])
-  }
-
+  // Walk in SQL against the id set, one hop at a time.
+  //
+  // This used to call getResearchGraph(), which reads every node — ~40 MB of
+  // title/abstract/author text across 29.5k rows — plus every edge, builds a
+  // degree map over all of it, and materializes the lot, in order to return a
+  // few hundred rows. It ran on every graph open, every hop change and every
+  // re-centre.
   const generation = new Map<string, number>([[focus, 0]])
 
-  const rank = (id: string): number => {
-    const n = byId.get(id)
-    if (!n) return -1
-    return n.influentialCitationCount * 5 + n.citationCount
-  }
+  // Ranking needs citation counts for candidates we have not fetched yet, so
+  // each hop pulls its own candidates' rows and reuses them for the payload.
+  const rowById = new Map<string, ReturnType<typeof getGraphNode>>()
 
-  // Breadth-first in each direction independently. A node already assigned a
-  // generation keeps it — the shortest path wins, so a paper that is both a
-  // reference and a distant citer reads as the reference it primarily is.
   const walk = (dir: 'back' | 'forward'): void => {
     let frontier = [focus]
     for (let hop = 1; hop <= hops; hop++) {
-      // Gather the whole candidate set for this hop, then cap ONCE across it.
-      //
-      // Capping per parent instead lets the layer multiply: 18 parents each
-      // contributing 18 children is 324 nodes in a single band, which is both
-      // unreadable and not what "top 18" was meant to mean. Ranking across the
-      // full candidate set also picks genuinely better papers, since it can
-      // prefer two strong children of one parent over one weak child each.
+      // 'back' follows outgoing edges (what this cites — older work);
+      // 'forward' follows incoming edges (what cites this — newer work).
+      const edges = dir === 'back' ? edgesFrom(frontier) : edgesTo(frontier)
       const candidates = new Set<string>()
-      for (const id of frontier) {
-        const neighbours = dir === 'back' ? (outgoing.get(id) ?? []) : (incoming.get(id) ?? [])
-        for (const n of neighbours) {
-          if (!generation.has(n)) candidates.add(n)
-        }
+      for (const e of edges) {
+        const other = dir === 'back' ? e.toPaperId : e.fromPaperId
+        if (!generation.has(other)) candidates.add(other)
       }
-      const next = [...candidates]
-        .sort((a, b) => rank(b) - rank(a))
-        .slice(0, PER_GENERATION)
+      if (candidates.size === 0) break
+
+      const ids = [...candidates]
+      for (const row of getGraphNodesByIds(ids)) rowById.set(row.paperId, row)
+
+      // Cap once across the whole hop, ranked by influence — capping per
+      // parent would let a band multiply without meaning "top N".
+      const rank = (id: string): number => {
+        const n = rowById.get(id)
+        if (!n) return -1
+        return n.influentialCitationCount * 5 + n.citationCount
+      }
+      const next =
+        ids.length <= PER_GENERATION
+          ? ids
+          : [...ids].sort((a, b) => rank(b) - rank(a)).slice(0, PER_GENERATION)
+
       for (const n of next) generation.set(n, dir === 'back' ? -hop : hop)
       frontier = next
-      if (frontier.length === 0) break
     }
   }
   walk('back')
   walk('forward')
 
+  const ids = [...generation.keys()]
+  const missing = ids.filter((id) => !rowById.has(id))
+  for (const row of getGraphNodesByIds(missing)) rowById.set(row.paperId, row)
+
+  const bookmarked = getBookmarkedPaperIds()
   const nodes: NeighborhoodNode[] = []
   for (const [id, gen] of generation) {
-    const n = byId.get(id)
-    if (n) nodes.push({ ...n, generation: gen })
+    const n = rowById.get(id)
+    if (!n) continue
+    nodes.push({
+      paperId: n.paperId,
+      title: n.title,
+      year: n.year,
+      authors: n.authors,
+      venue: n.venue,
+      citationCount: n.citationCount,
+      influentialCitationCount: n.influentialCitationCount,
+      fields: n.fields,
+      field: n.fields[0] ?? null,
+      abstract: n.abstract,
+      url: n.url,
+      pdfUrl: n.pdfUrl,
+      bookmarked: bookmarked.has(n.paperId),
+      depth: n.depth,
+      expanded: n.expandedAt !== null,
+      cluster: null,
+      degree: 0,
+      globalDegree: 0,
+      generation: gen
+    })
   }
-  const keep = new Set(nodes.map((n) => n.paperId))
+
+  // Degree within the returned scope, which is what the renderer actually
+  // needs — a global degree would describe papers that are not on screen.
+  const scoped = edgesWithin(ids)
+  const degree = new Map<string, number>()
+  for (const e of scoped) {
+    degree.set(e.fromPaperId, (degree.get(e.fromPaperId) ?? 0) + 1)
+    degree.set(e.toPaperId, (degree.get(e.toPaperId) ?? 0) + 1)
+  }
+  for (const n of nodes) n.degree = degree.get(n.paperId) ?? 0
+
+  const global = globalDegreesFor(ids)
+  for (const n of nodes) n.globalDegree = global.get(n.paperId) ?? 0
 
   return {
     focusPaperId: focus,
     nodes,
-    edges: all.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
+    edges: scoped.map((e) => ({
+      from: e.fromPaperId,
+      to: e.toPaperId,
+      relationship: e.relationship,
+      intent: e.intent
+    })),
     // A focus with no neighbours means it was seeded but never expanded, so
     // the UI can offer to fetch rather than showing a lone dot.
     needsExpansion: nodes.length <= 1
