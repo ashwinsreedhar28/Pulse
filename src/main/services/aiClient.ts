@@ -1,18 +1,22 @@
-// Thin router between Ollama (local) and Claude (cloud) for the two AI
-// calls that benefit most from model quality: value-chain generation,
-// sector classification, hyper-intelligence Q&A, and per-ticker news
-// summaries. The remaining Ollama calls (edge classification, etc.) stay
-// Ollama-only for now — they're cheaper to get wrong and the quality gap
-// is smaller.
+// Thin router between Ollama (local), Claude (cloud) and Runpod Serverless.
 //
-// Provider selection per Pulse preferences:
+// Claude vs Ollama covers the calls that benefit most from model quality:
+// value-chain generation, sector classification, hyper-intelligence Q&A, and
+// per-ticker news summaries. The remaining Ollama calls (edge classification,
+// etc.) stay Ollama-only for now — they're cheaper to get wrong and the
+// quality gap is smaller.
+//
+// Provider selection per Pulse preferences (aiProvider):
 // - 'auto'  : use Claude when configured, else Ollama. Default.
 // - 'claude': force Claude. Falls back to Ollama if the key is missing or
 //             Claude errors out — we'd rather generate with lower quality
 //             than fail the user's click.
 // - 'ollama': force local. Useful for privacy-conscious users or offline.
+//
+// Runpod vs Ollama covers one call, urgency scoring (see refineArticleScore
+// below). Claude never scores articles.
 
-import { getPreferences } from '../database/preferences'
+import { getPreferences, type ScoringProvider } from '../database/preferences'
 import {
   generateCompanyValueChain as claudeChain,
   classifyTickerSectors as claudeClassify,
@@ -25,11 +29,24 @@ import {
   classifyTickerSectors as ollamaClassify,
   answerQuestion as ollamaAnswer,
   summarizeTickerNews as ollamaSummarize,
+  scoreWithOllama,
   type GeneratedValueChain,
-  type TickerSectorClassification
+  type TickerSectorClassification,
+  type OllamaScoreInput,
+  type OllamaScoreResult
 } from './ollamaService'
+import {
+  scoreWithRunpod,
+  isRunpodConfigured,
+  getRunpodUsage,
+  resetRunpodUsage
+} from './runpodService'
 
 export type AiProviderResolved = 'claude' | 'ollama'
+
+// Runpod usage is tallied where the response body is seen (runpodService);
+// re-exported here so IPC has one module to import usage from, same as Claude.
+export { getRunpodUsage, resetRunpodUsage }
 
 // ---- usage telemetry (no gate) ---------------------------------------------
 //
@@ -191,4 +208,63 @@ export async function summarizeTickerNews(
   }
   const viaOllama = await ollamaSummarize(input)
   return { result: viaOllama, provider: 'ollama' }
+}
+
+// ---- urgency scoring: Ollama | Runpod ---------------------------------------
+//
+// The LLM pass over score-3 ("ambiguous") articles from feedPoller. This gets
+// its own provider knob, separate from aiProvider, because the trade-off is
+// different: many short prompts, never Claude, and the comparison that
+// matters is local GPU vs Runpod Serverless running the same open-weights
+// model.
+//
+// - 'auto'  : Runpod when RUNPOD_API_KEY + RUNPOD_ENDPOINT_ID are set, else Ollama.
+// - 'runpod': force Runpod; Ollama if Runpod is unconfigured.
+// - 'ollama': force Ollama.
+// Whichever runs first, a null result (offline, cold-start timeout, bad JSON)
+// falls through to the other so the article still gets a refined score. Both
+// null keeps the keyword score, exactly as before.
+
+export type ScoringProviderResolved = 'ollama' | 'runpod'
+
+// PULSE_SCORING_PROVIDER overrides the preference so the bench harness can
+// force a backend per run without editing pulse.db.
+function readScoringPreference(): ScoringProvider {
+  const env = process.env['PULSE_SCORING_PROVIDER']
+  if (env === 'auto' || env === 'ollama' || env === 'runpod') return env
+  return getPreferences().scoringProvider
+}
+
+export function resolveScoringProvider(): ScoringProviderResolved {
+  const pref = readScoringPreference()
+  if (pref === 'ollama') return 'ollama'
+  return isRunpodConfigured() ? 'runpod' : 'ollama'
+}
+
+function runScorer(
+  provider: ScoringProviderResolved,
+  input: OllamaScoreInput
+): Promise<OllamaScoreResult | null> {
+  return provider === 'runpod' ? scoreWithRunpod(input) : scoreWithOllama(input)
+}
+
+// "refine" because the keyword scorer (urgencyScorer.scoreArticle) has already
+// assigned a provisional 3; this pass sharpens it to 1-5.
+export async function refineArticleScore(
+  input: OllamaScoreInput
+): Promise<{ result: OllamaScoreResult | null; provider: ScoringProviderResolved }> {
+  const primary = resolveScoringProvider()
+  const secondary: ScoringProviderResolved = primary === 'runpod' ? 'ollama' : 'runpod'
+
+  const first = await runScorer(primary, input)
+  if (first) return { result: first, provider: primary }
+
+  if (secondary === 'runpod' && !isRunpodConfigured()) {
+    return { result: null, provider: primary }
+  }
+  // console.log, not warn: during a Runpod cold start every score-3 article
+  // for the next minute lands here by design, and that's not a fault.
+  console.log(`[aiClient] ${primary} scoring returned null, falling back to ${secondary}`)
+  const second = await runScorer(secondary, input)
+  return { result: second, provider: second ? secondary : primary }
 }

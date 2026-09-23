@@ -180,6 +180,9 @@ export type ResolvedTheme = Exclude<Theme, 'system'>
 // Cloud AI routing for value-chain generation + sector classification.
 // 'auto' picks Claude when a key is configured, else Ollama.
 export type AiProvider = 'auto' | 'ollama' | 'claude'
+// Backend for the urgency-scoring LLM pass: local Ollama or the Runpod
+// Serverless endpoint. 'auto' prefers Runpod when it is configured via env.
+export type ScoringProvider = 'auto' | 'ollama' | 'runpod'
 
 export interface Preferences {
   pollIntervalMin: number
@@ -195,6 +198,7 @@ export interface Preferences {
   theme: Theme
   mediaPipelineEnabled: boolean
   aiProvider: AiProvider
+  scoringProvider: ScoringProvider
   // Anthropic API key. Stored in the local pulse.db only; never logged.
   // Empty string when the user hasn't configured cloud AI.
   anthropicApiKey: string

@@ -13,7 +13,8 @@ import { getDb } from '../database/connection'
 import { fetchFeed } from './rssParser'
 import { buildUrgencyContext, scoreArticle, type UrgencyContext } from './urgencyScorer'
 import { notifyUrgent, trackMedium } from './notificationManager'
-import { enqueueOllamaTask, scoreWithOllama } from './ollamaService'
+import { enqueueOllamaTask } from './ollamaService'
+import { refineArticleScore } from './aiClient'
 import { refreshAllTickerSummaries } from './tickerSummaryService'
 import { classifyArticleAgainstTickers } from './tickerRelevance'
 import { isVideoGenBusy, onVideoGenSettled } from './videoGenService'
@@ -238,11 +239,13 @@ async function pollOne(
         })
       }
     } else if (row.urgencyScore === 3) {
-      // Ambiguous — hand off to Ollama for refined scoring. If we've already
-      // burned the per-poll AI budget, defer to the idle-drain queue instead
-      // of queueing a long synchronous backlog on mistral.
+      // Ambiguous — hand off to the scoring LLM (Runpod or Ollama, picked by
+      // aiClient per the scoringProvider preference) for refined scoring. If
+      // we've already burned the per-poll AI budget, defer to the idle-drain
+      // queue instead of queueing a long synchronous backlog. The Ollama task
+      // queue still bounds concurrency at 2 for both backends.
       const task = async (): Promise<void> => {
-        const refined = await scoreWithOllama({
+        const { result: refined, provider } = await refineArticleScore({
           title: row.title,
           summary: row.summary,
           domain: feed.domain,
@@ -250,7 +253,13 @@ async function pollOne(
           interests: promptLists.interests
         })
         if (!refined) return
-        updateArticleScore(row.id, refined.score, `AI: ${refined.reason}`.slice(0, 280))
+        // Provider in the reason string is the only per-row record of which
+        // backend scored it; the writeup queries it. Nothing parses the prefix.
+        updateArticleScore(
+          row.id,
+          refined.score,
+          `AI(${provider}): ${refined.reason}`.slice(0, 280)
+        )
         if (refined.score >= 4 && notifyOnPromote) {
           notifyUrgent({
             articleId: row.id,

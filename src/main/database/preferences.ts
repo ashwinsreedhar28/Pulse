@@ -6,9 +6,16 @@ export type Theme = 'system' | 'default' | 'light' | 'fiesta' | 'zazu' | 'ocean'
 // API key is set, falls back to local Ollama. "ollama" / "claude" force a
 // specific provider — useful for A/B comparison while debugging.
 export type AiProvider = 'auto' | 'ollama' | 'claude'
+// Backend for the urgency-scoring LLM pass (score-3 articles only). Separate
+// knob from aiProvider: Claude never scores articles; this picks between the
+// local Ollama model and the Runpod Serverless endpoint. "auto" prefers Runpod
+// when RUNPOD_API_KEY + RUNPOD_ENDPOINT_ID are set, else Ollama. Either way a
+// null result falls through to the other backend (see aiClient.refineArticleScore).
+export type ScoringProvider = 'auto' | 'ollama' | 'runpod'
 
 export const THEME_CHOICES: Theme[] = ['system', 'default', 'light', 'fiesta', 'zazu', 'ocean', 'casino']
 export const AI_PROVIDER_CHOICES: AiProvider[] = ['auto', 'ollama', 'claude']
+export const SCORING_PROVIDER_CHOICES: ScoringProvider[] = ['auto', 'ollama', 'runpod']
 
 export interface Preferences {
   pollIntervalMin: number
@@ -30,6 +37,7 @@ export interface Preferences {
   // console warning.
   aiProvider: AiProvider
   anthropicApiKey: string
+  scoringProvider: ScoringProvider
   // FRED (Federal Reserve Economic Data) API key. Free tier, no charges,
   // ~120 requests/min — plenty for our 9-series daily refresh. Empty
   // string disables the macro panel (renders an "add key in Settings"
@@ -77,6 +85,7 @@ const DEFAULTS: Preferences = {
   mediaPipelineEnabled: true,
   aiProvider: 'auto',
   anthropicApiKey: '',
+  scoringProvider: 'auto',
   fredApiKey: '',
   semanticScholarApiKey: '',
   notificationDailyCap: 5,
@@ -116,6 +125,7 @@ export function getPreferences(): Preferences {
         : map.get('mediaPipelineEnabled') === 'true',
     aiProvider: normalizeAiProvider(map.get('aiProvider')),
     anthropicApiKey: (map.get('anthropicApiKey') ?? DEFAULTS.anthropicApiKey).trim(),
+    scoringProvider: normalizeScoringProvider(map.get('scoringProvider')),
     fredApiKey: (map.get('fredApiKey') ?? DEFAULTS.fredApiKey).trim(),
     semanticScholarApiKey: (
       map.get('semanticScholarApiKey') ?? DEFAULTS.semanticScholarApiKey
@@ -155,6 +165,11 @@ function boolPref(raw: string | undefined, fallback: boolean): boolean {
 function normalizeAiProvider(raw: string | undefined): AiProvider {
   if (raw === 'auto' || raw === 'ollama' || raw === 'claude') return raw
   return DEFAULTS.aiProvider
+}
+
+function normalizeScoringProvider(raw: string | undefined): ScoringProvider {
+  if (raw === 'auto' || raw === 'ollama' || raw === 'runpod') return raw
+  return DEFAULTS.scoringProvider
 }
 
 function normalizeEngine(raw: string | undefined): TtsEngine {

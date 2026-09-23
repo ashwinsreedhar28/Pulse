@@ -70,7 +70,9 @@ export interface OllamaScoreResult {
   reason: string
 }
 
-function buildSystemPrompt(input: OllamaScoreInput): string {
+// Exported because runpodService sends the identical prompt: the Ollama-vs-
+// Runpod comparison has to isolate the host, so the prompt lives in one place.
+export function buildScoringSystemPrompt(input: OllamaScoreInput): string {
   if (input.domain === 'finance') {
     const list = input.tickers.length > 0 ? input.tickers.join(', ') : 'none listed'
     return (
@@ -96,7 +98,7 @@ export async function scoreWithOllama(
 ): Promise<OllamaScoreResult | null> {
   if (!(await checkOllamaHealth())) return null
 
-  const system = buildSystemPrompt(input)
+  const system = buildScoringSystemPrompt(input)
   const user = `Headline: ${input.title}\nSummary: ${input.summary ?? ''}`
 
   try {
