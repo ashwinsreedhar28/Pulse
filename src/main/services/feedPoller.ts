@@ -13,7 +13,6 @@ import { getDb } from '../database/connection'
 import { fetchFeed } from './rssParser'
 import { buildUrgencyContext, scoreArticle, type UrgencyContext } from './urgencyScorer'
 import { notifyUrgent, trackMedium } from './notificationManager'
-import { enqueueOllamaTask } from './ollamaService'
 import { refineArticleScore } from './aiClient'
 import { refreshAllTickerSummaries } from './tickerSummaryService'
 import { classifyArticleAgainstTickers } from './tickerRelevance'
@@ -48,6 +47,15 @@ let aiCallsUsed = 0
 // Score-3 articles that exceeded the per-poll AI budget. Drained when the
 // system has been idle for IDLE_THRESHOLD_SEC, one item per tick.
 const deferredScoreQueue: Array<() => Promise<void>> = []
+
+// Scoring tasks used to be enqueued on ollamaService's 2-wide queue. Now
+// aiClient.refineArticleScore picks the backend and each backend bounds its
+// own concurrency (Runpod 8, Ollama 2), so the task is simply started here.
+function runScoringTask(task: () => Promise<void>): void {
+  void task().catch((err) => {
+    console.warn('[feedPoller] scoring task failed:', err instanceof Error ? err.message : err)
+  })
+}
 
 export interface PollSummary {
   startedAt: number
@@ -242,8 +250,7 @@ async function pollOne(
       // Ambiguous — hand off to the scoring LLM (Runpod or Ollama, picked by
       // aiClient per the scoringProvider preference) for refined scoring. If
       // we've already burned the per-poll AI budget, defer to the idle-drain
-      // queue instead of queueing a long synchronous backlog. The Ollama task
-      // queue still bounds concurrency at 2 for both backends.
+      // queue instead of queueing a long synchronous backlog.
       const task = async (): Promise<void> => {
         const { result: refined, provider } = await refineArticleScore({
           title: row.title,
@@ -274,7 +281,7 @@ async function pollOne(
       }
       if (aiCallsUsed < MAX_AI_CALLS_PER_POLL) {
         aiCallsUsed++
-        enqueueOllamaTask(task)
+        runScoringTask(task)
       } else {
         deferredScoreQueue.push(task)
       }
@@ -330,7 +337,7 @@ export function startPolling(intervalMs: number = DEFAULT_INTERVAL_MS): void {
     if (deferredScoreQueue.length === 0) return
     if (powerMonitor.getSystemIdleTime() < IDLE_THRESHOLD_SEC) return
     const task = deferredScoreQueue.shift()
-    if (task) enqueueOllamaTask(task)
+    if (task) runScoringTask(task)
   }, IDLE_DRAIN_INTERVAL_MS)
 
   ensurePowerHandlers()

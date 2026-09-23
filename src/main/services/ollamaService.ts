@@ -178,6 +178,23 @@ export function enqueueOllamaTask(task: Task): void {
   pumpQueue()
 }
 
+// Promise-returning variant: run `fn` on the same bounded queue and resolve
+// with its result. Used by aiClient so a scoring call that falls back to
+// Ollama still respects MAX_CONCURRENT. Callers must not already hold a slot
+// (a task enqueued via enqueueOllamaTask must not call this), or two waiting
+// tasks can deadlock the 2-wide queue.
+export function runOllamaTask<T>(fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    enqueueOllamaTask(async () => {
+      try {
+        resolve(await fn())
+      } catch (err) {
+        reject(err)
+      }
+    })
+  })
+}
+
 export function getOllamaModel(): string {
   return OLLAMA_MODEL
 }

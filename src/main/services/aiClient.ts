@@ -30,6 +30,7 @@ import {
   answerQuestion as ollamaAnswer,
   summarizeTickerNews as ollamaSummarize,
   scoreWithOllama,
+  runOllamaTask,
   type GeneratedValueChain,
   type TickerSectorClassification,
   type OllamaScoreInput,
@@ -37,6 +38,7 @@ import {
 } from './ollamaService'
 import {
   scoreWithRunpod,
+  runRunpodTask,
   isRunpodConfigured,
   getRunpodUsage,
   resetRunpodUsage
@@ -241,11 +243,16 @@ export function resolveScoringProvider(): ScoringProviderResolved {
   return isRunpodConfigured() ? 'runpod' : 'ollama'
 }
 
+// Each backend has its own bounded queue (Runpod 8 in flight, Ollama 2), so
+// a Runpod call that falls back to Ollama still waits for an Ollama slot
+// rather than running eight mistral requests at once.
 function runScorer(
   provider: ScoringProviderResolved,
   input: OllamaScoreInput
 ): Promise<OllamaScoreResult | null> {
-  return provider === 'runpod' ? scoreWithRunpod(input) : scoreWithOllama(input)
+  return provider === 'runpod'
+    ? runRunpodTask(() => scoreWithRunpod(input))
+    : runOllamaTask(() => scoreWithOllama(input))
 }
 
 // "refine" because the keyword scorer (urgencyScorer.scoreArticle) has already
