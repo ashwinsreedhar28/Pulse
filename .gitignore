@@ -26,3 +26,4 @@ __pycache__/
 pulse.db
 pulse.db-wal
 pulse.db-shm
+bench/.env
