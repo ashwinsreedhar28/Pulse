@@ -280,7 +280,9 @@ export function runRunpodTask<T>(fn: () => Promise<T>): Promise<T> {
 const RUNPOD_PROMPT_SUFFIX = ' Keep reason to one sentence under 20 words.'
 
 // The OpenAI route has no equivalent of Ollama's format:'json', so tolerate a
-// fenced block or a sentence of preamble around the object.
+// fenced block or a sentence of preamble around the object. This matters in
+// practice: qwen3-32b-awq wraps its answer in ```json fences on short
+// prompts (bench, 2026-09-23); slicing first '{' to last '}' handles it.
 function extractJsonObject(raw: string): string | null {
   const trimmed = raw.trim()
   const start = trimmed.indexOf('{')
