@@ -21,6 +21,20 @@ direction / betweenness / PageRank / cross-sector rankings, backed by
 graph library); research search widened to OpenAlex + arXiv behind its first
 paint, with per-host pacing; and the `market_bars` daily-frequency fix.
 
+Since then (2026-09-23): **Runpod Serverless is a third AI backend, for urgency
+scoring only.** [runpodService.ts](src/main/services/runpodService.ts) speaks
+worker-vllm's OpenAI route; `aiClient.refineArticleScore` picks Runpod or
+Ollama per the `scoringProvider` preference (`auto` = Runpod when
+`RUNPOD_API_KEY` + `RUNPOD_ENDPOINT_ID` are set) and falls back to the other on
+null. Cold starts never block a poll: `/health` with zero workers queues a
+warmup job on `/run` and returns null; a 20 s timeout does the same. Reason
+strings now read `AI(runpod):` / `AI(ollama):`. The benchmark lives in `bench/`
+(untracked on purpose, separate from app commits): `coldstart.py`,
+`quality.py`, `REPORT.md`, `friction_log.md`. Two facts the bench surfaced:
+the real finance scoring prompt is ~730-860 tokens (75-ticker list), not the
+140 the first cold-start runs assumed, and the Ollama scoring path had never
+written a single result in the live corpus (see BUGS.md).
+
 **Read `trading/PHASE_A1_RESULT.md` with the market_bars caveat in mind** — its
 5-day excess returns were computed on bars that were monthly or quarterly for
 most symbols, so the MARGINAL verdict needs re-deriving once the corrected
@@ -62,7 +76,7 @@ copy of the news corpus. RSS cannot be backfilled. Do not "tidy" this up.
 **Services** ([src/main/services/](src/main/services/)) — grouped:
 - *Ingest/scoring:* [feedPoller.ts](src/main/services/feedPoller.ts), [rssParser.ts](src/main/services/rssParser.ts), [urgencyScorer.ts](src/main/services/urgencyScorer.ts) + [src/main/data/keywordDictionaries.ts](src/main/data/keywordDictionaries.ts)
 - *Reading:* [readerService.ts](src/main/services/readerService.ts), [adblockerService.ts](src/main/services/adblockerService.ts)
-- *AI:* [aiClient.ts](src/main/services/aiClient.ts) routes between providers by the `aiProvider` preference — **always go through it for new AI calls**, not directly to a provider. [claudeService.ts](src/main/services/claudeService.ts) (Anthropic; `chainGen` = Sonnet, `classifier` = Haiku), [ollamaService.ts](src/main/services/ollamaService.ts) (local; bounded concurrency 2, 60s health cache, `mistral:7b` default, override via `PULSE_OLLAMA_MODEL` / `PULSE_OLLAMA_URL`). Calling a provider directly is how `tickerSummaryService` ended up writing 150 rows and zero summaries.
+- *AI:* [aiClient.ts](src/main/services/aiClient.ts) routes between providers by the `aiProvider` preference — **always go through it for new AI calls**, not directly to a provider. [claudeService.ts](src/main/services/claudeService.ts) (Anthropic; `chainGen` = Sonnet, `classifier` = Haiku), [ollamaService.ts](src/main/services/ollamaService.ts) (local; bounded concurrency 2, 60s health cache, `mistral:7b` default, override via `PULSE_OLLAMA_MODEL` / `PULSE_OLLAMA_URL`), [runpodService.ts](src/main/services/runpodService.ts) (urgency scoring only; own 8-wide queue; env `RUNPOD_API_KEY`, `RUNPOD_ENDPOINT_ID`, `PULSE_RUNPOD_MODEL`; `PULSE_SCORING_PROVIDER` overrides the preference). Claude never scores articles. Calling a provider directly is how `tickerSummaryService` ended up writing 150 rows and zero summaries.
 - *Finance:* [stooqService.ts](src/main/services/stooqService.ts), [yahooFinanceService.ts](src/main/services/yahooFinanceService.ts) (needs crumb+cookie handshake), [stocksScheduler.ts](src/main/services/stocksScheduler.ts) (3 cadences: active/off-hours/weekend), [tickerSummaryService.ts](src/main/services/tickerSummaryService.ts), [companyProfileService.ts](src/main/services/companyProfileService.ts), [discoveryService.ts](src/main/services/discoveryService.ts)
 - *News extras:* [smartLookupService.ts](src/main/services/smartLookupService.ts) (Wikipedia → Ollama fallback, 30d cache), [feedFinderService.ts](src/main/services/feedFinderService.ts) (powers Hyperintelligence), [notificationManager.ts](src/main/services/notificationManager.ts)
 - *Sports:* [sportsService.ts](src/main/services/sportsService.ts) (ESPN site API, 9 leagues), [sportsAlertsService.ts](src/main/services/sportsAlertsService.ts)
@@ -80,7 +94,7 @@ npm run build          # production build into out/
 npm run package        # build + electron-builder — see Stage 13 gaps above
 npm run rebuild        # electron-rebuild, run after bumping Electron major
 npm run lint           # tsc --noEmit
-npm test               # vitest run — 81 tests
+npm test               # vitest run — 106 tests
 npm run test:watch     # vitest watch
 ```
 
