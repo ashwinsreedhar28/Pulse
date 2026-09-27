@@ -1,0 +1,211 @@
+Wed Sep 23 2026 13:41:40 GMT-0400 (Eastern Daylight Time) 2026-09-23 17:41:40,490 INFO httpx: HTTP Request: GET https://huggingface.co/api/agent-harnesses "HTTP/1.1 200 OK"
+Wed Sep 23 2026 13:41:40 GMT-0400 (Eastern Daylight Time) 2026-09-23 17:41:40,565 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/qwen/qwen3-8b/revision/b968826d9c46dd6066d109eabc6255188de91218 "HTTP/1.1 307 Temporary Redirect"
+Wed Sep 23 2026 13:41:40 GMT-0400 (Eastern Daylight Time) 2026-09-23 17:41:40,657 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen3-8B/revision/b968826d9c46dd6066d109eabc6255188de91218 "HTTP/1.1 200 OK"
+Wed Sep 23 2026 13:41:40 GMT-0400 (Eastern Daylight Time) 2026-09-23 17:41:40,659 INFO root: Model pre-flight: qwen/qwen3-8b@b968826d9c46dd6066d109eabc6255188de91218 is fetchable
+Wed Sep 23 2026 13:41:40 GMT-0400 (Eastern Daylight Time) 2026-09-23 17:41:40,660 INFO root: Starting vLLM: vllm serve --host 127.0.0.1 --port 8000 --block-size 16 --no-disable-custom-all-reduce --no-disable-sliding-window --distributed-executor-backend mp --dtype auto --no-enable-auto-tool-choice --enable-chunked-prefill --no-enable-expert-parallel --no-enable-log-requests --no-enable-lora --no-enable-prefix-caching --no-enforce-eager --no-fully-sharded-loras --gpu-memory-utilization 0.95 --kv-cache-dtype auto --load-format auto --lora-dtype auto --max-cpu-loras 0 --max-logprobs 20 --max-lora-rank 16 --max-loras 1 --max-model-len 4096 --max-num-seqs 256 --max-parallel-loading-workers 1 --pipeline-parallel-size 1 --quantization None --no-ray-workers-use-nsight --seed 0 --no-skip-tokenizer-init --tensor-parallel-size 1 --tokenizer-mode auto --no-trust-remote-code --model qwen/qwen3-8b --revision b968826d9c46dd6066d109eabc6255188de91218
+Wed Sep 23 2026 13:41:51 GMT-0400 (Eastern Daylight Time) INFO 09-23 17:41:51 [import_utils.py:478] DeepEP v2 requires NCCL >= 2.30.4 but found 2.29.7. deepep_v2 backend will not be available.
+Wed Sep 23 2026 13:41:55 GMT-0400 (Eastern Daylight Time) INFO 09-23 17:41:55 [__init__.py:109] Registered model loader `<class 'vllm_bnb_plugin.bitsandbytes_loader.BitsAndBytesModelLoader'>` with load format `bitsandbytes`
+Wed Sep 23 2026 13:41:55 GMT-0400 (Eastern Daylight Time) WARNING 09-23 17:41:55 [argparse_utils.py:257] With `vllm serve`, you should provide the model as a positional argument or in a config file instead of via the `--model` option. The `--model` option will be removed in a future version.
+Wed Sep 23 2026 13:41:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:41:55 [api_utils.py:333]
+Wed Sep 23 2026 13:41:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:41:55 [api_utils.py:333]        █     █     █▄   ▄█
+Wed Sep 23 2026 13:41:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:41:55 [api_utils.py:333]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.28.0
+Wed Sep 23 2026 13:41:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:41:55 [api_utils.py:333]   █▄█▀ █     █     █     █  model   qwen/qwen3-8b
+Wed Sep 23 2026 13:41:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:41:55 [api_utils.py:333]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+Wed Sep 23 2026 13:41:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:41:55 [api_utils.py:333]
+Wed Sep 23 2026 13:41:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:41:55 [api_utils.py:272] non-default args: {'model_tag': 'qwen/qwen3-8b', 'host': '127.0.0.1', 'model': 'qwen/qwen3-8b', 'revision': 'b968826d9c46dd6066d109eabc6255188de91218', 'max_model_len': 4096, 'distributed_executor_backend': 'mp', 'max_parallel_loading_workers': 1, 'block_size': 16, 'gpu_memory_utilization': 0.95, 'enable_prefix_caching': False, 'enable_lora': False, 'max_cpu_loras': 0, 'max_num_seqs': 256, 'enable_chunked_prefill': True}
+Wed Sep 23 2026 13:41:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Wed Sep 23 2026 13:42:05 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:42:05 [model.py:672] Resolved architecture: Qwen3ForCausalLM
+Wed Sep 23 2026 13:42:05 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:42:05 [model.py:1965] Using max model len 4096
+Wed Sep 23 2026 13:42:05 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) WARNING 09-23 17:42:05 [parallel.py:959] max_parallel_loading_workers is currently not supported and will be ignored.
+Wed Sep 23 2026 13:42:05 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:42:05 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+Wed Sep 23 2026 13:42:17 GMT-0400 (Eastern Daylight Time) (EngineCore pid=510) INFO 09-23 17:42:17 [import_utils.py:478] DeepEP v2 requires NCCL >= 2.30.4 but found 2.29.7. deepep_v2 backend will not be available.
+Wed Sep 23 2026 13:42:18 GMT-0400 (Eastern Daylight Time) (EngineCore pid=510) INFO 09-23 17:42:18 [__init__.py:109] Registered model loader `<class 'vllm_bnb_plugin.bitsandbytes_loader.BitsAndBytesModelLoader'>` with load format `bitsandbytes`
+Wed Sep 23 2026 13:42:18 GMT-0400 (Eastern Daylight Time) (EngineCore pid=510) INFO 09-23 17:42:18 [core.py:122] Initializing a V1 LLM engine (v0.28.0) with config: model='qwen/qwen3-8b', speculative_config=None, tokenizer='qwen/qwen3-8b', skip_tokenizer_init=False, tokenizer_mode=auto, revision=b968826d9c46dd6066d109eabc6255188de91218, tokenizer_revision=b968826d9c46dd6066d109eabc6255188de91218, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=4096, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=None, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=qwen/qwen3-8b, enable_prefix_caching=False, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::linear_attention', 'vllm::qwen_gdn_attention_core', 'vllm::qwen_gdn_attention_core_fused_norm_packed', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::hpc_rope_norm_forward', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [2048], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': False, 'fuse_act_quant': False, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 512, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=True, enable_bf16x3_router_gemm=False, moe_backend='auto', linear_backend='auto')
+Wed Sep 23 2026 13:42:18 GMT-0400 (Eastern Daylight Time) (EngineCore pid=510) INFO 09-23 17:42:18 [multiproc_executor.py:150] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=127.0.0.1, mq_connect_ip=172.30.0.2 (local), world_size=1, local_world_size=1
+Wed Sep 23 2026 13:42:24 GMT-0400 (Eastern Daylight Time) INFO 09-23 17:42:24 [import_utils.py:478] DeepEP v2 requires NCCL >= 2.30.4 but found 2.29.7. deepep_v2 backend will not be available.
+Wed Sep 23 2026 13:42:25 GMT-0400 (Eastern Daylight Time) INFO 09-23 17:42:25 [__init__.py:109] Registered model loader `<class 'vllm_bnb_plugin.bitsandbytes_loader.BitsAndBytesModelLoader'>` with load format `bitsandbytes`
+Wed Sep 23 2026 13:42:26 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:26 [parallel_state.py:1638] world_size=1 rank=0 local_rank=0 distributed_init_method=file:///tmp/vllm_dist_6e0f273e6a8a4452b807d9f7e612db0d backend=nccl
+Wed Sep 23 2026 13:42:26 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:26 [parallel_state.py:1982] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
+Wed Sep 23 2026 13:42:26 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:26 [gpu_worker.py:396] Using V2 Model Runner
+Wed Sep 23 2026 13:42:27 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:27 [model_runner.py:358] Loading model from scratch...
+Wed Sep 23 2026 13:42:27 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:27 [cuda.py:486] Using FLASH_ATTN attention backend out of potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION'].
+Wed Sep 23 2026 13:42:27 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:27 [flash_attn.py:866] Using FlashAttention version 2
+Wed Sep 23 2026 13:42:56 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:56 [weight_utils.py:521] Time spent downloading weights for qwen/qwen3-8b: 28.414765 seconds
+Wed Sep 23 2026 13:42:57 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:57 [weight_utils.py:858] Filesystem type for checkpoints: OVERLAY. Checkpoint size: 15.26 GiB. Available RAM: 24.15 GiB.
+Wed Sep 23 2026 13:42:57 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:57 [weight_utils.py:881] Auto-prefetch is disabled because the filesystem (OVERLAY) is not a recognized network FS (NFS/Lustre). If you want to force prefetching, start vLLM with --safetensors-load-strategy=prefetch.
+Wed Sep 23 2026 13:42:57 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 
+Wed Sep 23 2026 13:42:57 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:   0% Completed | 0/5 [00:00<?, ?it/s]
+Wed Sep 23 2026 13:42:57 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 
+Wed Sep 23 2026 13:42:57 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:  20% Completed | 1/5 [00:00<00:00,  4.25it/s]
+Wed Sep 23 2026 13:42:57 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 
+Wed Sep 23 2026 13:42:57 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:  40% Completed | 2/5 [00:00<00:00,  3.42it/s]
+Wed Sep 23 2026 13:42:57 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 
+Wed Sep 23 2026 13:42:57 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:  60% Completed | 3/5 [00:00<00:00,  3.18it/s]
+Wed Sep 23 2026 13:42:58 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 
+Wed Sep 23 2026 13:42:58 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:  80% Completed | 4/5 [00:01<00:00,  3.40it/s]
+Wed Sep 23 2026 13:42:58 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 
+Wed Sep 23 2026 13:42:58 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:01<00:00,  4.20it/s]
+Wed Sep 23 2026 13:42:58 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 
+Wed Sep 23 2026 13:42:58 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:01<00:00,  3.81it/s]
+Wed Sep 23 2026 13:42:58 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 
+Wed Sep 23 2026 13:42:58 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:58 [default_loader.py:430] Loading weights took 1.33 seconds
+Wed Sep 23 2026 13:42:59 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:59 [model_runner.py:380] Model loading took 15.27 GiB memory and 32.098277 seconds
+Wed Sep 23 2026 13:42:59 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:42:59 [topk_topp_sampler.py:62] Using FlashInfer for top-p & top-k sampling.
+Wed Sep 23 2026 13:42:59 GMT-0400 (Eastern Daylight Time) (EngineCore pid=510) INFO 09-23 17:42:59 [torch_utils.py:262] Reducing Torch threads from 128 to 1 for serving. Set OMP_NUM_THREADS in the external environment to override.
+Wed Sep 23 2026 13:43:05 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:43:05 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/65adab8d38/rank_0_0/backbone for vLLM's torch.compile
+Wed Sep 23 2026 13:43:05 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:43:05 [backends.py:1155] Dynamo bytecode transform time: 5.68 s
+Wed Sep 23 2026 13:43:07 GMT-0400 (Eastern Daylight Time) (Worker pid=840) [rank0]:W0923 17:43:07.312000 840 torch/_inductor/utils.py:1953] Not enough SMs to use max_autotune_gemm mode
+Wed Sep 23 2026 13:43:20 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:43:20 [backends.py:393] Compiling a graph for compile range (1, 2048) takes 14.17 s
+Wed Sep 23 2026 13:43:24 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:43:24 [backends.py:920] collected artifacts: 37 entries, 3 artifacts, 6352542 bytes total
+Wed Sep 23 2026 13:43:24 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:43:24 [decorators.py:708] saved AOT compiled function to /root/.cache/vllm/torch_compile_cache/torch_aot_compile/3f625b15f1e12f0970c0452254aa91e644d71a5c11b9716522c448949017fd8b/rank_0_0/model
+Wed Sep 23 2026 13:43:24 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:43:24 [monitor.py:53] torch.compile took 23.99 s in total
+Wed Sep 23 2026 13:43:24 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:43:24 [monitor.py:81] Initial profiling/warmup run took 0.08 s
+Wed Sep 23 2026 13:43:26 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:43:26 [gpu_worker.py:578] Available KV cache memory: 5.71 GiB
+Wed Sep 23 2026 13:43:26 GMT-0400 (Eastern Daylight Time) (EngineCore pid=510) INFO 09-23 17:43:26 [kv_cache_utils.py:1869] GPU KV cache size: 41,552 tokens, Maximum concurrency for 4,096 tokens per request: 10.14x
+Wed Sep 23 2026 13:43:26 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:43:26 [kernel_warmup.py:260] Using FlashInfer autotune cache file: /root/.cache/vllm/flashinfer_autotune_cache/0.6.16.post3/120f/4cb840c549ac51fff437bc64ef868a2fd3ad1c3998da781480ff08ab84c6c658/autotune_configs.json
+Wed Sep 23 2026 13:43:26 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 2026-09-23 17:43:26,785 - INFO - autotuner.py:829 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+Wed Sep 23 2026 13:43:54 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 2026-09-23 17:43:54,551 - INFO - autotuner.py:852 - flashinfer.jit: [Autotuner]: Autotuning process ends
+Wed Sep 23 2026 13:43:54 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 2026-09-23 17:43:54,560 - INFO - autotuner.py:2269 - flashinfer.jit: [Autotuner]: Saved 0 configs to /root/.cache/vllm/flashinfer_autotune_cache/0.6.16.post3/120f/4cb840c549ac51fff437bc64ef868a2fd3ad1c3998da781480ff08ab84c6c658/autotune_configs.json (0 new, 0 from previous config)
+Wed Sep 23 2026 13:43:55 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 
+Wed Sep 23 2026 13:43:55 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   0%|          | 0/51 [00:00<?, ?it/s]
+Wed Sep 23 2026 13:43:55 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   2%|▏         | 1/51 [00:00<00:14,  3.40it/s]
+Wed Sep 23 2026 13:43:56 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   4%|▍         | 2/51 [00:00<00:13,  3.58it/s]
+Wed Sep 23 2026 13:43:56 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   6%|▌         | 3/51 [00:00<00:13,  3.49it/s]
+Wed Sep 23 2026 13:43:56 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   8%|▊         | 4/51 [00:01<00:12,  3.82it/s]
+Wed Sep 23 2026 13:43:56 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  10%|▉         | 5/51 [00:01<00:11,  4.09it/s]
+Wed Sep 23 2026 13:43:56 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  12%|█▏        | 6/51 [00:01<00:10,  4.31it/s]
+Wed Sep 23 2026 13:43:57 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  14%|█▎        | 7/51 [00:01<00:10,  4.40it/s]
+Wed Sep 23 2026 13:43:57 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  16%|█▌        | 8/51 [00:01<00:09,  4.52it/s]
+Wed Sep 23 2026 13:43:57 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  18%|█▊        | 9/51 [00:02<00:08,  4.71it/s]
+Wed Sep 23 2026 13:43:57 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  20%|█▉        | 10/51 [00:02<00:08,  4.85it/s]
+Wed Sep 23 2026 13:43:57 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  22%|██▏       | 11/51 [00:02<00:07,  5.01it/s]
+Wed Sep 23 2026 13:43:58 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  24%|██▎       | 12/51 [00:02<00:07,  5.13it/s]
+Wed Sep 23 2026 13:43:58 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  25%|██▌       | 13/51 [00:02<00:07,  5.30it/s]
+Wed Sep 23 2026 13:43:58 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  27%|██▋       | 14/51 [00:03<00:06,  5.46it/s]
+Wed Sep 23 2026 13:43:58 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  29%|██▉       | 15/51 [00:03<00:06,  5.57it/s]
+Wed Sep 23 2026 13:44:21 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  31%|███▏      | 16/51 [00:03<00:06,  5.69it/s]
+Wed Sep 23 2026 13:44:21 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  33%|███▎      | 17/51 [00:26<03:59,  7.04s/it]
+Wed Sep 23 2026 13:44:21 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  35%|███▌      | 18/51 [00:26<02:43,  4.96s/it]
+Wed Sep 23 2026 13:44:21 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  37%|███▋      | 19/51 [00:26<01:52,  3.50s/it]
+Wed Sep 23 2026 13:44:22 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  39%|███▉      | 20/51 [00:26<01:17,  2.49s/it]
+Wed Sep 23 2026 13:44:22 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  41%|████      | 21/51 [00:26<00:53,  1.77s/it]
+Wed Sep 23 2026 13:44:22 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  43%|████▎     | 22/51 [00:26<00:36,  1.27s/it]
+Wed Sep 23 2026 13:44:22 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  45%|████▌     | 23/51 [00:27<00:25,  1.08it/s]
+Wed Sep 23 2026 13:44:22 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  47%|████▋     | 24/51 [00:27<00:18,  1.48it/s]
+Wed Sep 23 2026 13:44:22 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  49%|████▉     | 25/51 [00:27<00:13,  1.98it/s]
+Wed Sep 23 2026 13:44:22 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  53%|█████▎    | 27/51 [00:27<00:07,  3.19it/s]
+Wed Sep 23 2026 13:44:22 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  57%|█████▋    | 29/51 [00:27<00:04,  4.50it/s]
+Wed Sep 23 2026 13:44:23 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  61%|██████    | 31/51 [00:27<00:03,  5.76it/s]
+Wed Sep 23 2026 13:44:23 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  65%|██████▍   | 33/51 [00:27<00:02,  6.66it/s]
+Wed Sep 23 2026 13:44:23 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  69%|██████▊   | 35/51 [00:28<00:02,  7.96it/s]
+Wed Sep 23 2026 13:44:23 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  73%|███████▎  | 37/51 [00:28<00:01,  9.10it/s]
+Wed Sep 23 2026 13:44:23 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  76%|███████▋  | 39/51 [00:28<00:01, 10.19it/s]
+Wed Sep 23 2026 13:44:23 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  80%|████████  | 41/51 [00:28<00:00, 10.93it/s]
+Wed Sep 23 2026 13:44:24 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  84%|████████▍ | 43/51 [00:28<00:00, 11.41it/s]
+Wed Sep 23 2026 13:44:24 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  88%|████████▊ | 45/51 [00:28<00:00, 12.21it/s]
+Wed Sep 23 2026 13:44:24 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  92%|█████████▏| 47/51 [00:29<00:00, 12.67it/s]
+Wed Sep 23 2026 13:44:24 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  96%|█████████▌| 49/51 [00:29<00:00, 13.16it/s]
+Wed Sep 23 2026 13:44:24 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE): 100%|██████████| 51/51 [00:29<00:00, 13.27it/s]
+Wed Sep 23 2026 13:44:24 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE): 100%|██████████| 51/51 [00:29<00:00,  1.74it/s]
+Wed Sep 23 2026 13:44:24 GMT-0400 (Eastern Daylight Time) (Worker pid=840) 
+Wed Sep 23 2026 13:44:24 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):   0%|          | 0/35 [00:00<?, ?it/s]
+Wed Sep 23 2026 13:44:24 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):   6%|▌         | 2/35 [00:00<00:03, 10.71it/s]
+Wed Sep 23 2026 13:44:25 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  11%|█▏        | 4/35 [00:00<00:02, 11.17it/s]
+Wed Sep 23 2026 13:44:25 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  17%|█▋        | 6/35 [00:00<00:02, 11.56it/s]
+Wed Sep 23 2026 13:44:25 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  23%|██▎       | 8/35 [00:00<00:02, 11.84it/s]
+Wed Sep 23 2026 13:44:25 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  29%|██▊       | 10/35 [00:00<00:01, 12.79it/s]
+Wed Sep 23 2026 13:44:25 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  34%|███▍      | 12/35 [00:00<00:01, 13.61it/s]
+Wed Sep 23 2026 13:44:25 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  40%|████      | 14/35 [00:01<00:01, 14.37it/s]
+Wed Sep 23 2026 13:44:25 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  46%|████▌     | 16/35 [00:01<00:01, 15.08it/s]
+Wed Sep 23 2026 13:44:25 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  51%|█████▏    | 18/35 [00:01<00:01, 16.30it/s]
+Wed Sep 23 2026 13:44:26 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  57%|█████▋    | 20/35 [00:01<00:00, 17.09it/s]
+Wed Sep 23 2026 13:44:26 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  63%|██████▎   | 22/35 [00:01<00:00, 17.58it/s]
+Wed Sep 23 2026 13:44:26 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  69%|██████▊   | 24/35 [00:01<00:00, 18.15it/s]
+Wed Sep 23 2026 13:44:26 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  74%|███████▍  | 26/35 [00:01<00:00, 18.64it/s]
+Wed Sep 23 2026 13:44:26 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  80%|████████  | 28/35 [00:01<00:00, 18.78it/s]
+Wed Sep 23 2026 13:44:27 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  89%|████████▊ | 31/35 [00:01<00:00, 19.32it/s](EngineCore pid=510) INFO 09-23 17:44:27 [shm_broadcast.py:801] No available shared memory broadcast block found in 60 seconds. This typically happens when some processes are hanging or doing some time-consuming work (e.g. compilation, weight/kv cache quantization).
+Wed Sep 23 2026 13:45:09 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  89%|████████▊ | 31/35 [00:12<00:00, 19.32it/s]
+Wed Sep 23 2026 13:45:09 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  91%|█████████▏| 32/35 [00:45<00:20,  6.84s/it]
+Wed Sep 23 2026 13:45:09 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL): 100%|██████████| 35/35 [00:45<00:00,  4.10s/it]
+Wed Sep 23 2026 13:45:09 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL): 100%|██████████| 35/35 [00:45<00:00,  1.29s/it]
+Wed Sep 23 2026 13:45:09 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:45:09 [model_runner.py:906] Graph capturing finished in 75 secs, took 0.49 GiB
+Wed Sep 23 2026 13:45:09 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:45:09 [gpu_worker.py:804] Free memory on device (23.4/23.62 GiB) on startup. Desired GPU memory utilization is (0.95, 22.44 GiB). Actual usage is 15.58 GiB for consumed memory (weights + non-torch), 1.16 GiB for peak activation, and 0.49 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=5439361127` (5.07 GiB) to fit into requested memory, or `--kv-cache-memory=6471395840` (6.03 GiB) to fully utilize gpu memory. Current kv cache memory in use is 5.71 GiB.
+Wed Sep 23 2026 13:45:12 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:45:12 [jit_monitor.py:85] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+Wed Sep 23 2026 13:45:13 GMT-0400 (Eastern Daylight Time) (Worker pid=840) INFO 09-23 17:45:13 [torch_utils.py:262] Reducing Torch threads from 64 to 1 for serving. Set OMP_NUM_THREADS in the external environment to override.
+Wed Sep 23 2026 13:45:13 GMT-0400 (Eastern Daylight Time) (EngineCore pid=510) INFO 09-23 17:45:13 [core.py:347] init engine (profile, create kv cache, warmup model) took 134.01 s (compilation: 23.99 s)
+Wed Sep 23 2026 13:45:15 GMT-0400 (Eastern Daylight Time) (EngineCore pid=510) INFO 09-23 17:45:15 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+Wed Sep 23 2026 13:45:15 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:15 [api_server.py:653] Supported tasks: ['generate']
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:18 [hf.py:551] Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) WARNING 09-23 17:45:18 [model.py:1713] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 0.6, 'top_k': 20, 'top_p': 0.95}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:18 [api_server.py:657] Starting vLLM server on http://127.0.0.1:8000
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:18 [launcher.py:51] Available routes are:
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:18 [launcher.py:60] Route: /openapi.json, Methods: HEAD, GET
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:18 [launcher.py:60] Route: /docs, Methods: HEAD, GET
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:18 [launcher.py:60] Route: /docs/oauth2-redirect, Methods: HEAD, GET
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:18 [launcher.py:60] Route: /redoc, Methods: HEAD, GET
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:18 [launcher.py:60] Route: /metrics, Methods: GET
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     Started server process [46]
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     Waiting for application startup.
+Wed Sep 23 2026 13:45:18 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     Application startup complete.
+Wed Sep 23 2026 13:45:20 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:53298 - "GET /health HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:20 GMT-0400 (Eastern Daylight Time) 2026-09-23 17:45:20,754 INFO root: vLLM is healthy
+Wed Sep 23 2026 13:45:22 GMT-0400 (Eastern Daylight Time) --- Starting Serverless Worker |  Version 1.12.0 ---
+Wed Sep 23 2026 13:45:22 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Running 7 fitness check(s)...", "level": "INFO"}
+Wed Sep 23 2026 13:45:22 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "GPU binary test passed: 1 GPU(s) healthy (CUDA 13.0)", "level": "INFO"}
+Wed Sep 23 2026 13:45:22 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Memory check passed: 1324.87GB available (of 1511.43GB total)", "level": "INFO"}
+Wed Sep 23 2026 13:45:22 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Disk space check passed: 134.51GB free (89.7% available)", "level": "INFO"}
+Wed Sep 23 2026 13:45:22 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Network connectivity passed: Connected to 8.8.8.8 (1ms)", "level": "INFO"}
+Wed Sep 23 2026 13:45:22 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "CUDA version check passed: 13.0 (minimum: 11.8)", "level": "INFO"}
+Wed Sep 23 2026 13:45:24 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "CUDA initialization passed: 1 device(s) initialized successfully", "level": "INFO"}
+Wed Sep 23 2026 13:45:24 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "GPU compute benchmark passed: Matrix multiply completed in 56ms", "level": "INFO"}
+Wed Sep 23 2026 13:45:24 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "All fitness checks passed. (2011.26ms)", "level": "INFO"}
+Wed Sep 23 2026 13:45:24 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:24 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:27 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:53314 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:27 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-24d9ffa0-d5d7-4459-9d02-26435934fed8-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:27 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-24d9ffa0-d5d7-4459-9d02-26435934fed8-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:45:28 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:28 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:28 [loggers.py:310] Engine 000: Avg prompt throughput: 21.1 tokens/s, Avg generation throughput: 5.6 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.4%, Prefix cache hit rate: 0.0%
+Wed Sep 23 2026 13:45:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:59388 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:30 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-477cb5b7-b115-4811-803b-cb0c7f418e09-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:31 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-477cb5b7-b115-4811-803b-cb0c7f418e09-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:45:31 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:33 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:59392 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:33 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b1ccf197-42b7-4f9f-8f81-d7bac33f2585-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:34 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b1ccf197-42b7-4f9f-8f81-d7bac33f2585-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:45:34 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:36 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:59394 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:36 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a4fda015-27a7-46c6-9b24-473eeafee30a-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:37 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a4fda015-27a7-46c6-9b24-473eeafee30a-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:45:37 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:38 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:38 [loggers.py:310] Engine 000: Avg prompt throughput: 42.0 tokens/s, Avg generation throughput: 21.3 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.4%, Prefix cache hit rate: 0.0%
+Wed Sep 23 2026 13:45:40 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:59408 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:40 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-bdc6f119-c4d2-4070-860c-47d0cb9fe8a5-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:40 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-bdc6f119-c4d2-4070-860c-47d0cb9fe8a5-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:45:40 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:55628 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-21fe6abc-8836-4b13-af16-08bd0e7d541d-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-21fe6abc-8836-4b13-af16-08bd0e7d541d-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:45:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:55634 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ac71c558-aa97-4713-9183-37abb1e903b0-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ac71c558-aa97-4713-9183-37abb1e903b0-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:45:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:48 [loggers.py:310] Engine 000: Avg prompt throughput: 42.0 tokens/s, Avg generation throughput: 20.5 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.5%, Prefix cache hit rate: 0.0%
+Wed Sep 23 2026 13:45:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:55636 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:49 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fa0cf2bb-9a7e-446b-a55a-cc1acc996ede-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:49 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fa0cf2bb-9a7e-446b-a55a-cc1acc996ede-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:45:49 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:53518 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-13b83d39-a9f2-4160-981d-131d8787d630-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-13b83d39-a9f2-4160-981d-131d8787d630-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:45:52 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:53528 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ea934afd-a554-4843-88f3-3eaa6d3c76b2-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ea934afd-a554-4843-88f3-3eaa6d3c76b2-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:45:55 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 13:45:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO:     127.0.0.1:53534 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 13:45:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-3201c00b-b23d-48ad-a3a2-6595c6b52661-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 13:45:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:45:58 [loggers.py:310] Engine 000: Avg prompt throughput: 42.0 tokens/s, Avg generation throughput: 21.1 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+Wed Sep 23 2026 13:45:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-3201c00b-b23d-48ad-a3a2-6595c6b52661-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 13:46:08 GMT-0400 (Eastern Daylight Time) (APIServer pid=46) INFO 09-23 17:46:08 [loggers.py:310] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 0.0 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%

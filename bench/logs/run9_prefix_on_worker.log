@@ -1,0 +1,500 @@
+2026-09-23 16:15:16.210 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:16.312 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:15:16.313 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:16.914 | info | 0srxny843ech7c | Jobs in progress: 1
+2026-09-23 16:15:16.914 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:16.914 | info | 0srxny843ech7c | Jobs in queue: 8
+2026-09-23 16:15:18.340 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:18.340 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44300 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:18.455 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44252 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:18.455 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:18.583 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44272 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:18.583 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44288 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:18.583 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44258 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:18.691 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:18.691 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44278 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:18.691 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:18.691 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44268 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:18.691 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:18.691 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:18.855 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44308 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:18.856 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:18.856 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:18.856 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:18.856 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:18.856 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:18.967 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:18.967 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:18.967 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:18.967 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:18.967 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:18.967 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:18.967 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:19.144 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:19.144 | info | 0srxny843ech7c | Jobs in queue: 1
+2026-09-23 16:15:19.144 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:19.144 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:19.144 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:15:19.144 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:19.518 | info | 0srxny843ech7c | Jobs in progress: 1
+2026-09-23 16:15:19.518 | info | 0srxny843ech7c | Jobs in queue: 7
+2026-09-23 16:15:20.432 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:20.432 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44314 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:20.545 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:20.832 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:20.973 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:20.973 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44338 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:20.974 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44328 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:20.974 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44372 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:20.974 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:21.099 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:21.100 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:21.100 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44330 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:21.100 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44354 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:21.100 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44368 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:21.100 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44356 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:21.211 | info | 0srxny843ech7c | Jobs in queue: 1
+2026-09-23 16:15:21.211 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:21.211 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:21.211 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:21.211 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:21.211 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:21.321 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:21.321 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:21.321 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:21.441 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:21.441 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:21.441 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:21.441 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:21.637 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:21.637 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:21.637 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:21.637 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:21.637 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:15:21.637 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:21.637 | info | 0srxny843ech7c | Jobs in progress: 1
+2026-09-23 16:15:21.637 | info | 0srxny843ech7c | Jobs in queue: 3
+2026-09-23 16:15:22.105 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:22.105 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:44376 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:22.233 | info | 0srxny843ech7c | Jobs in queue: 4
+2026-09-23 16:15:22.233 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:22.234 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:22.505 | info | 0srxny843ech7c | (APIServer pid=52) INFO 09-23 20:15:22 [loggers.py:310] Engine 000: Avg prompt throughput: 1723.6 tokens/s, Avg generation throughput: 76.7 tokens/s, Running: 7 reqs, Waiting: 0 reqs, GPU KV cache usage: 2.2%, Prefix cache hit rate: 0.0%\n
+2026-09-23 16:15:22.812 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:22.812 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:22.812 | info | 0srxny843ech7c | Jobs in queue: 1
+2026-09-23 16:15:23.097 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:23.098 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51302 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:23.221 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51320 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:23.221 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51310 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:23.221 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:23.460 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:23.460 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:23.460 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51358 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:23.568 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:23.568 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:23.568 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:23.568 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:23.568 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51346 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:23.569 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51368 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:23.569 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:23.678 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:23.678 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:23.678 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:23.678 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51334 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:23.678 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:23.786 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:23.786 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51380 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:23.786 | info | 0srxny843ech7c | Jobs in queue: 3
+2026-09-23 16:15:23.925 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:23.925 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:23.925 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:23.925 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:24.039 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:24.040 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:24.040 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:24.040 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:24.175 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:24.175 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:24.429 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:24.429 | info | 0srxny843ech7c | Jobs in queue: 5
+2026-09-23 16:15:25.257 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:25.257 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51386 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:25.366 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51390 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:25.366 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51384 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:25.366 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:25.654 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:25.654 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:25.654 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:25.800 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:25.800 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:25.800 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:25.800 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51398 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:25.800 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:25.800 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:25.800 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51402 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:25.800 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51410 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:25.912 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51414 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:25.912 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51420 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:25.912 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:25.912 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:25.912 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:26.103 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:26.103 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:26.103 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:26.210 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:26.210 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:26.210 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:26.210 | info | 0srxny843ech7c | Jobs in queue: 3
+2026-09-23 16:15:26.211 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:26.211 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:26.211 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:26.661 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:26.661 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:26.661 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:26.661 | info | 0srxny843ech7c | Jobs in queue: 5
+2026-09-23 16:15:27.609 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:27.609 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51448 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:27.732 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51424 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:27.732 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:27.912 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:27.912 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51436 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:27.912 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51498 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:28.016 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:28.016 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51482 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:28.016 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51450 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:28.016 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51462 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:28.016 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:28.122 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:28.122 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:28.122 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:28.122 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:28.122 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:28.122 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51474 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:28.122 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:28.122 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:28.311 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:28.312 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:28.312 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:28.312 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:28.513 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:28.513 | info | 0srxny843ech7c | Jobs in queue: 2
+2026-09-23 16:15:28.513 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:28.513 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:28.513 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:28.513 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:28.513 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:28.513 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:28.513 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:28.835 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:15:28.835 | info | 0srxny843ech7c | Jobs in queue: 6
+2026-09-23 16:15:29.862 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:29.862 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51504 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:29.982 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51506 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:29.982 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:30.132 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:30.132 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51546 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:30.249 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:30.401 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:30.401 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:30.401 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:30.401 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:30.401 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51520 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:30.401 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51532 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:30.401 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51556 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:30.401 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51558 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:30.401 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:30.511 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51508 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:30.512 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:30.512 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:30.512 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:30.512 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:30.642 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:30.642 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:30.642 | info | 0srxny843ech7c | Jobs in queue: 2
+2026-09-23 16:15:30.761 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:30.761 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:30.761 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:30.761 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:30.761 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:30.761 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:30.761 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:31.174 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:31.174 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:31.174 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:15:31.174 | info | 0srxny843ech7c | Jobs in queue: 6
+2026-09-23 16:15:32.074 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:32.074 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51560 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:32.190 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51566 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:32.190 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:32.408 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:32.408 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51576 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:32.527 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:32.527 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:32.527 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51568 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:32.527 | info | 0srxny843ech7c | (APIServer pid=52) INFO 09-23 20:15:32 [loggers.py:310] Engine 000: Avg prompt throughput: 2274.3 tokens/s, Avg generation throughput: 101.6 tokens/s, Running: 4 reqs, Waiting: 0 reqs, GPU KV cache usage: 1.4%, Prefix cache hit rate: 0.0%\n
+2026-09-23 16:15:32.527 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:32.649 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:32.649 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:32.649 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51590 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:32.649 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:32.649 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51574 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:32.774 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51572 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:32.774 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:51578 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:32.774 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:32.774 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:32.880 | info | 0srxny843ech7c | Jobs in queue: 2
+2026-09-23 16:15:32.881 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:32.881 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:32.881 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:32.881 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:32.881 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:33.003 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:33.003 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:33.118 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:33.118 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:33.118 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:33.118 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:33.118 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:33.118 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:33.266 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:15:33.266 | info | 0srxny843ech7c | Jobs in queue: 4
+2026-09-23 16:15:34.063 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:34.063 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40034 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:34.178 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:34.295 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40044 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:34.296 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:34.444 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:34.591 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:34.591 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40046 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:34.591 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40066 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:34.592 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40056 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:34.592 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40070 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:34.592 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:34.898 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:34.899 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:34.899 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:34.899 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:34.899 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:34.899 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:38.802 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:38.802 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:38.802 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:15:38.803 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:38.803 | info | 0srxny843ech7c | Jobs in progress: 1
+2026-09-23 16:15:38.803 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:38.803 | info | 0srxny843ech7c | Jobs in queue: 8
+2026-09-23 16:15:40.242 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:40.242 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40090 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:40.390 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40120 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:40.391 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:40.513 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40078 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:40.513 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40102 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:40.514 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40154 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:40.514 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40132 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:40.514 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:40.514 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40140 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:40.651 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:40.651 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:40.651 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40110 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:40.651 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:40.651 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:40.651 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:40.817 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:40.818 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:40.818 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:40.818 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:40.818 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:40.818 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:40.935 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:40.935 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:40.935 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:40.935 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:40.935 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:40.935 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:40.935 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:15:40.935 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:41.141 | info | 0srxny843ech7c | Jobs in progress: 1
+2026-09-23 16:15:41.141 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:41.141 | info | 0srxny843ech7c | Jobs in queue: 7
+2026-09-23 16:15:41.634 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:41.635 | info | 0srxny843ech7c | Jobs in queue: 1
+2026-09-23 16:15:42.506 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:42.506 | info | 0srxny843ech7c | (APIServer pid=52) INFO 09-23 20:15:42 [loggers.py:310] Engine 000: Avg prompt throughput: 1351.7 tokens/s, Avg generation throughput: 52.8 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 2.8%, Prefix cache hit rate: 0.0%\n
+2026-09-23 16:15:42.630 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40174 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:42.741 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40178 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:42.741 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:42.871 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40164 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:42.871 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40214 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:42.871 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:42.871 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40172 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:42.871 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40188 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:42.871 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40202 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:42.871 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:42.976 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:42930 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:42.976 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:42.976 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:42.976 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:42.976 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:43.146 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:43.349 | info | 0srxny843ech7c | Jobs in queue: 2
+2026-09-23 16:15:43.833 | info | 0srxny843ech7c | Jobs in queue: 6
+2026-09-23 16:15:44.628 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:44.628 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:42936 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:44.739 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:44.920 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:42940 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:44.920 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:45.026 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:45.146 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:45.146 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:42968 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:45.384 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:42952 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:45.509 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:45.813 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:15:46.292 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:46.293 | info | 0srxny843ech7c | Jobs in queue: 2
+2026-09-23 16:15:46.682 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:46.682 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:42990 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:46.791 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:47.073 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:47.199 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:47.311 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:47.579 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:47.744 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:47.872 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:48.386 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:48.386 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:48.513 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:48.921 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:49.116 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:49.116 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:43084 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:49.390 | info | 0srxny843ech7c | Jobs in queue: 1
+2026-09-23 16:15:49.501 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:49.734 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:50.000 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:50.132 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:50.276 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:50.577 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:50.745 | info | 0srxny843ech7c | Jobs in queue: 5
+2026-09-23 16:15:51.221 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:51.221 | info | 0srxny843ech7c | Jobs in queue: 1
+2026-09-23 16:15:51.484 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:51.484 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:43150 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:51.882 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:51.882 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:52.092 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:52.333 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:43178 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:52.562 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:52.703 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:15:52.976 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:53.110 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:15:53.467 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:15:53.591 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:54.048 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:54.048 | info | 0srxny843ech7c | Jobs in queue: 2
+2026-09-23 16:15:54.667 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:54.667 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:35334 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:54.777 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:35364 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:54.777 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:35344 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:54.888 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:35384 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:55.158 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:15:55.368 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:55.611 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:15:55.835 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:15:56.301 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:15:56.301 | info | 0srxny843ech7c | Jobs in queue: 2
+2026-09-23 16:15:56.984 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:15:56.984 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:35412 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:57.091 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:35414 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:57.091 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:57.257 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:57.367 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:35432 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:15:57.526 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:15:57.826 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:16:01.916 | info | 0srxny843ech7c | Jobs in progress: 1
+2026-09-23 16:16:01.916 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:16:01.916 | info | 0srxny843ech7c | Jobs in queue: 8
+2026-09-23 16:16:02.507 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:16:02.507 | info | 0srxny843ech7c | (APIServer pid=52) INFO 09-23 20:16:02 [loggers.py:310] Engine 000: Avg prompt throughput: 1229.6 tokens/s, Avg generation throughput: 51.3 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 2.6%, Prefix cache hit rate: 0.0%\n
+2026-09-23 16:16:03.475 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54540 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:03.591 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54514 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:03.591 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54506 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:03.591 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54520 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:03.591 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54558 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:03.591 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:03.702 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54556 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:03.702 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54566 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:03.702 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:03.702 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:03.702 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:03.702 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54536 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:03.702 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:03.702 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:03.868 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:03.869 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:03.869 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:16:03.978 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:16:03.979 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:16:03.979 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:16:03.979 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:16:03.979 | info | 0srxny843ech7c | Jobs in progress: 5
+2026-09-23 16:16:03.979 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:16:03.979 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:16:03.979 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:16:03.979 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:16:04.224 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:16:04.684 | info | 0srxny843ech7c | Jobs in progress: 6
+2026-09-23 16:16:04.684 | info | 0srxny843ech7c | Jobs in queue: 2
+2026-09-23 16:16:05.834 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:16:05.834 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54602 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:05.947 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54588 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:05.947 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54620 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:05.947 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54636 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:05.947 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54580 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:05.947 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54594 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:06.084 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54652 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:06.324 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:16:06.514 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:16:06.995 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:16:06.995 | info | 0srxny843ech7c | Jobs in queue: 6
+2026-09-23 16:16:08.017 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:16:08.017 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54658 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:08.133 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:08.255 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54662 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:08.255 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:08.412 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:16:08.521 | info | 0srxny843ech7c | Jobs in progress: 7
+2026-09-23 16:16:08.521 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54688 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:08.783 | info | 0srxny843ech7c | Jobs in queue: 2
+2026-09-23 16:16:08.915 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:16:09.283 | info | 0srxny843ech7c | Jobs in progress: 2
+2026-09-23 16:16:09.283 | info | 0srxny843ech7c | Jobs in queue: 6
+2026-09-23 16:16:10.303 | info | 0srxny843ech7c | Jobs in progress: 8
+2026-09-23 16:16:10.303 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54730 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:10.438 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:10.567 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54726 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:10.567 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:10.668 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54736 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:10.783 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54742 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:10.935 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:11.328 | info | 0srxny843ech7c | Jobs in queue: 2
+2026-09-23 16:16:11.328 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:16:11.505 | info | 0srxny843ech7c | Jobs in progress: 3
+2026-09-23 16:16:12.319 | info | 0srxny843ech7c | Jobs in progress: 4
+2026-09-23 16:16:12.319 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54796 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:12.441 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:54782 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:12.442 | info | 0srxny843ech7c | Finished running generator.
+2026-09-23 16:16:12.546 | info | 0srxny843ech7c | (APIServer pid=52) INFO 09-23 20:16:12 [loggers.py:310] Engine 000: Avg prompt throughput: 1968.4 tokens/s, Avg generation throughput: 102.8 tokens/s, Running: 2 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.7%, Prefix cache hit rate: 0.0%\n
+2026-09-23 16:16:12.786 | info | 0srxny843ech7c | (APIServer pid=52) INFO:     127.0.0.1:40904 - "POST /v1/chat/completions HTTP/1.1" 200 OK\n
+2026-09-23 16:16:12.988 | info | 0srxny843ech7c | Finished.
+2026-09-23 16:16:13.094 | info | 0srxny843ech7c | Jobs in progress: 1
+2026-09-23 16:16:22.508 | info | 0srxny843ech7c | (APIServer pid=52) INFO 09-23 20:16:22 [loggers.py:310] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 0.8 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%\n

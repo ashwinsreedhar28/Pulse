@@ -1,0 +1,443 @@
+{
+ "frozen_at": "2026-09-23T19:48:26+00:00",
+ "db": "/Users/ashwinsreedhar/Library/Application Support/pulse/pulse.db",
+ "pulse_commit": "193f046",
+ "max_tokens": 128,
+ "temperature": 0,
+ "prompt_lists": {
+  "tickers": [
+   "AAOI (Applied Optoelectronics)",
+   "ACLS (Axcelis Technologies)",
+   "ADEA (Adeia)",
+   "AEIS (Advanced Energy Industries)",
+   "ALAB (Astera Labs)",
+   "AMAT (Applied Materials)",
+   "AMD (Advanced Micro Devices)",
+   "AMKR (Amkor Technology)",
+   "ANET (Arista Networks)",
+   "APH (Amphenol)",
+   "ARM (Arm Holdings)",
+   "ASML (ASML Holding NV)",
+   "ASX (ASE Technology Holding)",
+   "ATEYY (Advantest Corporation)",
+   "AVGO (Broadcom)",
+   "CAMT (Camtek Ltd.)",
+   "CDNS (Cadence Design Systems)",
+   "CE (Celanese)",
+   "CIEN (Ciena)",
+   "CLS (Celestica)",
+   "COHR (Coherent)",
+   "COHU (Cohu Inc.)",
+   "CRDO (Credo Technology Group)",
+   "CRUS (Cirrus Logic Inc.)",
+   "CRWV (CoreWeave)",
+   "CSCO (Cisco Systems)",
+   "ENTG (Entegris)",
+   "ETN (Eaton Corporation)",
+   "FCX (Freeport-McMoRan)",
+   "FLEX (Flex Ltd)",
+   "FN (Fabrinet)",
+   "FORM (FormFactor)",
+   "GFS (GlobalFoundries)",
+   "GLW (Corning)",
+   "INTC (Intel)",
+   "JBL (Jabil)",
+   "JCI (Johnson Controls)",
+   "KLAC (KLA Corporation)",
+   "KLIC (Kulicke & Soffa Industries)",
+   "LIN (Linde plc)",
+   "LITE (Lumentum)",
+   "LRCX (Lam Research)",
+   "LSCC (Lattice Semiconductor)",
+   "MCHP (Microchip Technology)",
+   "MKSI (MKS Instruments)",
+   "MPWR (Monolithic Power Systems)",
+   "MRVL (Marvell Technology)",
+   "MTSI (MACOM Technology Solutions)",
+   "MU (Micron Technology)",
+   "NVDA (NVIDIA)",
+   "NXPI (NXP Semiconductors)",
+   "ON (onsemi)",
+   "ONTO (Onto Innovation)",
+   "PH (Parker Hannifin)",
+   "QCOM (Qualcomm)",
+   "QRVO (Qorvo)",
+   "RKLB (Rocket Lab Corporation)",
+   "RMBS (Rambus)",
+   "SIMO (Silicon Motion Technology)",
+   "SMCI (Super Micro Computer)",
+   "SNDK (Sandisk Corporation)",
+   "SNPS (Synopsys)",
+   "SPCX (Space Exploration Technologies Corp.)",
+   "STM (STMicroelectronics)",
+   "STX (Seagate Technology)",
+   "SWKS (Skyworks Solutions)",
+   "TEL (TE Connectivity)",
+   "TER (Teradyne)",
+   "TSM (Taiwan Semiconductor Manufacturing)",
+   "UCTT (Ultra Clean Holdings)",
+   "UMC (United Microelectronics)",
+   "VICR (Vicor Corporation)",
+   "VRT (Vertiv)",
+   "WDC (Western Digital)",
+   "WOLF (Wolfspeed)"
+  ],
+  "interests": []
+ },
+ "system_prompt": {
+  "finance": "You are a financial news urgency scorer. Given a news headline and summary, score its urgency from 1 to 5 for an investor holding the following stocks: AAOI (Applied Optoelectronics), ACLS (Axcelis Technologies), ADEA (Adeia), AEIS (Advanced Energy Industries), ALAB (Astera Labs), AMAT (Applied Materials), AMD (Advanced Micro Devices), AMKR (Amkor Technology), ANET (Arista Networks), APH (Amphenol), ARM (Arm Holdings), ASML (ASML Holding NV), ASX (ASE Technology Holding), ATEYY (Advantest Corporation), AVGO (Broadcom), CAMT (Camtek Ltd.), CDNS (Cadence Design Systems), CE (Celanese), CIEN (Ciena), CLS (Celestica), COHR (Coherent), COHU (Cohu Inc.), CRDO (Credo Technology Group), CRUS (Cirrus Logic Inc.), CRWV (CoreWeave), CSCO (Cisco Systems), ENTG (Entegris), ETN (Eaton Corporation), FCX (Freeport-McMoRan), FLEX (Flex Ltd), FN (Fabrinet), FORM (FormFactor), GFS (GlobalFoundries), GLW (Corning), INTC (Intel), JBL (Jabil), JCI (Johnson Controls), KLAC (KLA Corporation), KLIC (Kulicke & Soffa Industries), LIN (Linde plc), LITE (Lumentum), LRCX (Lam Research), LSCC (Lattice Semiconductor), MCHP (Microchip Technology), MKSI (MKS Instruments), MPWR (Monolithic Power Systems), MRVL (Marvell Technology), MTSI (MACOM Technology Solutions), MU (Micron Technology), NVDA (NVIDIA), NXPI (NXP Semiconductors), ON (onsemi), ONTO (Onto Innovation), PH (Parker Hannifin), QCOM (Qualcomm), QRVO (Qorvo), RKLB (Rocket Lab Corporation), RMBS (Rambus), SIMO (Silicon Motion Technology), SMCI (Super Micro Computer), SNDK (Sandisk Corporation), SNPS (Synopsys), SPCX (Space Exploration Technologies Corp.), STM (STMicroelectronics), STX (Seagate Technology), SWKS (Skyworks Solutions), TEL (TE Connectivity), TER (Teradyne), TSM (Taiwan Semiconductor Manufacturing), UCTT (Ultra Clean Holdings), UMC (United Microelectronics), VICR (Vicor Corporation), VRT (Vertiv), WDC (Western Digital), WOLF (Wolfspeed). Consider: Does this news directly impact any of these holdings? Could it affect their supply chain, customers, or competitors? Is this breaking news or routine coverage? Respond in JSON only: {\"score\": N, \"reason\": \"brief explanation\"} Keep reason to one sentence under 20 words.",
+  "general": "You are a news urgency scorer. Given a news headline and summary, score its urgency from 1 to 5 for a person interested in the following topics and locations: none listed. Consider: Is this breaking or developing news? Does it directly affect one of these areas? Is this a significant event or routine coverage? Would someone want to know about this immediately? Respond in JSON only: {\"score\": N, \"reason\": \"brief explanation\"} Keep reason to one sentence under 20 words."
+ },
+ "articles": [
+  {
+   "id": 11714037,
+   "title": "STMicroelectronics Sees AI Data-Center Revenue Surging Past $2 Billion in 2027",
+   "summary": "Industrial Chips Are in Rally Mode—5 Ways to PlaySTMicroelectronics (NYSE:STM) CFO Lorenzo Grandi said the chipmaker continues to see strong bookings, lean inventory and improving demand visibility across its end markets, with particular strength in artificial intelligence infras",
+   "domain": "finance",
+   "publishedAt": 1789264918000
+  },
+  {
+   "id": 10661222,
+   "title": "Nvidia's unreleased RTX 3070 Ti 16GB comes to life thanks to a modder's crazy GDDR6 swap — Frankenstein card combines RTX 3070 PCB and new VRAM with RTX 3070 Ti GPU",
+   "summary": "A modder has recreated the never-released RTX 3070 Ti with 16GB of VRAM using GDDR6 chips instead of the GDDR6X the retail 3070 Ti actually shipped with.",
+   "domain": "finance",
+   "publishedAt": 1788951600000
+  },
+  {
+   "id": 11711957,
+   "title": "Amphenol (APH) is an Incredible Growth Stock: 3 Reasons Why",
+   "summary": "Amphenol (APH) is well positioned to outperform the market, as it exhibits above-average growth in financials.",
+   "domain": "finance",
+   "publishedAt": 1789145101000
+  },
+  {
+   "id": 9854422,
+   "title": "Here's Why Credo Technology Group Holding Ltd. (CRDO) is a Strong Growth Stock",
+   "summary": "Wondering how to pick strong, market-beating stocks for your investment portfolio? Look no further than the Zacks Style Scores.",
+   "domain": "finance",
+   "publishedAt": 1788875103000
+  },
+  {
+   "id": 11712604,
+   "title": "Nasdaq 100 Movers: TER, HONIV",
+   "summary": "In early trading on Monday, shares of Honeywell International topped the list of the day's best performing components of the Nasdaq 100 index, trading up 7.5%. Year to date, Honeywell International registers a 42.2% gain. And the worst performing Nasdaq 100 component thus far",
+   "domain": "finance",
+   "publishedAt": 1789397065000
+  },
+  {
+   "id": 9710164,
+   "title": "Why Jabil (JBL) Dipped More Than Broader Market Today",
+   "summary": "Jabil (JBL) reached $304.89 at the closing of the latest trading day, reflecting a -2.66% change compared to its last close.",
+   "domain": "finance",
+   "publishedAt": 1787609702000
+  },
+  {
+   "id": 9709124,
+   "title": "Marvell Raised Its Outlook but Fell as Google Chip Revenue Stayed Distant. Has the AI Payoff Been Priced In? (Ready for review)",
+   "summary": "Marvell raised its annual forecasts on August 27, yet its shares fell as investors focused on the timing of revenue from a custom AI-chip relationship with Google. Management said material Google revenue was not expected until fiscal 2029, even though its outlook already included some contribution and the longer opportunity could be substantial. Marvell Technology, […]",
+   "domain": "finance",
+   "publishedAt": 1788562736000
+  },
+  {
+   "id": 11116991,
+   "title": "Dow Jones Futures: Oil Prices Keep Rising But Market Hasn't Broken Yet. Inflation Data Due.",
+   "summary": "Oil prices and Treasury yields weighed on the indexes, But Meta, AMD were winners. Apple unveiled its foldable iPhone. Inflation data looms.",
+   "domain": "finance",
+   "publishedAt": 1788993569000
+  },
+  {
+   "id": 10720478,
+   "title": "Here's How Much You'd Have If You Invested $1000 in Freeport-McMoRan a Decade Ago",
+   "summary": "Why investing for the long run, especially if you buy certain popular stocks, could reap huge rewards.",
+   "domain": "finance",
+   "publishedAt": 1788957002000
+  },
+  {
+   "id": 9708731,
+   "title": "Why Axcelis Technologies (ACLS) Is Back On Investor Radars",
+   "summary": "Why Axcelis Technologies Is Back On Investor Radars Axcelis Technologies (ACLS) recently announced plans to join upcoming investor conferences, including the Citi 2026 Global TMT Conference and the B. Riley Securities Consumer & TMT Conference, which has put fresh attention on the stock. The recent conference announcements come after a mixed price pattern for Axcelis Technologies, with the share price up 28.62% year to date but down 31.57% over 90 days. The 1-year total shareholder return of...",
+   "domain": "finance",
+   "publishedAt": 1788455210000
+  },
+  {
+   "id": 9710418,
+   "title": "China says it will pump $54 billion into banks and insurers — but their stocks still fell",
+   "summary": "With a bigger capital cushion, financial institutions may also be asked to do more to mobilize resources in capital markets, analysts say.",
+   "domain": "finance",
+   "publishedAt": 1788773214000
+  },
+  {
+   "id": 11678677,
+   "title": "Thinking of Buying the Anthropic IPO? More Than a Decade of Tech-Based IPO History May Change Your Mind.",
+   "summary": "The developer of the Claude large language model may unseat SpaceX as Wall Street’s largest-ever initial public offering (IPO).",
+   "domain": "finance",
+   "publishedAt": 1789039561000
+  },
+  {
+   "id": 9711065,
+   "title": "Silicon Motion (SIMO) Just Flashed Golden Cross Signal: Do You Buy?",
+   "summary": "Good things could be on the horizon when a stock surpasses the 20-day simple moving average. How should investors react?",
+   "domain": "finance",
+   "publishedAt": 1787837702000
+  },
+  {
+   "id": 9710025,
+   "title": "Lattice Semiconductor Sees AMI Combination Powering $3B AI Data Center Ambition",
+   "summary": "Lattice Semiconductor (NASDAQ:LSCC) CEO Ford Tamer and AMI Business Unit leader Sanjoy Maity outlined how the companies’ combination is intended to address growing management, control and security demands across AI data centers and physical AI systems. Speaking at The Six Five Summit 2026, Tamer de",
+   "domain": "finance",
+   "publishedAt": 1787968888000
+  },
+  {
+   "id": 11716232,
+   "title": "Broadcom Drops Over 4% as $21.7 Billion AI Forecast Meets Slowdown Fears",
+   "summary": "Broadcom expects another surge in AI-chip sales, making Monday's selloff a direct test of infrastructure-spending confidence.",
+   "domain": "finance",
+   "publishedAt": 1789419615000
+  },
+  {
+   "id": 9710672,
+   "title": "Eaton to participate in the Morgan Stanley 14th Annual Laguna Conference on September 16",
+   "summary": "DUBLIN, September 03, 2026--Intelligent power management company Eaton (NYSE:ETN) today announced that its Chief Executive Officer, Paulo Ruiz, will participate in Morgan Stanley’s 14th Annual Laguna Conference on September 16, 2026, at 1:50 p.m. Pacific time. Mr. Ruiz will speak to investors in a fireside chat about the company’s growth strategy, portfolio transformation and focused execution amid strong demand across data centers, utilities, aerospace and other key markets.",
+   "domain": "finance",
+   "publishedAt": 1788432300000
+  },
+  {
+   "id": 9709632,
+   "title": "IBM Just Opened Its Mainframes to Arm—Is the Market Missing the Shift?",
+   "summary": "IBM is integrating ARM Holdings' architecture into its mainframes, enabling native dual-execution without emulation, as shares trade near $231 amid a 22% year-to-date decline.",
+   "domain": "finance",
+   "publishedAt": 1787670000000
+  },
+  {
+   "id": 11086438,
+   "title": "Petco (WOOF) Q2 2026 Earnings Call Transcript",
+   "summary": "@media (max-width: 768px) { .image-container { width: 100% !important; float: none !important; margin: 0 0 1rem 0 !important; } } Image source: The Mo",
+   "domain": "finance",
+   "publishedAt": 1788989349000
+  },
+  {
+   "id": 11680618,
+   "title": "Macy's Q2 26 Earnings Conference Call At 8:00 AM ET",
+   "summary": "(RTTNews) - Macy's Inc. (M) will host a conference call at 8:00 AM ET on September 10, 2026, to discuss Q2 26 earnings results.",
+   "domain": "finance",
+   "publishedAt": 1789038220000
+  },
+  {
+   "id": 9933807,
+   "title": "Broadcom vs. Marvell: Which Custom AI Chip Stock Is the Better Buy?",
+   "summary": "Investors looking to capitalize on the custom AI chip market need to take a closer look at these two companies dominating this space.",
+   "domain": "finance",
+   "publishedAt": 1788892260000
+  },
+  {
+   "id": 9744321,
+   "title": "The Market May Be Underestimating This AI Chip-Design Stock",
+   "summary": "Synopsys just posted explosive revenue growth that dwarfs its closest EDA rival, yet the market prices it at a fraction of that rival's multiple. Something in that gap tells a story most investors are missing.",
+   "domain": "finance",
+   "publishedAt": 1788271251000
+  },
+  {
+   "id": 9709100,
+   "title": "Monolithic Power Revenue Jumped 48%. Can AI Power Chips Keep the Momentum Going?",
+   "summary": "On July 30, Monolithic Power Systems reported second-quarter revenue of $980.6 million, up 47.6% from a year earlier and 21.9% sequentially. The pace puts its AI opportunity into reported results. Monolithic Power Systems, Inc. (NASDAQ:MPWR) does not sell AI accelerators. It supplies the power-management components that help those expensive processors operate efficiently, making the company […]",
+   "domain": "finance",
+   "publishedAt": 1788603720000
+  },
+  {
+   "id": 11716347,
+   "title": "AI-Related Debt Sales Are Near $500 Billion. Meta and CoreWeave Show Why the Same Boom Creates Two Different Risks",
+   "summary": "AI infrastructure is becoming a credit story as much as a technology story. Reuters Breakingviews reported that AI-related debt issuance had reached nearly $500 billion by early August, about one-fifth of higher-rated U.S. issuance this year versus roughly 1% in 2024. Meta Platforms, Inc. (NASDAQ:META) and CoreWeave, Inc. (NASDAQ:CRWV) sit at opposite ends of that […]",
+   "domain": "finance",
+   "publishedAt": 1789412563000
+  },
+  {
+   "id": 11712187,
+   "title": "Arista's Cash Flow Momentum Builds: How Sustainable is it?",
+   "summary": "ANET's cash flow is surging on strong growth and upfront customer payments, but deferred revenue and inventory swings could add volatility.",
+   "domain": "finance",
+   "publishedAt": 1789389600000
+  },
+  {
+   "id": 9709747,
+   "title": "KLA Corporation (KLAC): 3 Reasons We Love This Stock",
+   "summary": "KLA Corporation currently trades at $182.67 and has been a dream stock for shareholders. It’s returned 434% since August 2021, blowing past the S&P 500’s 69.4% gain. The company has also beaten the index over the past six months as its stock price is up 19% thanks to its solid quarterly results.",
+   "domain": "finance",
+   "publishedAt": 1787936692000
+  },
+  {
+   "id": 10619114,
+   "title": "China on track to launch Mars sample-return mission in 2028: 'If accurate, this represents a Sputnik moment'",
+   "summary": "China is making progress on its Tianwen 3 Mars sample-return mission, which aims to launch in 2028 and return a collection of Red Planet dirt and rock to Earth in 2031.",
+   "domain": "general",
+   "publishedAt": 1788948000000
+  },
+  {
+   "id": 11707797,
+   "title": "Malta warned of corruption crisis after ‘utter disbelief’ over Daphne Caruana Galizia verdict",
+   "summary": "Labour peer tells Council of Europe inquiry failure to implement legal protections still putting journalists at risk Europe live – latest updates Malta is vulnerable to “repeated instances of high-level corruption” unless it strengthens the rule of law and protections for journalists, the Labour peer Shami Chakrabarti said at the opening of an inquiry into judicial failures following the death of Daphne Caruana Galizia. Chakrabarti, a member of the House of Lords and former director of the hu…",
+   "domain": "general",
+   "publishedAt": 1789042672000
+  },
+  {
+   "id": 11711171,
+   "title": "As Supreme Court Weighs Trump Mail Ballot Plan, Another Judge Blocks It",
+   "summary": "The ruling by a lower court judge was another blow to President Trump’s effort to make voting by mail harder. The Supreme Court is also considering the Trump plan.",
+   "domain": "general",
+   "publishedAt": 1789402375000
+  },
+  {
+   "id": 9707691,
+   "title": "Mladic's death, Bosnia and Serbia's unfinished reckoning",
+   "summary": "The death of Ratko Mladic did not close a dark chapter of European history; it reopened old wounds. The ideology that created him lives on. The Dayton peace agreement ended the war, not the divisions that produced it.",
+   "domain": "general",
+   "publishedAt": 1788268140000
+  },
+  {
+   "id": 11714938,
+   "title": "Mark Carney pitches Canada to global investors amid US trade war",
+   "summary": "Hundreds of investors overseeing nearly $120 trillion in assets will gather in Toronto for the Canada Investment Summit.",
+   "domain": "general",
+   "publishedAt": 1789407753000
+  },
+  {
+   "id": 10426369,
+   "title": "Valvoline Coupons and Promo Codes for September 2026",
+   "summary": "We've gathered all the top Valvoline coupons and promo codes for September 2026, including deals on full synthetic oil changes and other essential maintenance.",
+   "domain": "general",
+   "publishedAt": 1788930000000
+  },
+  {
+   "id": 9707552,
+   "title": "Falklands row shows urgent need to commit to 3% target, says Labour defence committee chair",
+   "summary": "Exclusive: Tan Dhesi says Argentinian threats make it more crucial than ever that PM increase defence spending Javier Milei’s threats to the Falkland Islands make it even more important that Andy Burnham increase defence spending immediately, according to the Labour chair of the defence committee. Tan Dhesi said the comments by the Argentinian president this week show why the government should raise military spending to 3% of GDP by 2030. But he said Burnham’s plans remain mired in confusion …",
+   "domain": "general",
+   "publishedAt": 1788674458000
+  },
+  {
+   "id": 10545020,
+   "title": "Miliband defends sanctions on Israeli settlements and pushes back against chief rabbi’s criticism – UK politics live",
+   "summary": "UK foreign secretary ‘regrets’ Israel’s response to ban on trade with illegal settlements but ‘proud’ of his actions UK accuses Israeli ‘terrorists’ of ethnic cleansing in West Bank with government backing Good morning. Yesterday Ed Miliband, the foreign secretary, made what may turn out to be one of the most important Commons statements of the year. Here is our overnight report by Pippa Crerar, Jessica Elgot and Kiran Stacey. Here is an analysis by Patrick Wintour, the Guardian’s diplomatic …",
+   "domain": "general",
+   "publishedAt": 1788940513000
+  },
+  {
+   "id": 9708199,
+   "title": "Jayden Daniels Trolled by Young Fan With 'College GameDay' Sign After No. 5 LSU Jersey Saga",
+   "summary": "If Jayden Daniels thought the mockery toward him had dissipated, the former LSU star was sorely mistaken Saturday morning.",
+   "domain": "general",
+   "publishedAt": 1788617434000
+  },
+  {
+   "id": 9707413,
+   "title": "U.S. tourism groups want to win Canadian visitors back. A testy trade war isn't helping",
+   "summary": "The bilateral rift has not stopped state and local tourism officials and popular destinations like Graceland from trying to persuade Canadian visitors to return.",
+   "domain": "general",
+   "publishedAt": 1788714436000
+  },
+  {
+   "id": 11132428,
+   "title": "Fetterman to Praise Trump in Convention Video",
+   "summary": "Senator John Fetterman, who has become alienated from his own party, was expected to make a surprise virtual appearance, breaking with Democrats’ midterm message.",
+   "domain": "general",
+   "publishedAt": 1788994839000
+  },
+  {
+   "id": 10702774,
+   "title": "Cambodia's floating schools hit by rising fuel costs",
+   "summary": "The Iran war has sent fuel prices higher in Cambodia, squeezing families who rely on fishing and boats for their livelihoods. For children living on Tonle Sap, rising fuel costs pose yet another barrier to education.",
+   "domain": "general",
+   "publishedAt": 1788958620000
+  },
+  {
+   "id": 9707528,
+   "title": "The domestic armed threat facing Iran",
+   "summary": "External support for ethnic armed groups poses an escalating security threat to Iran, experts and state officials warn.",
+   "domain": "general",
+   "publishedAt": 1788807982000
+  },
+  {
+   "id": 11707888,
+   "title": "Uganda: Traditional kingdom plunged into succession crisis",
+   "summary": "A royal succession committee and the family of late King Oyo Nyimba of Toroo have put forward competing candidates. Questions have been raised as to whether the late monarch indeed had a son as his family claims.",
+   "domain": "general",
+   "publishedAt": 1789048260000
+  },
+  {
+   "id": 11617432,
+   "title": "The elephant in the room at the RNC: Trump's money",
+   "summary": "President Trump’s massive campaign war chest is looming over the GOP’s midterm convention in Dallas this week as Republicans grow frustrated with how his political operation has spent in races this cycle. Trump’s super PAC made its first major investment of the cycle last week, dropping a $10 million ad buy supporting the GOP Senate...",
+   "domain": "general",
+   "publishedAt": 1789034400000
+  },
+  {
+   "id": 9943143,
+   "title": "Ed Miliband has overturned decades of Foreign Office inertia on illegal Israeli settlements",
+   "summary": "Foreign secretary ends UK’s feigned helplessness with sanctions and description of Israel’s actions as ethnic cleansing The indefatigable ability of UK Foreign Office ministers over decades to issue boilerplate statements of concern about the extension of illegal settlements in Israel has long been a matter of ridicule. Even some of the Conservative ministers who issued them, notably Alan Duncan and Alistair Burt, have agreed. Duncan described the UK stance towards settlements as weak and nai…",
+   "domain": "general",
+   "publishedAt": 1788892443000
+  },
+  {
+   "id": 10221259,
+   "title": "US destroys five Iranian tankers, Iran retaliates with attacks on Jordan",
+   "summary": "US military says it struck the five Iranian tankers after IRGC targeted a US warship twice in two days.",
+   "domain": "general",
+   "publishedAt": 1788912517000
+  },
+  {
+   "id": 10729536,
+   "title": "AI spend per employee slumped at top firms in August — summer doldrums or a warning sign?",
+   "summary": "Falling token costs, cheaper models, and less spend per employee—AI adoption isn't playing out the way hyperscalers hoped.",
+   "domain": "general",
+   "publishedAt": 1788963514000
+  },
+  {
+   "id": 10901596,
+   "title": "Associated Press will stick with Lake Ontario over Trump's renamed 'Lake America'",
+   "summary": "The Associated Press will continue to refer to Lake Ontario by its original name, despite President Trump’s push to rename the body of water “Lake America.” The president signed an executive order last month directing the name change, marking the latest in his efforts to rename geographical places like the Gulf of Mexico. The order...",
+   "domain": "general",
+   "publishedAt": 1788976848000
+  },
+  {
+   "id": 11711123,
+   "title": "On this day in space! Sept. 13, 2007: Japan launches Kaguya spacecraft to the moon to map the lunar surface in HD",
+   "summary": "On Sept. 13, 2007, Japan launched the Kaguya spacecraft on a mission to the moon. Here's why it mattered.",
+   "domain": "general",
+   "publishedAt": 1789321521000
+  },
+  {
+   "id": 11711631,
+   "title": "Former Hockey Players at University of Michigan Sue, Say They Were Sexually Abused Decades Ago",
+   "summary": "DETROIT (AP) — More than a dozen former hockey players are suing the University of Michigan, alleging their coach and other staff were aware of sexual hazing that included the forced shaving of their genitals and other abuse by teammates decades ago.",
+   "domain": "general",
+   "publishedAt": 1789062288000
+  },
+  {
+   "id": 9853056,
+   "title": "Houthis strike Saudi Arabian cities in significant expansion of Middle East war",
+   "summary": "Riyadh says it will retaliate after overnight attacks by Iran-backed Yemen group on oil facilities wound more than 70 Yemen’s Iran-backed Houthis have attacked four cities in Saudi Arabia, wounding more than 70 people and setting oil installations ablaze in what appeared to be a significant expansion of the Middle East war. Saudi Arabia said it would retaliate after the overnight strikes – reportedly involving dozens of drones and missiles – that targeted several oil facilities in the country…",
+   "domain": "general",
+   "publishedAt": 1788869131000
+  },
+  {
+   "id": 11710845,
+   "title": "They lost their jobs after posting about Charlie Kirk, but some have no regrets",
+   "summary": "Some people fired in the wake of Kirk's assassination have won big settlements from employers, others have had to start over from scratch.",
+   "domain": "general",
+   "publishedAt": 1789260548000
+  },
+  {
+   "id": 11393348,
+   "title": "Republican Senate Candidates Avoid Tariffs and Iran War at Trump’s Convention",
+   "summary": "Four battleground Senate nominees who spoke sidestepped a pair of issues that have posed political challenges, focusing instead on Mr. Trump’s tax law and other topics.",
+   "domain": "general",
+   "publishedAt": 1789011368000
+  },
+  {
+   "id": 9708012,
+   "title": "Medicube Coupon Code: 40% Off for September 2026",
+   "summary": "Upgrade your K-beauty routine with these active Medicube promo codes. Save on Age-R devices, serums, and masks with student discounts and referral rewards.",
+   "domain": "general",
+   "publishedAt": 1788498000000
+  }
+ ]
+}

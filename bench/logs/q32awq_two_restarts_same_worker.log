@@ -1,0 +1,1099 @@
+Wed Sep 23 2026 18:02:34 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:02:34,348 INFO httpx: HTTP Request: GET https://huggingface.co/api/agent-harnesses "HTTP/1.1 200 OK"
+Wed Sep 23 2026 18:02:34 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:02:34,476 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/qwen/qwen3-32b-awq/revision/0499c3ac83fdef8810b907a23894ba91e95eddd8 "HTTP/1.1 307 Temporary Redirect"
+Wed Sep 23 2026 18:02:34 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:02:34,614 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen3-32B-AWQ/revision/0499c3ac83fdef8810b907a23894ba91e95eddd8 "HTTP/1.1 200 OK"
+Wed Sep 23 2026 18:02:34 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:02:34,618 INFO root: Model pre-flight: qwen/qwen3-32b-awq@0499c3ac83fdef8810b907a23894ba91e95eddd8 is fetchable
+Wed Sep 23 2026 18:02:34 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:02:34,619 INFO root: Starting vLLM: vllm serve --host 127.0.0.1 --port 8000 --block-size 16 --no-disable-custom-all-reduce --no-disable-sliding-window --distributed-executor-backend mp --dtype auto --no-enable-auto-tool-choice --enable-chunked-prefill --no-enable-expert-parallel --no-enable-log-requests --no-enable-lora --enable-prefix-caching --no-enforce-eager --no-fully-sharded-loras --gpu-memory-utilization 0.95 --hf-token hf_REDACTED --kv-cache-dtype auto --load-format auto --lora-dtype auto --max-cpu-loras 0 --max-logprobs 20 --max-lora-rank 16 --max-loras 1 --max-model-len 4096 --max-num-seqs 256 --max-parallel-loading-workers 1 --pipeline-parallel-size 1 --quantization awq --no-ray-workers-use-nsight --seed 0 --no-skip-tokenizer-init --tensor-parallel-size 1 --tokenizer-mode auto --no-trust-remote-code --model qwen/qwen3-32b-awq --revision 0499c3ac83fdef8810b907a23894ba91e95eddd8
+Wed Sep 23 2026 18:02:47 GMT-0400 (Eastern Daylight Time) INFO 09-23 22:02:47 [import_utils.py:478] DeepEP v2 requires NCCL >= 2.30.4 but found 2.29.7. deepep_v2 backend will not be available.
+Wed Sep 23 2026 18:02:51 GMT-0400 (Eastern Daylight Time) INFO 09-23 22:02:51 [__init__.py:109] Registered model loader `<class 'vllm_bnb_plugin.bitsandbytes_loader.BitsAndBytesModelLoader'>` with load format `bitsandbytes`
+Wed Sep 23 2026 18:02:51 GMT-0400 (Eastern Daylight Time) WARNING 09-23 22:02:51 [argparse_utils.py:257] With `vllm serve`, you should provide the model as a positional argument or in a config file instead of via the `--model` option. The `--model` option will be removed in a future version.
+Wed Sep 23 2026 18:02:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:02:51 [api_utils.py:333] 
+Wed Sep 23 2026 18:02:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:02:51 [api_utils.py:333]        █     █     █▄   ▄█
+Wed Sep 23 2026 18:02:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:02:51 [api_utils.py:333]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.28.0
+Wed Sep 23 2026 18:02:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:02:51 [api_utils.py:333]   █▄█▀ █     █     █     █  model   qwen/qwen3-32b-awq
+Wed Sep 23 2026 18:02:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:02:51 [api_utils.py:333]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+Wed Sep 23 2026 18:02:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:02:51 [api_utils.py:333] 
+Wed Sep 23 2026 18:02:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:02:51 [api_utils.py:272] non-default args: {'model_tag': 'qwen/qwen3-32b-awq', 'host': '127.0.0.1', 'model': 'qwen/qwen3-32b-awq', 'revision': '0499c3ac83fdef8810b907a23894ba91e95eddd8', 'max_model_len': 4096, 'quantization': 'awq', 'hf_token': 'hf_REDACTED', 'distributed_executor_backend': 'mp', 'max_parallel_loading_workers': 1, 'block_size': 16, 'gpu_memory_utilization': 0.95, 'enable_prefix_caching': True, 'enable_lora': False, 'max_cpu_loras': 0, 'max_num_seqs': 256, 'enable_chunked_prefill': True}
+Wed Sep 23 2026 18:03:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:03:02 [model.py:672] Resolved architecture: Qwen3ForCausalLM
+Wed Sep 23 2026 18:03:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:03:02 [model.py:1965] Using max model len 4096
+Wed Sep 23 2026 18:03:03 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) WARNING 09-23 22:03:03 [parallel.py:959] max_parallel_loading_workers is currently not supported and will be ignored.
+Wed Sep 23 2026 18:03:04 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) 
+Wed Sep 23 2026 18:03:04 GMT-0400 (Eastern Daylight Time) Parse safetensors files:   0%|          | 0/4 [00:00<?, ?it/s]
+Wed Sep 23 2026 18:03:05 GMT-0400 (Eastern Daylight Time) Parse safetensors files:  25%|██▌       | 1/4 [00:00<00:02,  1.48it/s]
+Wed Sep 23 2026 18:03:05 GMT-0400 (Eastern Daylight Time) Parse safetensors files: 100%|██████████| 4/4 [00:00<00:00,  5.54it/s]
+Wed Sep 23 2026 18:03:05 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:03:05 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+Wed Sep 23 2026 18:03:20 GMT-0400 (Eastern Daylight Time) INFO 09-23 22:03:20 [import_utils.py:478] DeepEP v2 requires NCCL >= 2.30.4 but found 2.29.7. deepep_v2 backend will not be available.
+Wed Sep 23 2026 18:03:22 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:03:22 [__init__.py:109] Registered model loader `<class 'vllm_bnb_plugin.bitsandbytes_loader.BitsAndBytesModelLoader'>` with load format `bitsandbytes`
+Wed Sep 23 2026 18:03:22 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:03:22 [core.py:122] Initializing a V1 LLM engine (v0.28.0) with config: model='qwen/qwen3-32b-awq', speculative_config=None, tokenizer='qwen/qwen3-32b-awq', skip_tokenizer_init=False, tokenizer_mode=auto, revision=0499c3ac83fdef8810b907a23894ba91e95eddd8, tokenizer_revision=0499c3ac83fdef8810b907a23894ba91e95eddd8, trust_remote_code=False, dtype=torch.float16, max_seq_len=4096, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=auto_awq, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=qwen/qwen3-32b-awq, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::linear_attention', 'vllm::qwen_gdn_attention_core', 'vllm::qwen_gdn_attention_core_fused_norm_packed', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::hpc_rope_norm_forward', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [2048], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': False, 'fuse_act_quant': False, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 512, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=True, enable_bf16x3_router_gemm=False, moe_backend='auto', linear_backend='auto')
+Wed Sep 23 2026 18:03:22 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:03:22 [multiproc_executor.py:150] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=127.0.0.1, mq_connect_ip=192.168.3.2 (local), world_size=1, local_world_size=1
+Wed Sep 23 2026 18:03:29 GMT-0400 (Eastern Daylight Time) INFO 09-23 22:03:29 [import_utils.py:478] DeepEP v2 requires NCCL >= 2.30.4 but found 2.29.7. deepep_v2 backend will not be available.
+Wed Sep 23 2026 18:03:31 GMT-0400 (Eastern Daylight Time) INFO 09-23 22:03:31 [__init__.py:109] Registered model loader `<class 'vllm_bnb_plugin.bitsandbytes_loader.BitsAndBytesModelLoader'>` with load format `bitsandbytes`
+Wed Sep 23 2026 18:03:31 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:31 [parallel_state.py:1638] world_size=1 rank=0 local_rank=0 distributed_init_method=file:///tmp/vllm_dist_875c3095839f48b79f6b05b608f73f9d backend=nccl
+Wed Sep 23 2026 18:03:31 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:31 [parallel_state.py:1982] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
+Wed Sep 23 2026 18:03:31 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:31 [gpu_worker.py:396] Using V2 Model Runner
+Wed Sep 23 2026 18:03:32 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:32 [model_runner.py:358] Loading model from scratch...
+Wed Sep 23 2026 18:03:32 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:32 [auto_awq.py:448] Using MarlinLinearKernel for AutoAWQMarlinLinearMethod
+Wed Sep 23 2026 18:03:32 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:32 [cuda.py:486] Using FLASH_ATTN attention backend out of potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION'].
+Wed Sep 23 2026 18:03:32 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:32 [flash_attn.py:866] Using FlashAttention version 2
+Wed Sep 23 2026 18:03:51 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:51 [weight_utils.py:521] Time spent downloading weights for qwen/qwen3-32b-awq: 17.011159 seconds
+Wed Sep 23 2026 18:03:51 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:51 [weight_utils.py:858] Filesystem type for checkpoints: OVERLAY. Checkpoint size: 18.00 GiB. Available RAM: 25.10 GiB.
+Wed Sep 23 2026 18:03:51 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:51 [weight_utils.py:881] Auto-prefetch is disabled because the filesystem (OVERLAY) is not a recognized network FS (NFS/Lustre). If you want to force prefetching, start vLLM with --safetensors-load-strategy=prefetch.
+Wed Sep 23 2026 18:03:51 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:03:51 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:   0% Completed | 0/4 [00:00<?, ?it/s]
+Wed Sep 23 2026 18:03:52 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:03:52 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:  25% Completed | 1/4 [00:00<00:02,  1.04it/s]
+Wed Sep 23 2026 18:03:53 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:03:53 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:  50% Completed | 2/4 [00:01<00:01,  1.02it/s]
+Wed Sep 23 2026 18:03:54 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:03:54 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:  75% Completed | 3/4 [00:02<00:00,  1.05it/s]
+Wed Sep 23 2026 18:03:55 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:03:55 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards: 100% Completed | 4/4 [00:03<00:00,  1.06it/s]
+Wed Sep 23 2026 18:03:55 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:03:55 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards: 100% Completed | 4/4 [00:03<00:00,  1.05it/s]
+Wed Sep 23 2026 18:03:55 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:03:55 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:55 [default_loader.py:430] Loading weights took 3.88 seconds
+Wed Sep 23 2026 18:03:59 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:59 [model_runner.py:380] Model loading took 18.01 GiB memory and 27.379566 seconds
+Wed Sep 23 2026 18:03:59 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:03:59 [topk_topp_sampler.py:62] Using FlashInfer for top-p & top-k sampling.
+Wed Sep 23 2026 18:03:59 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:03:59 [torch_utils.py:262] Reducing Torch threads from 96 to 1 for serving. Set OMP_NUM_THREADS in the external environment to override.
+Wed Sep 23 2026 18:04:19 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:04:19 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/2f56dd1dec/rank_0_0/backbone for vLLM's torch.compile
+Wed Sep 23 2026 18:04:19 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:04:19 [backends.py:1155] Dynamo bytecode transform time: 18.17 s
+Wed Sep 23 2026 18:04:42 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:04:42 [backends.py:393] Compiling a graph for compile range (1, 2048) takes 22.32 s
+Wed Sep 23 2026 18:04:55 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:04:55 [backends.py:920] collected artifacts: 65 entries, 3 artifacts, 6139038 bytes total
+Wed Sep 23 2026 18:04:55 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:04:55 [decorators.py:708] saved AOT compiled function to /root/.cache/vllm/torch_compile_cache/torch_aot_compile/46a0a473594b7b548441e537975887bebadafb00cfee5733b61683b317506fda/rank_0_0/model
+Wed Sep 23 2026 18:04:55 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:04:55 [monitor.py:53] torch.compile took 54.96 s in total
+Wed Sep 23 2026 18:04:56 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:04:56 [monitor.py:81] Initial profiling/warmup run took 0.13 s
+Wed Sep 23 2026 18:04:58 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:04:58 [gpu_worker.py:578] Available KV cache memory: 22.41 GiB
+Wed Sep 23 2026 18:04:58 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:04:58 [kv_cache_utils.py:1869] GPU KV cache size: 91,776 tokens, Maximum concurrency for 4,096 tokens per request: 22.41x
+Wed Sep 23 2026 18:04:59 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:05:00 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   0%|          | 0/51 [00:00<?, ?it/s]
+Wed Sep 23 2026 18:05:00 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   2%|▏         | 1/51 [00:00<00:26,  1.88it/s]
+Wed Sep 23 2026 18:05:01 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   4%|▍         | 2/51 [00:01<00:25,  1.93it/s]
+Wed Sep 23 2026 18:05:01 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   6%|▌         | 3/51 [00:01<00:24,  1.93it/s]
+Wed Sep 23 2026 18:05:02 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   8%|▊         | 4/51 [00:02<00:24,  1.88it/s]
+Wed Sep 23 2026 18:05:02 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  10%|▉         | 5/51 [00:02<00:24,  1.89it/s]
+Wed Sep 23 2026 18:05:03 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  12%|█▏        | 6/51 [00:03<00:22,  1.96it/s]
+Wed Sep 23 2026 18:05:03 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  14%|█▎        | 7/51 [00:03<00:21,  2.02it/s]
+Wed Sep 23 2026 18:05:04 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  16%|█▌        | 8/51 [00:04<00:20,  2.06it/s]
+Wed Sep 23 2026 18:05:04 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  18%|█▊        | 9/51 [00:04<00:20,  2.07it/s]
+Wed Sep 23 2026 18:05:05 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  20%|█▉        | 10/51 [00:05<00:19,  2.07it/s]
+Wed Sep 23 2026 18:05:05 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  22%|██▏       | 11/51 [00:05<00:19,  2.04it/s]
+Wed Sep 23 2026 18:05:06 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  24%|██▎       | 12/51 [00:06<00:19,  2.01it/s]
+Wed Sep 23 2026 18:05:06 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  25%|██▌       | 13/51 [00:06<00:18,  2.10it/s]
+Wed Sep 23 2026 18:05:07 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  27%|██▋       | 14/51 [00:06<00:17,  2.18it/s]
+Wed Sep 23 2026 18:05:07 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  29%|██▉       | 15/51 [00:07<00:16,  2.16it/s]
+Wed Sep 23 2026 18:05:07 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  31%|███▏      | 16/51 [00:07<00:16,  2.16it/s]
+Wed Sep 23 2026 18:05:08 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  33%|███▎      | 17/51 [00:08<00:13,  2.44it/s]
+Wed Sep 23 2026 18:05:08 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  35%|███▌      | 18/51 [00:08<00:12,  2.58it/s]
+Wed Sep 23 2026 18:05:08 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  37%|███▋      | 19/51 [00:08<00:11,  2.87it/s]
+Wed Sep 23 2026 18:05:09 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  39%|███▉      | 20/51 [00:09<00:10,  2.90it/s]
+Wed Sep 23 2026 18:05:09 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  41%|████      | 21/51 [00:09<00:09,  3.16it/s]
+Wed Sep 23 2026 18:05:09 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  43%|████▎     | 22/51 [00:09<00:08,  3.32it/s]
+Wed Sep 23 2026 18:05:09 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  45%|████▌     | 23/51 [00:09<00:07,  3.55it/s]
+Wed Sep 23 2026 18:05:09 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  47%|████▋     | 24/51 [00:10<00:07,  3.73it/s]
+Wed Sep 23 2026 18:05:10 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  49%|████▉     | 25/51 [00:10<00:06,  4.03it/s]
+Wed Sep 23 2026 18:05:10 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  51%|█████     | 26/51 [00:10<00:06,  3.82it/s]
+Wed Sep 23 2026 18:05:10 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  53%|█████▎    | 27/51 [00:10<00:07,  3.24it/s]
+Wed Sep 23 2026 18:05:11 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  55%|█████▍    | 28/51 [00:11<00:06,  3.60it/s]
+Wed Sep 23 2026 18:05:11 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  57%|█████▋    | 29/51 [00:11<00:05,  3.91it/s]
+Wed Sep 23 2026 18:05:11 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  59%|█████▉    | 30/51 [00:11<00:05,  3.98it/s]
+Wed Sep 23 2026 18:05:11 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  61%|██████    | 31/51 [00:11<00:05,  3.90it/s]
+Wed Sep 23 2026 18:05:12 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  63%|██████▎   | 32/51 [00:12<00:04,  3.89it/s]
+Wed Sep 23 2026 18:05:12 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  65%|██████▍   | 33/51 [00:12<00:04,  4.01it/s]
+Wed Sep 23 2026 18:05:12 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  67%|██████▋   | 34/51 [00:12<00:04,  4.16it/s]
+Wed Sep 23 2026 18:05:12 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  69%|██████▊   | 35/51 [00:12<00:04,  3.91it/s]
+Wed Sep 23 2026 18:05:12 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  71%|███████   | 36/51 [00:13<00:03,  4.25it/s]
+Wed Sep 23 2026 18:05:13 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  73%|███████▎  | 37/51 [00:13<00:03,  4.42it/s]
+Wed Sep 23 2026 18:05:13 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  75%|███████▍  | 38/51 [00:13<00:02,  4.38it/s]
+Wed Sep 23 2026 18:05:13 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  76%|███████▋  | 39/51 [00:13<00:02,  4.76it/s]
+Wed Sep 23 2026 18:05:13 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  78%|███████▊  | 40/51 [00:13<00:02,  5.15it/s]
+Wed Sep 23 2026 18:05:13 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  80%|████████  | 41/51 [00:14<00:02,  4.78it/s]
+Wed Sep 23 2026 18:05:14 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  82%|████████▏ | 42/51 [00:14<00:01,  5.48it/s]
+Wed Sep 23 2026 18:05:14 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  84%|████████▍ | 43/51 [00:14<00:01,  6.17it/s]
+Wed Sep 23 2026 18:05:14 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  86%|████████▋ | 44/51 [00:14<00:01,  6.79it/s]
+Wed Sep 23 2026 18:05:14 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  88%|████████▊ | 45/51 [00:14<00:00,  7.30it/s]
+Wed Sep 23 2026 18:05:14 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  90%|█████████ | 46/51 [00:14<00:00,  6.83it/s]
+Wed Sep 23 2026 18:05:14 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  92%|█████████▏| 47/51 [00:14<00:00,  7.44it/s]
+Wed Sep 23 2026 18:05:14 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  94%|█████████▍| 48/51 [00:14<00:00,  7.91it/s]
+Wed Sep 23 2026 18:05:14 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  96%|█████████▌| 49/51 [00:14<00:00,  8.32it/s]
+Wed Sep 23 2026 18:05:15 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  98%|█████████▊| 50/51 [00:15<00:00,  8.63it/s]
+Wed Sep 23 2026 18:05:15 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE): 100%|██████████| 51/51 [00:15<00:00,  7.68it/s]
+Wed Sep 23 2026 18:05:15 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE): 100%|██████████| 51/51 [00:15<00:00,  3.34it/s]
+Wed Sep 23 2026 18:05:15 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:05:15 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):   0%|          | 0/35 [00:00<?, ?it/s]
+Wed Sep 23 2026 18:05:15 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):   3%|▎         | 1/35 [00:00<00:07,  4.50it/s]
+Wed Sep 23 2026 18:05:15 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):   6%|▌         | 2/35 [00:00<00:07,  4.62it/s]
+Wed Sep 23 2026 18:05:15 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):   9%|▊         | 3/35 [00:00<00:06,  4.72it/s]
+Wed Sep 23 2026 18:05:16 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  11%|█▏        | 4/35 [00:00<00:06,  4.81it/s]
+Wed Sep 23 2026 18:05:16 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  14%|█▍        | 5/35 [00:01<00:06,  4.89it/s]
+Wed Sep 23 2026 18:05:16 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  17%|█▋        | 6/35 [00:01<00:05,  4.93it/s]
+Wed Sep 23 2026 18:05:16 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  20%|██        | 7/35 [00:01<00:05,  5.00it/s]
+Wed Sep 23 2026 18:05:16 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  23%|██▎       | 8/35 [00:01<00:05,  5.04it/s]
+Wed Sep 23 2026 18:05:16 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  26%|██▌       | 9/35 [00:01<00:04,  5.36it/s]
+Wed Sep 23 2026 18:05:17 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  29%|██▊       | 10/35 [00:01<00:04,  5.47it/s]
+Wed Sep 23 2026 18:05:17 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  31%|███▏      | 11/35 [00:02<00:04,  5.62it/s]
+Wed Sep 23 2026 18:05:17 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  34%|███▍      | 12/35 [00:02<00:04,  5.71it/s]
+Wed Sep 23 2026 18:05:17 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  37%|███▋      | 13/35 [00:02<00:03,  5.87it/s]
+Wed Sep 23 2026 18:05:17 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  40%|████      | 14/35 [00:02<00:03,  5.99it/s]
+Wed Sep 23 2026 18:05:17 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  43%|████▎     | 15/35 [00:02<00:03,  6.11it/s]
+Wed Sep 23 2026 18:05:18 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  46%|████▌     | 16/35 [00:02<00:03,  6.19it/s]
+Wed Sep 23 2026 18:05:18 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  49%|████▊     | 17/35 [00:03<00:02,  6.68it/s]
+Wed Sep 23 2026 18:05:18 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  51%|█████▏    | 18/35 [00:03<00:02,  6.96it/s]
+Wed Sep 23 2026 18:05:18 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  54%|█████▍    | 19/35 [00:03<00:02,  7.29it/s]
+Wed Sep 23 2026 18:05:18 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  57%|█████▋    | 20/35 [00:03<00:01,  7.51it/s]
+Wed Sep 23 2026 18:05:18 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  60%|██████    | 21/35 [00:03<00:01,  7.40it/s]
+Wed Sep 23 2026 18:05:18 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  63%|██████▎   | 22/35 [00:03<00:01,  7.74it/s]
+Wed Sep 23 2026 18:05:18 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  66%|██████▌   | 23/35 [00:03<00:01,  8.05it/s]
+Wed Sep 23 2026 18:05:19 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  69%|██████▊   | 24/35 [00:03<00:01,  8.30it/s]
+Wed Sep 23 2026 18:05:19 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  74%|███████▍  | 26/35 [00:04<00:00,  9.74it/s]
+Wed Sep 23 2026 18:05:19 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  80%|████████  | 28/35 [00:04<00:00, 11.11it/s]
+Wed Sep 23 2026 18:05:19 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  86%|████████▌ | 30/35 [00:04<00:00, 12.28it/s]
+Wed Sep 23 2026 18:05:19 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  91%|█████████▏| 32/35 [00:04<00:00, 12.97it/s]
+Wed Sep 23 2026 18:05:19 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL):  97%|█████████▋| 34/35 [00:04<00:00, 13.67it/s]
+Wed Sep 23 2026 18:05:19 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (FULL): 100%|██████████| 35/35 [00:04<00:00,  7.49it/s]
+Wed Sep 23 2026 18:05:19 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:05:19 [model_runner.py:906] Graph capturing finished in 20 secs, took 1.01 GiB
+Wed Sep 23 2026 18:05:19 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:05:19 [gpu_worker.py:804] Free memory on device (44.16/44.42 GiB) on startup. Desired GPU memory utilization is (0.95, 42.2 GiB). Actual usage is 18.31 GiB for consumed memory (weights + non-torch), 1.48 GiB for peak activation, and 1.01 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=22812765901` (21.25 GiB) to fit into requested memory, or `--kv-cache-memory=24914338304` (23.2 GiB) to fully utilize gpu memory. Current kv cache memory in use is 22.41 GiB.
+Wed Sep 23 2026 18:05:24 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:05:24 [jit_monitor.py:85] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+Wed Sep 23 2026 18:05:25 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:05:25 [torch_utils.py:262] Reducing Torch threads from 48 to 1 for serving. Set OMP_NUM_THREADS in the external environment to override.
+Wed Sep 23 2026 18:05:25 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:05:25 [core.py:347] init engine (profile, create kv cache, warmup model) took 85.52 s (compilation: 54.96 s)
+Wed Sep 23 2026 18:05:27 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:05:27 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+Wed Sep 23 2026 18:05:27 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:27 [api_server.py:653] Supported tasks: ['generate']
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:30 [hf.py:551] Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) WARNING 09-23 22:05:30 [model.py:1713] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 0.6, 'top_k': 20, 'top_p': 0.95}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:30 [api_server.py:657] Starting vLLM server on http://127.0.0.1:8000
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:30 [launcher.py:51] Available routes are:
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:30 [launcher.py:60] Route: /openapi.json, Methods: GET, HEAD
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:30 [launcher.py:60] Route: /docs, Methods: GET, HEAD
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:30 [launcher.py:60] Route: /docs/oauth2-redirect, Methods: GET, HEAD
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:30 [launcher.py:60] Route: /redoc, Methods: GET, HEAD
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:30 [launcher.py:60] Route: /metrics, Methods: GET
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     Started server process [51]
+Wed Sep 23 2026 18:05:30 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     Waiting for application startup.
+Wed Sep 23 2026 18:05:31 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     Application startup complete.
+Wed Sep 23 2026 18:05:32 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42756 - "GET /health HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:32 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:05:32,763 INFO root: vLLM is healthy
+Wed Sep 23 2026 18:05:34 GMT-0400 (Eastern Daylight Time) --- Starting Serverless Worker |  Version 1.12.0 ---
+Wed Sep 23 2026 18:05:34 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Running 7 fitness check(s)...", "level": "INFO"}
+Wed Sep 23 2026 18:05:34 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "GPU binary test passed: 1 GPU(s) healthy (CUDA 13.0)", "level": "INFO"}
+Wed Sep 23 2026 18:05:34 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Memory check passed: 446.01GB available (of 503.51GB total)", "level": "INFO"}
+Wed Sep 23 2026 18:05:34 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Disk space check passed: 131.82GB free (87.9% available)", "level": "INFO"}
+Wed Sep 23 2026 18:05:34 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Network connectivity passed: Connected to 8.8.8.8 (7ms)", "level": "INFO"}
+Wed Sep 23 2026 18:05:34 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "CUDA version check passed: 13.0 (minimum: 11.8)", "level": "INFO"}
+Wed Sep 23 2026 18:05:36 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "CUDA initialization passed: 1 device(s) initialized successfully", "level": "INFO"}
+Wed Sep 23 2026 18:05:36 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "GPU compute benchmark passed: Matrix multiply completed in 69ms", "level": "INFO"}
+Wed Sep 23 2026 18:05:36 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "All fitness checks passed. (2110.79ms)", "level": "INFO"}
+Wed Sep 23 2026 18:05:37 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 18:05:37 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 1", "level": "INFO"}
+Wed Sep 23 2026 18:05:38 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42770 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:38 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-834527da-e296-49df-beef-bdee9975bb26-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:39 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-834527da-e296-49df-beef-bdee9975bb26-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:40 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 1", "level": "INFO"}
+Wed Sep 23 2026 18:05:41 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:41 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 29", "level": "INFO"}
+Wed Sep 23 2026 18:05:41 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42786 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:41 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:41 [loggers.py:310] Engine 000: Avg prompt throughput: 47.0 tokens/s, Avg generation throughput: 3.6 tokens/s, Running: 2 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.7%, Prefix cache hit rate: 70.3%
+Wed Sep 23 2026 18:05:41 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9ab71de5-5661-41ee-96d2-cd5c98af446b-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:41 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9ab71de5-5661-41ee-96d2-cd5c98af446b-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:41 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:42 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 2", "level": "INFO"}
+Wed Sep 23 2026 18:05:42 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 30", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42796 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42870 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:43026 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42788 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42812 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42994 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42988 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:43056 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0bc4d7c2-6083-4326-8501-8f84a54fb56e-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-96655901-8809-42df-9fd8-956c3971be76-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42908 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:43034 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-189c973f-7d1d-4977-b631-d7a42bcc3af3-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42918 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42970 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42972 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d03de83a-857f-4c0d-9387-efac5f04658c-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-94be17d7-dd9a-4c0e-8f81-e31faf824a65-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42826 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2982d4ad-a1b4-432d-b3d6-e4728a6fe905-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42838 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42886 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42898 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42934 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42948 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42952 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42968 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:43010 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:43038 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-cf0dac81-6c1f-4068-94df-d35065666c60-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-89da6535-d7f2-4009-a9d5-e8b3139e1caa-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42806 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42834 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42854 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-78198aab-8fce-48f7-aea7-ddc138da215f-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-263cbfb2-77cc-4fdf-b5b5-3b79b464565c-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:42916 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-7cd864b1-bd6a-420e-b983-d8acf4cf70d6-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-291b7fb6-1b7e-4e5d-898f-72371bfee010-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-71bfbbd1-90b1-4ac1-b3d0-c7f711453ba4-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-aaef2c33-14cc-4a8e-85d8-3e61efa1280b-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0bc4d7c2-6083-4326-8501-8f84a54fb56e-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0439b41f-31a8-46b5-93d5-fcd93d460b84-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 29", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-61c6bf5f-d04d-4626-9e43-678dde7ffdc8-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:43048 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d3eef498-6166-44be-8a62-03a053ac1b8b-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-aaac990b-d645-4a3c-baac-b1c7ed13988f-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0a6168e0-dfbe-4122-b514-8d5ea303ee86-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-3500041e-bc62-42a9-af36-4e4a14395dc3-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ddf29bbe-6d62-43ae-92df-ed83d26d16ac-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-96655901-8809-42df-9fd8-956c3971be76-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b73f2c81-0005-45d3-8f8d-f44066a15b8b-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-4b631b8c-a05b-4e6b-8772-a8aea7b35be1-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-340a5a12-7ba6-4269-a869-ce4717b75c9f-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-189c973f-7d1d-4977-b631-d7a42bcc3af3-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 27", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-52b8b2f3-d85e-46b9-a6ab-de7c2e39bde3-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-94be17d7-dd9a-4c0e-8f81-e31faf824a65-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 26", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2982d4ad-a1b4-432d-b3d6-e4728a6fe905-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 25", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-cf0dac81-6c1f-4068-94df-d35065666c60-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 24", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-08704f41-d94b-413e-848e-9299c9ab5aaa-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-89da6535-d7f2-4009-a9d5-e8b3139e1caa-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 23", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d03de83a-857f-4c0d-9387-efac5f04658c-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c5967ea5-cf54-4712-adab-73607b80a9e8-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-00e4365e-cfec-4453-a526-f47bf0bb4c06-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-78198aab-8fce-48f7-aea7-ddc138da215f-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-263cbfb2-77cc-4fdf-b5b5-3b79b464565c-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-7cd864b1-bd6a-420e-b983-d8acf4cf70d6-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-291b7fb6-1b7e-4e5d-898f-72371bfee010-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-71bfbbd1-90b1-4ac1-b3d0-c7f711453ba4-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-aaef2c33-14cc-4a8e-85d8-3e61efa1280b-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 16", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-61c6bf5f-d04d-4626-9e43-678dde7ffdc8-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 15", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0439b41f-31a8-46b5-93d5-fcd93d460b84-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 14", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d3eef498-6166-44be-8a62-03a053ac1b8b-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 13", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-aaac990b-d645-4a3c-baac-b1c7ed13988f-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 12", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-4b631b8c-a05b-4e6b-8772-a8aea7b35be1-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 11", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-3500041e-bc62-42a9-af36-4e4a14395dc3-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 10", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0a6168e0-dfbe-4122-b514-8d5ea303ee86-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 9", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ddf29bbe-6d62-43ae-92df-ed83d26d16ac-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 8", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-340a5a12-7ba6-4269-a869-ce4717b75c9f-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 7", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b73f2c81-0005-45d3-8f8d-f44066a15b8b-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 6", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-52b8b2f3-d85e-46b9-a6ab-de7c2e39bde3-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 5", "level": "INFO"}
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59732 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59738 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-08704f41-d94b-413e-848e-9299c9ab5aaa-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 4", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-00e4365e-cfec-4453-a526-f47bf0bb4c06-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 3", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c5967ea5-cf54-4712-adab-73607b80a9e8-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 2", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-50d4fcbd-3270-4fb7-b450-45b029678f71-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9b7dd84e-9df7-4247-ac5e-795b6228b921-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 5", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9b7dd84e-9df7-4247-ac5e-795b6228b921-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 6", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-50d4fcbd-3270-4fb7-b450-45b029678f71-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 5", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 8", "level": "INFO"}
+Wed Sep 23 2026 18:05:44 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 13", "level": "INFO"}
+Wed Sep 23 2026 18:05:45 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 9", "level": "INFO"}
+Wed Sep 23 2026 18:05:45 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:45 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59744 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:45 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59764 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:45 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59740 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:45 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-693121b9-b160-4a1c-b9a7-9b958aea5fd5-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:45 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c5000e01-e0b2-4103-968d-78704932061d-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:45 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-286ae783-8e3e-42e6-a93a-5828e7ccfd98-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59756 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59768 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c08fa096-f68c-4ef1-8b29-ac162f91ad44-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-37c6122c-0ac4-43f8-aa71-7fcca31dc447-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c5000e01-e0b2-4103-968d-78704932061d-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-693121b9-b160-4a1c-b9a7-9b958aea5fd5-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-286ae783-8e3e-42e6-a93a-5828e7ccfd98-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59778 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59804 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c08fa096-f68c-4ef1-8b29-ac162f91ad44-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-37c6122c-0ac4-43f8-aa71-7fcca31dc447-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59798 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59800 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59822 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59774 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-81a4699e-aa2c-452e-8b33-a4d299e1bf85-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-909bb09c-d31d-4bf0-80c3-421e38811aeb-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-70d35d0f-270e-44c9-91e0-11208c46be3f-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1a3d12f8-dda4-4192-a0b2-ab8877d3b6bf-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59790 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59810 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-8fdb7623-6732-4649-812d-7f1e614472c3-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ca3a2c00-ff00-4163-b0f0-6f53e56dc8d6-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59826 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59872 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2d673703-d269-477c-80e8-cb3d0f101570-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-4ae73b0b-d3ff-4c18-9e19-43292447931e-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59886 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-084d9486-32e4-4e23-9bed-22236421e989-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 11", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-55d2c1cd-1bdc-428e-89dd-9b686a934a19-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-81a4699e-aa2c-452e-8b33-a4d299e1bf85-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 27", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-909bb09c-d31d-4bf0-80c3-421e38811aeb-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 26", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59896 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59902 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-019b9584-dcfd-4ab4-8f6a-e9957ecacfc6-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-70d35d0f-270e-44c9-91e0-11208c46be3f-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 25", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1a3d12f8-dda4-4192-a0b2-ab8877d3b6bf-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 24", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-8fdb7623-6732-4649-812d-7f1e614472c3-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 23", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59850 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ca3a2c00-ff00-4163-b0f0-6f53e56dc8d6-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-4735dbe4-1f53-4241-b0b2-e0d0670b5eb9-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9c8b3bec-7763-420b-893e-2dec187e0adb-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2d673703-d269-477c-80e8-cb3d0f101570-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-7fd45d5e-3086-490b-aed4-d4239b0ad655-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-4ae73b0b-d3ff-4c18-9e19-43292447931e-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:46 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-084d9486-32e4-4e23-9bed-22236421e989-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59898 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-55d2c1cd-1bdc-428e-89dd-9b686a934a19-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-019b9584-dcfd-4ab4-8f6a-e9957ecacfc6-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0526a30f-4cc1-4524-9b75-622f1c55979a-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-4735dbe4-1f53-4241-b0b2-e0d0670b5eb9-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 16", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59838 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9c8b3bec-7763-420b-893e-2dec187e0adb-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 15", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59866 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-7fd45d5e-3086-490b-aed4-d4239b0ad655-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 14", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-778f5112-e315-4a5b-8270-bcfa2362d7ba-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5f4de87b-f6ff-4f31-af3e-90afd39a495d-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0526a30f-4cc1-4524-9b75-622f1c55979a-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 13", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-778f5112-e315-4a5b-8270-bcfa2362d7ba-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 12", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5f4de87b-f6ff-4f31-af3e-90afd39a495d-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:47 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 11", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59954 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59926 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59966 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-884e3bd7-c1ac-4bbe-8b40-49482acd2215-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59946 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59986 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60000 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2bcde6b5-2105-4c4d-b45b-2f760842c70a-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59976 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-937177fd-5f83-4ee7-b35a-8d41eae9c3ea-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59944 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59964 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fbd6a9d7-1fbd-432e-b7cf-3cb1c91668fe-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-72b3a25e-db64-46ca-9f79-562b343081f5-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-74f9b0c2-179b-4bf3-84ee-910f585a4ef6-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59918 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e7d82fcb-87ae-4060-91fe-cf98408d0d3e-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 30", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-628842bc-f31e-4f75-8be8-d3015277a6d0-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-884e3bd7-c1ac-4bbe-8b40-49482acd2215-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 29", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:59932 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1d83a56c-33b1-46b3-91ee-b66d113319d4-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-937177fd-5f83-4ee7-b35a-8d41eae9c3ea-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-dc3eb8f1-ba5a-4cb3-8618-f8075eafc67f-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fbd6a9d7-1fbd-432e-b7cf-3cb1c91668fe-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 27", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-72b3a25e-db64-46ca-9f79-562b343081f5-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 26", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-02aa448b-77a6-4a0f-aeae-0915d6066953-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-74f9b0c2-179b-4bf3-84ee-910f585a4ef6-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 25", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2bcde6b5-2105-4c4d-b45b-2f760842c70a-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 24", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e7d82fcb-87ae-4060-91fe-cf98408d0d3e-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 23", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-628842bc-f31e-4f75-8be8-d3015277a6d0-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1d83a56c-33b1-46b3-91ee-b66d113319d4-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-dc3eb8f1-ba5a-4cb3-8618-f8075eafc67f-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-02aa448b-77a6-4a0f-aeae-0915d6066953-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:48 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60054 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60118 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 11", "level": "INFO"}
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60002 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60038 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60068 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60090 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60158 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60050 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-402fdd59-cea3-4042-bc07-2d9b1391db33-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60144 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 30", "level": "INFO"}
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0caf9186-f0ec-4fdb-b5f2-3c8f91b0ee56-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60034 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-68c48156-88c0-4975-a9b1-5b9c8f9ec2f0-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5e31a107-1b8c-4a48-98d1-678074d6bc16-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-caf5e2ec-774d-440f-a2cf-a0a88f086b02-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60018 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1470722f-18ce-4819-9d14-13b7b44dfd45-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60032 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60130 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:49 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5f8b6da5-5ced-4a32-ad88-9e1250c2c1bf-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d6b3eb2e-6d8a-4c5c-8899-fe9c7a93db01-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d123ffd4-fa49-4bc0-b4b5-3e01f8e51868-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a10b521b-6542-4dfb-91f1-b93e9ad1a9c0-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5de6c94f-8269-4f14-a6d0-e11d7c80c94d-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-019a311c-c64f-402c-bdb9-dc447b6129e3-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-dc22ae52-9406-46c5-81bf-e2e87ffcd836-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-402fdd59-cea3-4042-bc07-2d9b1391db33-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 29", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60020 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60082 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60134 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0caf9186-f0ec-4fdb-b5f2-3c8f91b0ee56-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-68c48156-88c0-4975-a9b1-5b9c8f9ec2f0-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 27", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5f8b6da5-5ced-4a32-ad88-9e1250c2c1bf-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 26", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5e31a107-1b8c-4a48-98d1-678074d6bc16-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 25", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-caf5e2ec-774d-440f-a2cf-a0a88f086b02-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 24", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1470722f-18ce-4819-9d14-13b7b44dfd45-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 23", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d123ffd4-fa49-4bc0-b4b5-3e01f8e51868-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-dad3b370-d950-4821-94a8-2ac425c7974a-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d6b3eb2e-6d8a-4c5c-8899-fe9c7a93db01-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f351a5c8-edb3-4eec-9f69-e9cf9a29ba91-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fa9bf172-34d0-4d07-bdce-55cd4fceb103-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a10b521b-6542-4dfb-91f1-b93e9ad1a9c0-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-019a311c-c64f-402c-bdb9-dc447b6129e3-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5de6c94f-8269-4f14-a6d0-e11d7c80c94d-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-dc22ae52-9406-46c5-81bf-e2e87ffcd836-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60102 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60016 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f351a5c8-edb3-4eec-9f69-e9cf9a29ba91-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 16", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f0f0d19d-d3be-4e99-82a5-ff2b7b852466-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fa9bf172-34d0-4d07-bdce-55cd4fceb103-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 15", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-dad3b370-d950-4821-94a8-2ac425c7974a-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 14", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60128 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-57e1c2bc-be6d-4b27-8892-5e9579475247-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-819cbf26-a02d-42c2-9d57-14f1a8d4c21d-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f0f0d19d-d3be-4e99-82a5-ff2b7b852466-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 13", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-57e1c2bc-be6d-4b27-8892-5e9579475247-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 12", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-819cbf26-a02d-42c2-9d57-14f1a8d4c21d-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:50 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 11", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60204 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60214 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60194 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60248 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60254 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6d32472d-04dd-48f3-8839-4cc02925b8ff-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60176 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60206 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60216 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60232 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-76ee1609-53a0-4467-a53b-6b4d21c674b2-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-83f13b95-e9fd-4c6c-83e2-bcd29aae36f9-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f63f2c91-c48f-41bd-884d-eac6bb8722bc-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-23bf42ae-0657-4aa3-b9a8-700489ed522d-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60192 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-64055b8a-7fac-4a80-b80d-d642749ab71a-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-796057f4-63cb-431a-8ebb-f1b65f377549-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-df3341a5-c566-4a1d-8587-e7306dd57f27-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-381ee796-8c08-4045-bd6f-0c252e4e14e7-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 12", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 23", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:05:51 [loggers.py:310] Engine 000: Avg prompt throughput: 363.4 tokens/s, Avg generation throughput: 249.9 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.7%, Prefix cache hit rate: 92.7%
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d5caee46-181c-4d2b-b6ea-2a6795e4a013-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60174 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6d32472d-04dd-48f3-8839-4cc02925b8ff-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-76ee1609-53a0-4467-a53b-6b4d21c674b2-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-83f13b95-e9fd-4c6c-83e2-bcd29aae36f9-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-23bf42ae-0657-4aa3-b9a8-700489ed522d-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f4a8f1de-80d8-4467-8e9b-5d12062e6f19-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f63f2c91-c48f-41bd-884d-eac6bb8722bc-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-381ee796-8c08-4045-bd6f-0c252e4e14e7-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-64055b8a-7fac-4a80-b80d-d642749ab71a-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 16", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-796057f4-63cb-431a-8ebb-f1b65f377549-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 15", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-df3341a5-c566-4a1d-8587-e7306dd57f27-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 14", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d5caee46-181c-4d2b-b6ea-2a6795e4a013-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 13", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f4a8f1de-80d8-4467-8e9b-5d12062e6f19-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:51 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 12", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60334 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60264 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60282 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60344 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60276 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60316 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60324 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5081342a-e1a7-425b-8b97-1e39fb0cd7e6-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60294 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60306 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60358 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-38698693-ea97-4539-8f31-64dff9fd9602-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60332 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d0c5ff2f-40e7-4223-8730-56539ad897db-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-4c226824-6b5b-4968-9603-f1357d5cf927-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b43de973-48ab-44c7-9006-e832d3a95eb3-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-dff5b73c-b6a5-4e6e-b6f7-b1a9c6950f40-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e6452480-2463-4ed4-87f7-56cb342e0fbb-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:60372 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1b369c27-a90d-4a14-99e6-2bc113665823-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-bfad493c-2e62-4a7c-b0d7-33376f7954ff-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-47d25e3a-406e-43b5-b3a0-f6e6ca9ce52f-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c6dc4634-b89e-4dd6-a563-4a12c427047c-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c1c2ed8f-721a-4525-8df5-32b9f8d7fb9e-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:52 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 30", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5081342a-e1a7-425b-8b97-1e39fb0cd7e6-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 29", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d0c5ff2f-40e7-4223-8730-56539ad897db-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-4c226824-6b5b-4968-9603-f1357d5cf927-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 27", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-38698693-ea97-4539-8f31-64dff9fd9602-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 26", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b43de973-48ab-44c7-9006-e832d3a95eb3-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 25", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e6452480-2463-4ed4-87f7-56cb342e0fbb-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 24", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-dff5b73c-b6a5-4e6e-b6f7-b1a9c6950f40-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 23", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-47d25e3a-406e-43b5-b3a0-f6e6ca9ce52f-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-bfad493c-2e62-4a7c-b0d7-33376f7954ff-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1b369c27-a90d-4a14-99e6-2bc113665823-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c6dc4634-b89e-4dd6-a563-4a12c427047c-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c1c2ed8f-721a-4525-8df5-32b9f8d7fb9e-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:53 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38738 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38754 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6b2d51fa-73e8-47d0-9ede-b9d835e4ac5e-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38782 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38788 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38746 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38900 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38906 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38810 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 12", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a52ee7f3-1ccf-4d42-ba6f-0527cb2e01bf-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-3de23b4e-3478-4c81-838f-58506fe3ad79-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38826 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-8abbd94c-26c5-402e-b6fd-5fa486112647-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 30", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a162afde-4694-49cf-a103-ec95179a024e-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9c33e9fd-ca70-496b-8721-8a98069b5233-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ea9ebcb0-d314-4f4a-89ff-1a0eb14987b1-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38766 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38870 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-65e290a3-f5ae-4270-baee-14f288012d29-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38836 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38842 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38890 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e762239e-8ac4-4036-96fe-cfa9616cc961-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6b2d51fa-73e8-47d0-9ede-b9d835e4ac5e-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 29", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-60a254c2-1454-4d73-9d05-3691d0778834-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-18e3faa2-4e2a-4cae-b43e-0cad3d6304d8-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-125c2f4a-2c76-40dd-a617-a6727c39a25c-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a481dc12-3b93-4be6-8e29-84f4e149c63e-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f217788d-f7e6-4544-88d9-2f88965505b2-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a52ee7f3-1ccf-4d42-ba6f-0527cb2e01bf-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-3de23b4e-3478-4c81-838f-58506fe3ad79-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 27", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-8abbd94c-26c5-402e-b6fd-5fa486112647-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 26", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38876 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a162afde-4694-49cf-a103-ec95179a024e-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 25", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9c33e9fd-ca70-496b-8721-8a98069b5233-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 24", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ea9ebcb0-d314-4f4a-89ff-1a0eb14987b1-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 23", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-65e290a3-f5ae-4270-baee-14f288012d29-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e762239e-8ac4-4036-96fe-cfa9616cc961-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:54 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1b461cd3-c620-438a-9dcf-a805f674553d-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-60a254c2-1454-4d73-9d05-3691d0778834-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-18e3faa2-4e2a-4cae-b43e-0cad3d6304d8-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-125c2f4a-2c76-40dd-a617-a6727c39a25c-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f217788d-f7e6-4544-88d9-2f88965505b2-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a481dc12-3b93-4be6-8e29-84f4e149c63e-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 16", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38828 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38858 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-4c8b171c-c0de-48c5-8fed-bb7277e7aeb3-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5a950184-06a8-4a84-8cdb-cb1b113f15c7-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1b461cd3-c620-438a-9dcf-a805f674553d-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 15", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38800 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f85fa36c-55c8-4bf8-b427-0e636a5913f8-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-4c8b171c-c0de-48c5-8fed-bb7277e7aeb3-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 14", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5a950184-06a8-4a84-8cdb-cb1b113f15c7-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 13", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f85fa36c-55c8-4bf8-b427-0e636a5913f8-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 12", "level": "INFO"}
+Wed Sep 23 2026 18:05:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38958 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38946 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 17", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38912 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 29", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1ffddee7-12ba-4334-ad14-4d7c1bf0c77d-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38970 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38980 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38916 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38982 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-7afcc5f8-6148-48d9-a41f-ec38fa99444d-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-cf6e8a01-cedf-46ee-a1b2-273cccbbb51e-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38938 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38948 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38924 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38986 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6f8af099-b614-47c3-bd7a-2678de8350fa-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6149e7b8-b1f4-414e-8005-3c46a7b2f9e3-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fe56bc73-e7d5-4f37-96da-95be573c7eb1-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9dc38a61-90bc-48c5-8ac1-af43870b21cf-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-48ac5045-15c4-44fa-8247-f53b7217281c-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f9a7eac3-be2a-4db2-9ae6-b6379e48e90b-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a1c92b2e-9e70-4056-af70-2f1262373752-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-42e2114f-e808-4274-92fc-316163fb8621-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1ffddee7-12ba-4334-ad14-4d7c1bf0c77d-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-7afcc5f8-6148-48d9-a41f-ec38fa99444d-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 27", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-cf6e8a01-cedf-46ee-a1b2-273cccbbb51e-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 26", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6f8af099-b614-47c3-bd7a-2678de8350fa-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 25", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6149e7b8-b1f4-414e-8005-3c46a7b2f9e3-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 24", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fe56bc73-e7d5-4f37-96da-95be573c7eb1-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 23", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9dc38a61-90bc-48c5-8ac1-af43870b21cf-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-48ac5045-15c4-44fa-8247-f53b7217281c-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-f9a7eac3-be2a-4db2-9ae6-b6379e48e90b-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a1c92b2e-9e70-4056-af70-2f1262373752-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-42e2114f-e808-4274-92fc-316163fb8621-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38952 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:56 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-cf7270a8-8699-4a63-b243-4f3ad0d7aec1-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-cf7270a8-8699-4a63-b243-4f3ad0d7aec1-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39014 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39074 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39058 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39138 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 12", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ebeec4e4-16d0-4d33-9bf1-f5a5fad8e4b1-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39118 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39170 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 29", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-bfcd5982-5811-4292-bf97-8e9df6d2009c-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39090 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39152 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39104 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39154 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0fb487a0-bf63-4353-abd9-02cf3e0bf861-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d3b00977-38d2-4c26-aa99-57b3e06a50bd-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-569c34c6-9aab-4bba-b136-50336b2af1ac-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:38996 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39144 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2fbc43cb-532a-46dd-a94b-e26ba7603890-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-11b80a59-f5ee-446e-9971-7f1dc1392f41-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-287b6aba-ea3a-40de-8977-2672ec28eb1b-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9fd8a05d-d61f-4f6b-b36f-854bf50aff6d-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e15997d0-0744-4241-84d4-abe855cfcdec-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39046 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d014ff3f-7a82-4575-9dc3-b75103e80266-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1885c1c0-d538-4708-8bd9-c0635d08b2c7-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ebeec4e4-16d0-4d33-9bf1-f5a5fad8e4b1-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-bfcd5982-5811-4292-bf97-8e9df6d2009c-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 27", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-44fcae73-c574-4b00-ae84-c68d6b81822b-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0fb487a0-bf63-4353-abd9-02cf3e0bf861-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 26", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d3b00977-38d2-4c26-aa99-57b3e06a50bd-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 25", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-569c34c6-9aab-4bba-b136-50336b2af1ac-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 24", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2fbc43cb-532a-46dd-a94b-e26ba7603890-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 23", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-11b80a59-f5ee-446e-9971-7f1dc1392f41-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:57 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-287b6aba-ea3a-40de-8977-2672ec28eb1b-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e15997d0-0744-4241-84d4-abe855cfcdec-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-9fd8a05d-d61f-4f6b-b36f-854bf50aff6d-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d014ff3f-7a82-4575-9dc3-b75103e80266-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1885c1c0-d538-4708-8bd9-c0635d08b2c7-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39006 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39030 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39120 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-44fcae73-c574-4b00-ae84-c68d6b81822b-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 16", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-28b816cd-843d-4c4c-b383-f69aefe8d05c-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39122 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2183a63d-db32-4ce4-bd16-0e6d74d9df99-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b77f3e1e-49aa-4a65-bc9e-8bb90a5057e0-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1a1248b6-80c9-43f5-b2d3-587d3721ed81-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2183a63d-db32-4ce4-bd16-0e6d74d9df99-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 15", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b77f3e1e-49aa-4a65-bc9e-8bb90a5057e0-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 14", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-28b816cd-843d-4c4c-b383-f69aefe8d05c-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 13", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1a1248b6-80c9-43f5-b2d3-587d3721ed81-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 12", "level": "INFO"}
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39186 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39194 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39256 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39180 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39192 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39230 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39238 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39252 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:58 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39208 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c093ae9a-050f-4822-a117-33215ec0e7a2-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b0cb5f3c-9027-4a3e-97c5-1afe2b5033bb-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-8443f1f0-3b69-4f6d-bc59-d2ed98e93667-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 17", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39206 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39224 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39228 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b8eacc7c-24c9-4ecf-8538-e394400109ff-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6ff38276-8484-40bd-8c92-675986a56808-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6039d265-2f61-4f60-b4cc-589e0361eb7c-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6699b0ca-5385-422a-a714-04485b09d99c-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-748d77af-f77f-4366-a018-9f6105e95e72-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0d43c5c5-f23b-4e07-85df-7e98928a7357-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 29", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e8d7fa9a-be9e-460d-8150-78decfd2bf7c-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-8ed6e4ad-9ac9-4f89-9a1a-c67da6afff4e-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ca28015c-e514-48b5-be2a-5f69df7f356f-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c093ae9a-050f-4822-a117-33215ec0e7a2-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-8443f1f0-3b69-4f6d-bc59-d2ed98e93667-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b0cb5f3c-9027-4a3e-97c5-1afe2b5033bb-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 26", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-b8eacc7c-24c9-4ecf-8538-e394400109ff-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 25", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6ff38276-8484-40bd-8c92-675986a56808-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 24", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6699b0ca-5385-422a-a714-04485b09d99c-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6039d265-2f61-4f60-b4cc-589e0361eb7c-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-748d77af-f77f-4366-a018-9f6105e95e72-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0d43c5c5-f23b-4e07-85df-7e98928a7357-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e8d7fa9a-be9e-460d-8150-78decfd2bf7c-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-8ed6e4ad-9ac9-4f89-9a1a-c67da6afff4e-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ca28015c-e514-48b5-be2a-5f69df7f356f-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:05:59 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39266 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 13", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39280 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39300 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39304 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39334 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39360 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39350 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39402 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1b755e11-22ca-4a2e-b899-3f54246a933a-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 30", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39328 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39370 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39386 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39428 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5e880edf-cb4e-4ac2-bf05-cafd5d5a8ee7-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-aab8ce73-a967-49bc-818d-56960891ac18-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-664b66fe-fea6-49de-8f05-1d63f9bcf3f4-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-05576e6d-56dc-4799-a635-651474731fb8-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39288 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c879d518-658b-4518-ad97-3799cf5d782b-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-598ffc7d-63be-43aa-979d-00b1bd6eae1d-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39316 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39380 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d8a264c5-454f-4552-9542-d4f237bc1d26-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39294 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39414 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-472adfb8-03bf-43b0-be05-504fa910a076-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0be1aa92-1c3f-449b-89a6-bbb39047fc86-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a2150c46-8edb-4012-ad1f-33f5ab357cba-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-39cfd2b6-eeb4-4950-b432-6854ef631e1c-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a8a886c1-00bd-4d6d-ab5d-f031f404da5c-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a93f2826-54cd-4123-a57e-36772d5d242d-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-cf0d7e92-f8a2-4263-a4c7-89ff40eaa33e-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ca6bb9a2-8643-4c1e-a32f-e98122b86fa8-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2598a898-c6d4-4f0d-9711-8510a084bdde-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-1b755e11-22ca-4a2e-b899-3f54246a933a-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 29", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-664b66fe-fea6-49de-8f05-1d63f9bcf3f4-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 28", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-05576e6d-56dc-4799-a635-651474731fb8-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 27", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-aab8ce73-a967-49bc-818d-56960891ac18-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 26", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-5e880edf-cb4e-4ac2-bf05-cafd5d5a8ee7-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 25", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c879d518-658b-4518-ad97-3799cf5d782b-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:00 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 24", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-598ffc7d-63be-43aa-979d-00b1bd6eae1d-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 23", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d8a264c5-454f-4552-9542-d4f237bc1d26-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 22", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0be1aa92-1c3f-449b-89a6-bbb39047fc86-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 21", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a2150c46-8edb-4012-ad1f-33f5ab357cba-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 20", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-472adfb8-03bf-43b0-be05-504fa910a076-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 19", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-39cfd2b6-eeb4-4950-b432-6854ef631e1c-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a8a886c1-00bd-4d6d-ab5d-f031f404da5c-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-a93f2826-54cd-4123-a57e-36772d5d242d-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 16", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-cf0d7e92-f8a2-4263-a4c7-89ff40eaa33e-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 15", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2598a898-c6d4-4f0d-9711-8510a084bdde-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 14", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ca6bb9a2-8643-4c1e-a32f-e98122b86fa8-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 13", "level": "INFO"}
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:06:01 [loggers.py:310] Engine 000: Avg prompt throughput: 391.0 tokens/s, Avg generation throughput: 240.8 tokens/s, Running: 13 reqs, Waiting: 0 reqs, GPU KV cache usage: 1.4%, Prefix cache hit rate: 93.2%
+Wed Sep 23 2026 18:06:01 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39450 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39434 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e82aa1b1-9fe4-4d81-af70-59bb6fe423dc-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39466 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39468 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39474 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39514 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39486 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in queue: 5", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-edb597fd-1e50-4104-be95-1e8b40c19489-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39470 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39498 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39518 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fdf8d860-bd48-417b-acf0-5ba710181a64-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d3a19367-b7d5-4dc2-9ff8-9cac2acdda5d-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fba5f111-659b-4b7f-8df8-85271ca138ad-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 18", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-65005abc-3163-49c9-bfc5-54fc2d0c972a-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-bd0ceb69-aff2-420a-8a88-ef5e45076a6a-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39534 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39546 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-eb254700-9eee-4f8c-8de6-e9394dcc5bc3-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6b26eef6-1626-4912-a559-3ddd18eecc20-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c34f7654-a9be-4576-bc42-2dffcfde3e0e-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d8c70e5b-8941-4af9-a10d-b0a2e32c4cd7-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-e82aa1b1-9fe4-4d81-af70-59bb6fe423dc-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 17", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-7268a8d2-2fba-4e4d-a2e4-3c3aa5e239d7-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-edb597fd-1e50-4104-be95-1e8b40c19489-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 16", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39448 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-65005abc-3163-49c9-bfc5-54fc2d0c972a-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 15", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fba5f111-659b-4b7f-8df8-85271ca138ad-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d3a19367-b7d5-4dc2-9ff8-9cac2acdda5d-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 13", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-fdf8d860-bd48-417b-acf0-5ba710181a64-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 12", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-bd0ceb69-aff2-420a-8a88-ef5e45076a6a-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 11", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-eb254700-9eee-4f8c-8de6-e9394dcc5bc3-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 10", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-99fa677c-0c0b-4f7a-8049-b71eb90c67c1-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-6b26eef6-1626-4912-a559-3ddd18eecc20-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 9", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-c34f7654-a9be-4576-bc42-2dffcfde3e0e-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d8c70e5b-8941-4af9-a10d-b0a2e32c4cd7-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 7", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-7268a8d2-2fba-4e4d-a2e4-3c3aa5e239d7-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 6", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-99fa677c-0c0b-4f7a-8049-b71eb90c67c1-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:02 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 5", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39594 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39558 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0d7e4bce-9346-4ea7-8d8f-21c898e27c4c-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39578 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d5339711-f811-49f5-970d-540cd41bab25-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39566 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO:     127.0.0.1:39596 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2417428d-ac1e-4a27-b4be-e2b16920f3e0-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ee3c2611-0d27-4a7f-8e33-a850e0ff232b-u2", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-dc93b2c0-a233-4e5b-a1d5-fe51ced14a72-u1", "message": "Finished running generator.", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-0d7e4bce-9346-4ea7-8d8f-21c898e27c4c-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 4", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-d5339711-f811-49f5-970d-540cd41bab25-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 3", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-2417428d-ac1e-4a27-b4be-e2b16920f3e0-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 2", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-ee3c2611-0d27-4a7f-8e33-a850e0ff232b-u2", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": null, "message": "Jobs in progress: 1", "level": "INFO"}
+Wed Sep 23 2026 18:06:03 GMT-0400 (Eastern Daylight Time) {"requestId": "sync-dc93b2c0-a233-4e5b-a1d5-fe51ced14a72-u1", "message": "Finished.", "level": "INFO"}
+Wed Sep 23 2026 18:06:11 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:06:11 [loggers.py:310] Engine 000: Avg prompt throughput: 19.8 tokens/s, Avg generation throughput: 35.2 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 93.2%
+Wed Sep 23 2026 18:08:22 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:08:22 [loggers.py:310] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 0.0 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 93.2%
+Wed Sep 23 2026 18:08:22 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:08:22,618 INFO root: Received signal 15, shutting down vLLM
+Wed Sep 23 2026 18:09:26 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:09:26,345 INFO httpx: HTTP Request: GET https://huggingface.co/api/agent-harnesses "HTTP/1.1 200 OK"
+Wed Sep 23 2026 18:09:26 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:09:26,472 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/qwen/qwen3-32b-awq/revision/0499c3ac83fdef8810b907a23894ba91e95eddd8 "HTTP/1.1 307 Temporary Redirect"
+Wed Sep 23 2026 18:09:26 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:09:26,612 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen3-32B-AWQ/revision/0499c3ac83fdef8810b907a23894ba91e95eddd8 "HTTP/1.1 200 OK"
+Wed Sep 23 2026 18:09:26 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:09:26,615 INFO root: Model pre-flight: qwen/qwen3-32b-awq@0499c3ac83fdef8810b907a23894ba91e95eddd8 is fetchable
+Wed Sep 23 2026 18:09:26 GMT-0400 (Eastern Daylight Time) 2026-09-23 22:09:26,616 INFO root: Starting vLLM: vllm serve --host 127.0.0.1 --port 8000 --block-size 16 --no-disable-custom-all-reduce --no-disable-sliding-window --distributed-executor-backend mp --dtype auto --no-enable-auto-tool-choice --enable-chunked-prefill --no-enable-expert-parallel --no-enable-log-requests --no-enable-lora --enable-prefix-caching --no-enforce-eager --no-fully-sharded-loras --gpu-memory-utilization 0.95 --hf-token hf_REDACTED --kv-cache-dtype auto --load-format auto --lora-dtype auto --max-cpu-loras 0 --max-logprobs 20 --max-lora-rank 16 --max-loras 1 --max-model-len 4096 --max-num-seqs 256 --max-parallel-loading-workers 1 --pipeline-parallel-size 1 --quantization awq --no-ray-workers-use-nsight --seed 0 --no-skip-tokenizer-init --tensor-parallel-size 1 --tokenizer-mode auto --no-trust-remote-code --model qwen/qwen3-32b-awq --revision 0499c3ac83fdef8810b907a23894ba91e95eddd8
+Wed Sep 23 2026 18:09:39 GMT-0400 (Eastern Daylight Time) INFO 09-23 22:09:39 [import_utils.py:478] DeepEP v2 requires NCCL >= 2.30.4 but found 2.29.7. deepep_v2 backend will not be available.
+Wed Sep 23 2026 18:09:43 GMT-0400 (Eastern Daylight Time) INFO 09-23 22:09:43 [__init__.py:109] Registered model loader `<class 'vllm_bnb_plugin.bitsandbytes_loader.BitsAndBytesModelLoader'>` with load format `bitsandbytes`
+Wed Sep 23 2026 18:09:43 GMT-0400 (Eastern Daylight Time) WARNING 09-23 22:09:43 [argparse_utils.py:257] With `vllm serve`, you should provide the model as a positional argument or in a config file instead of via the `--model` option. The `--model` option will be removed in a future version.
+Wed Sep 23 2026 18:09:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:09:43 [api_utils.py:333] 
+Wed Sep 23 2026 18:09:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:09:43 [api_utils.py:333]        █     █     █▄   ▄█
+Wed Sep 23 2026 18:09:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:09:43 [api_utils.py:333]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.28.0
+Wed Sep 23 2026 18:09:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:09:43 [api_utils.py:333]   █▄█▀ █     █     █     █  model   qwen/qwen3-32b-awq
+Wed Sep 23 2026 18:09:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:09:43 [api_utils.py:333]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+Wed Sep 23 2026 18:09:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:09:43 [api_utils.py:333] 
+Wed Sep 23 2026 18:09:43 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:09:43 [api_utils.py:272] non-default args: {'model_tag': 'qwen/qwen3-32b-awq', 'host': '127.0.0.1', 'model': 'qwen/qwen3-32b-awq', 'revision': '0499c3ac83fdef8810b907a23894ba91e95eddd8', 'max_model_len': 4096, 'quantization': 'awq', 'hf_token': 'hf_REDACTED', 'distributed_executor_backend': 'mp', 'max_parallel_loading_workers': 1, 'block_size': 16, 'gpu_memory_utilization': 0.95, 'enable_prefix_caching': True, 'enable_lora': False, 'max_cpu_loras': 0, 'max_num_seqs': 256, 'enable_chunked_prefill': True}
+Wed Sep 23 2026 18:09:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:09:54 [model.py:672] Resolved architecture: Qwen3ForCausalLM
+Wed Sep 23 2026 18:09:54 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:09:54 [model.py:1965] Using max model len 4096
+Wed Sep 23 2026 18:09:55 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) WARNING 09-23 22:09:55 [parallel.py:959] max_parallel_loading_workers is currently not supported and will be ignored.
+Wed Sep 23 2026 18:09:56 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) 
+Wed Sep 23 2026 18:09:56 GMT-0400 (Eastern Daylight Time) Parse safetensors files:   0%|          | 0/4 [00:00<?, ?it/s]
+Wed Sep 23 2026 18:09:57 GMT-0400 (Eastern Daylight Time) Parse safetensors files:  25%|██▌       | 1/4 [00:00<00:02,  1.43it/s]
+Wed Sep 23 2026 18:09:57 GMT-0400 (Eastern Daylight Time) Parse safetensors files: 100%|██████████| 4/4 [00:00<00:00,  5.49it/s]
+Wed Sep 23 2026 18:09:57 GMT-0400 (Eastern Daylight Time) (APIServer pid=51) INFO 09-23 22:09:57 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+Wed Sep 23 2026 18:10:12 GMT-0400 (Eastern Daylight Time) INFO 09-23 22:10:12 [import_utils.py:478] DeepEP v2 requires NCCL >= 2.30.4 but found 2.29.7. deepep_v2 backend will not be available.
+Wed Sep 23 2026 18:10:14 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:10:14 [__init__.py:109] Registered model loader `<class 'vllm_bnb_plugin.bitsandbytes_loader.BitsAndBytesModelLoader'>` with load format `bitsandbytes`
+Wed Sep 23 2026 18:10:14 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:10:14 [core.py:122] Initializing a V1 LLM engine (v0.28.0) with config: model='qwen/qwen3-32b-awq', speculative_config=None, tokenizer='qwen/qwen3-32b-awq', skip_tokenizer_init=False, tokenizer_mode=auto, revision=0499c3ac83fdef8810b907a23894ba91e95eddd8, tokenizer_revision=0499c3ac83fdef8810b907a23894ba91e95eddd8, trust_remote_code=False, dtype=torch.float16, max_seq_len=4096, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=auto_awq, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=qwen/qwen3-32b-awq, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::linear_attention', 'vllm::qwen_gdn_attention_core', 'vllm::qwen_gdn_attention_core_fused_norm_packed', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::hpc_rope_norm_forward', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [2048], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': False, 'fuse_act_quant': False, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 512, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=True, enable_bf16x3_router_gemm=False, moe_backend='auto', linear_backend='auto')
+Wed Sep 23 2026 18:10:14 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:10:14 [multiproc_executor.py:150] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=127.0.0.1, mq_connect_ip=192.168.3.2 (local), world_size=1, local_world_size=1
+Wed Sep 23 2026 18:10:21 GMT-0400 (Eastern Daylight Time) INFO 09-23 22:10:21 [import_utils.py:478] DeepEP v2 requires NCCL >= 2.30.4 but found 2.29.7. deepep_v2 backend will not be available.
+Wed Sep 23 2026 18:10:23 GMT-0400 (Eastern Daylight Time) INFO 09-23 22:10:23 [__init__.py:109] Registered model loader `<class 'vllm_bnb_plugin.bitsandbytes_loader.BitsAndBytesModelLoader'>` with load format `bitsandbytes`
+Wed Sep 23 2026 18:10:23 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:23 [parallel_state.py:1638] world_size=1 rank=0 local_rank=0 distributed_init_method=file:///tmp/vllm_dist_c46e6ab324ee456d967d300f48c11aa3 backend=nccl
+Wed Sep 23 2026 18:10:23 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:23 [parallel_state.py:1982] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
+Wed Sep 23 2026 18:10:23 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:23 [gpu_worker.py:396] Using V2 Model Runner
+Wed Sep 23 2026 18:10:24 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:24 [model_runner.py:358] Loading model from scratch...
+Wed Sep 23 2026 18:10:24 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:24 [auto_awq.py:448] Using MarlinLinearKernel for AutoAWQMarlinLinearMethod
+Wed Sep 23 2026 18:10:24 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:24 [cuda.py:486] Using FLASH_ATTN attention backend out of potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION'].
+Wed Sep 23 2026 18:10:24 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:24 [flash_attn.py:866] Using FlashAttention version 2
+Wed Sep 23 2026 18:10:42 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:42 [weight_utils.py:521] Time spent downloading weights for qwen/qwen3-32b-awq: 15.967701 seconds
+Wed Sep 23 2026 18:10:42 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:42 [weight_utils.py:858] Filesystem type for checkpoints: OVERLAY. Checkpoint size: 18.00 GiB. Available RAM: 25.54 GiB.
+Wed Sep 23 2026 18:10:42 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:42 [weight_utils.py:881] Auto-prefetch is disabled because the filesystem (OVERLAY) is not a recognized network FS (NFS/Lustre). If you want to force prefetching, start vLLM with --safetensors-load-strategy=prefetch.
+Wed Sep 23 2026 18:10:42 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:10:42 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:   0% Completed | 0/4 [00:00<?, ?it/s]
+Wed Sep 23 2026 18:10:43 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:10:43 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:  25% Completed | 1/4 [00:00<00:02,  1.09it/s]
+Wed Sep 23 2026 18:10:44 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:10:44 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:  50% Completed | 2/4 [00:01<00:01,  1.06it/s]
+Wed Sep 23 2026 18:10:45 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:10:45 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards:  75% Completed | 3/4 [00:02<00:00,  1.06it/s]
+Wed Sep 23 2026 18:10:46 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:10:46 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards: 100% Completed | 4/4 [00:03<00:00,  1.07it/s]
+Wed Sep 23 2026 18:10:46 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:10:46 GMT-0400 (Eastern Daylight Time) Loading safetensors checkpoint shards: 100% Completed | 4/4 [00:03<00:00,  1.07it/s]
+Wed Sep 23 2026 18:10:46 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:10:46 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:46 [default_loader.py:430] Loading weights took 3.82 seconds
+Wed Sep 23 2026 18:10:50 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:50 [model_runner.py:380] Model loading took 18.01 GiB memory and 26.243509 seconds
+Wed Sep 23 2026 18:10:50 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:10:50 [topk_topp_sampler.py:62] Using FlashInfer for top-p & top-k sampling.
+Wed Sep 23 2026 18:10:50 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:10:50 [torch_utils.py:262] Reducing Torch threads from 96 to 1 for serving. Set OMP_NUM_THREADS in the external environment to override.
+Wed Sep 23 2026 18:11:09 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:11:09 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/2f56dd1dec/rank_0_0/backbone for vLLM's torch.compile
+Wed Sep 23 2026 18:11:09 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:11:09 [backends.py:1155] Dynamo bytecode transform time: 18.04 s
+Wed Sep 23 2026 18:11:33 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:11:33 [backends.py:393] Compiling a graph for compile range (1, 2048) takes 22.60 s
+Wed Sep 23 2026 18:11:47 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:11:47 [backends.py:920] collected artifacts: 65 entries, 3 artifacts, 6139038 bytes total
+Wed Sep 23 2026 18:11:47 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:11:47 [decorators.py:708] saved AOT compiled function to /root/.cache/vllm/torch_compile_cache/torch_aot_compile/46a0a473594b7b548441e537975887bebadafb00cfee5733b61683b317506fda/rank_0_0/model
+Wed Sep 23 2026 18:11:47 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:11:47 [monitor.py:53] torch.compile took 56.12 s in total
+Wed Sep 23 2026 18:11:47 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:11:47 [monitor.py:81] Initial profiling/warmup run took 0.13 s
+Wed Sep 23 2026 18:11:50 GMT-0400 (Eastern Daylight Time) (Worker pid=965) INFO 09-23 22:11:50 [gpu_worker.py:578] Available KV cache memory: 22.41 GiB
+Wed Sep 23 2026 18:11:50 GMT-0400 (Eastern Daylight Time) (EngineCore pid=571) INFO 09-23 22:11:50 [kv_cache_utils.py:1869] GPU KV cache size: 91,776 tokens, Maximum concurrency for 4,096 tokens per request: 22.41x
+Wed Sep 23 2026 18:11:51 GMT-0400 (Eastern Daylight Time) (Worker pid=965) 
+Wed Sep 23 2026 18:11:51 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   0%|          | 0/51 [00:00<?, ?it/s]
+Wed Sep 23 2026 18:11:52 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   2%|▏         | 1/51 [00:00<00:26,  1.88it/s]
+Wed Sep 23 2026 18:11:52 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   4%|▍         | 2/51 [00:01<00:25,  1.94it/s]
+Wed Sep 23 2026 18:11:53 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   6%|▌         | 3/51 [00:01<00:24,  1.97it/s]
+Wed Sep 23 2026 18:11:53 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):   8%|▊         | 4/51 [00:02<00:23,  1.99it/s]
+Wed Sep 23 2026 18:11:54 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  10%|▉         | 5/51 [00:02<00:23,  1.97it/s]
+Wed Sep 23 2026 18:11:54 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  12%|█▏        | 6/51 [00:03<00:22,  2.00it/s]
+Wed Sep 23 2026 18:11:55 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  14%|█▎        | 7/51 [00:03<00:21,  2.02it/s]
+Wed Sep 23 2026 18:11:55 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  16%|█▌        | 8/51 [00:04<00:21,  2.00it/s]
+Wed Sep 23 2026 18:11:56 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  18%|█▊        | 9/51 [00:04<00:20,  2.05it/s]
+Wed Sep 23 2026 18:11:56 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  20%|█▉        | 10/51 [00:05<00:20,  2.01it/s]
+Wed Sep 23 2026 18:11:57 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  22%|██▏       | 11/51 [00:05<00:19,  2.07it/s]
+Wed Sep 23 2026 18:11:57 GMT-0400 (Eastern Daylight Time) Capturing CUDA graphs (PIECEWISE):  24%|██▎       | 12/51 [00:05<00:18,  2.12it/s]

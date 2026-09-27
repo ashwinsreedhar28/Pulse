@@ -1,0 +1,186 @@
+# Script outputs, verbatim, in order. All on endpoint 4ib59mjp0vgaao, 24 GB flex $0.69/hr, worker-vllm v2.27.1 (vLLM 0.28.0), model qwen/qwen3-8b, MAX_MODEL_LEN 4096.
+
+## Run 1, 2026-09-23 ~13:33 EDT, MODEL default (Qwen/Qwen3-8B) -> 404 from vLLM
+# (script exited on FAILED; row in results CSV: delay=311157 ms, status FAILED, workers_before throttled:1)
+
+## Run 2, 13:41 EDT, MODEL=qwen/qwen3-8b --cycles 1 --warm 10
+cycle=0 cold wall=237218ms delay=233850 exec=2976 COMPLETED
+cycle=0 warm wall=3032ms delay=23 exec=2889 COMPLETED
+cycle=0 warm wall=3002ms delay=19 exec=2863 COMPLETED
+cycle=0 warm wall=3090ms delay=17 exec=2916 COMPLETED
+cycle=0 warm wall=3397ms delay=22 exec=2902 COMPLETED
+cycle=0 warm wall=3075ms delay=25 exec=2956 COMPLETED
+cycle=0 warm wall=3020ms delay=18 exec=2897 COMPLETED
+cycle=0 warm wall=3011ms delay=17 exec=2893 COMPLETED
+cycle=0 warm wall=3010ms delay=18 exec=2893 COMPLETED
+cycle=0 warm wall=3044ms delay=21 exec=2899 COMPLETED
+cycle=0 warm wall=3021ms delay=17 exec=2893 COMPLETED
+
+## Run 3, 13:50 EDT, --cycles 1 --warm 2 (worker still idle from run 2; NOT a cold start)
+cycle=0 cold wall=3555ms delay=558 exec=2867 COMPLETED
+cycle=0 warm wall=3032ms delay=17 exec=2913 COMPLETED
+cycle=0 warm wall=3193ms delay=24 exec=2880 COMPLETED
+
+## Run 4, 14:00 EDT, script v3 (text column), --cycles 1 --warm 2. Endpoint was throttled (no capacity) before the request.
+cycle=0 cold wall=314612ms delay=310459 exec=2980 tok=64 finish=length COMPLETED
+   text: {"score": 2, "reason": "The Federal Reserve's decision not to change rates may have a broad market impact but does not directly affect the specific stocks liste
+cycle=0 warm wall=3189ms delay=22 exec=2843 tok=64 finish=length COMPLETED
+   text: {"score": 2, "reason": "The Federal Reserve's decision not to change rates may have a broad market impact but does not directly affect the specific stocks liste
+cycle=0 warm wall=2998ms delay=19 exec=2882 tok=64 finish=length COMPLETED
+
+## Run 5, 14:07 EDT, FlashBoot cycles: --cycles 10 --warm 5 --idle-wait 300 (output pasted when done)
+cycle=0 cold wall=7213ms delay=502 exec=6559 tok=64 finish=length COMPLETED     <- parked-worker HIT on the 24 GB-tier worker (L4-class); first exec 2.3x slow
+   text: {"score": 2, "reason": "The Federal Reserve's decision not to change rates may have a broad market impact but does not directly affect the specific stocks liste
+cycle=0 warm wall=3411ms delay=35 exec=2894 tok=64 finish=length COMPLETED
+cycle=0 warm wall=3393ms delay=18 exec=2916 tok=64 finish=length COMPLETED
+cycle=0 warm wall=3399ms delay=19 exec=2888 tok=64 finish=length COMPLETED
+cycle=0 warm wall=3182ms delay=19 exec=2910 tok=64 finish=length COMPLETED
+cycle=0 warm wall=3229ms delay=21 exec=2912 tok=64 finish=length COMPLETED
+   idling 300s
+# cycle 1 cold call sent ~14:13:30, never served: three successive PRO 6000 MIG placements in US-PA-1 hung (friction #17), a fourth in US-WA-1 failed with
+# "cant create container; network must exist" (friction #19). Script Ctrl-C'd ~14:39, queue purged, GPU priority changed to 24 GB PRO first.
+
+## Run 6, 14:42 EDT, --gpu 24GBPRO-1.10 --cycles 9 --warm 5 --idle-wait 300 (output pasted when done)
+cycle=0 cold wall=478698ms delay=476676 exec=1317 tok=64 finish=length COMPLETED     <- RTX 4090 US-NC-1; delay is mostly queue time behind hung MIG workers (enqueued 14:42, placed ~14:48)
+   text: {"score": 2, "reason": "The Federal Reserve's decision not to change rates may have a broad market impact but does not directly affect the specific stocks liste
+cycle=0 warm wall=1440ms delay=19 exec=1247 tok=64 finish=length COMPLETED
+cycle=0 warm wall=1315ms delay=17 exec=1194 tok=64 finish=length COMPLETED
+cycle=0 warm wall=1499ms delay=16 exec=1268 tok=64 finish=length COMPLETED
+cycle=0 warm wall=1358ms delay=18 exec=1242 tok=64 finish=length COMPLETED
+cycle=0 warm wall=1373ms delay=15 exec=1243 tok=64 finish=length COMPLETED
+   idling 300s
+# 14:55 the parked 4090 was evicted; Runpod re-parked on a PRO 6000 MIG in US-PA-1 (US-PA-1 is not in the data-center filter list, friction #22). Data centers set to allowlist US-NC-1, US-CA-2, US-IL-1, US-KS-2 at ~14:57 -> rollout -> cycle 1 placed on RTX 4090 US-NC-1.
+cycle=1 cold wall=259819ms delay=257952 exec=1350 tok=64 finish=length COMPLETED     <- miss; includes rollout
+   text: {"score": 2, "reason": "The Federal Reserve's decision not to change rates may have a broad market impact but does not directly affect the specific stocks liste
+cycle=1 warm wall=1396ms delay=24 exec=1244 tok=64 finish=length COMPLETED
+cycle=1 warm wall=1494ms delay=22 exec=1236 tok=64 finish=length COMPLETED
+cycle=1 warm wall=1417ms delay=32 exec=1227 tok=64 finish=length COMPLETED
+cycle=1 warm wall=2092ms delay=20 exec=1283 tok=64 finish=length COMPLETED
+cycle=1 warm wall=1857ms delay=24 exec=1283 tok=64 finish=length COMPLETED
+   idling 300s
+cycle=2 cold wall=244973ms delay=242993 exec=1337 tok=64 finish=length COMPLETED     <- RTX 4090 US-NC-1; miss, no config change
+   text: {"score": 2, "reason": "The Federal Reserve's decision not to change rates may have a broad market impact but does not directly affect the specific stocks liste
+cycle=2 warm wall=1682ms delay=16 exec=1261 tok=64 finish=length COMPLETED
+cycle=2 warm wall=1752ms delay=18 exec=1281 tok=64 finish=length COMPLETED
+cycle=2 warm wall=1568ms delay=18 exec=1225 tok=64 finish=length COMPLETED
+cycle=2 warm wall=1453ms delay=25 exec=1332 tok=64 finish=length COMPLETED
+cycle=2 warm wall=1382ms delay=25 exec=1263 tok=64 finish=length COMPLETED
+   idling 300s
+# cycle 3 cold call enqueued ~15:15. Placements: 4090 US-CA-2 (gone within a minute) -> 4090 EUR-NO-1 (hung at "initializing model files" from 15:21:31, friction #25). Script Ctrl-C'd ~15:40, queue purged. Run 6 total: 3 cycles, 0 parked-worker hits at 5 min idle, 3 cold starts (476.7 placement-blocked, 258.0 with rollout, 243.0 clean).
+
+## Run 7, 15:50 EDT, placement test after HF_TOKEN (version 7): --cycles 1 --warm 2. Served by A40 yji6fzgmt48rg8 in Canada (host had "model ready" since 15:40:52).
+cycle=0 cold wall=180781ms delay=177517 exec=2173 tok=64 finish=length COMPLETED
+   text: {"score": 2, "reason": "The Federal Reserve's decision not to change rates may have a broad market impact but does not directly affect the specific stocks liste
+cycle=0 warm wall=2273ms delay=19 exec=2108 tok=64 finish=length COMPLETED
+   text: {"score": 2, "reason": "The Federal Reserve's decision not to change rates may have a broad market impact but does not directly affect the specific stocks liste
+cycle=0 warm wall=2163ms delay=16 exec=2043 tok=64 finish=length COMPLETED
+# Container log for this worker still says "unauthenticated requests to the HF Hub" -> HF_TOKEN secret reference did not reach the container (or worker was v6).
+
+## Run 8, 16:08 EDT, throughput.py --gpu 48GB-A40-1.22 --rate 1.22 --n 200 --concurrency 8 --label prefix_off (max workers still 2; a second A40 started mid-batch)
+warm-up request...
+   delay=171115 exec=1119 COMPLETED ""
+batch: n=200 concurrency=8 label=prefix_off
+   25/200 done, 8s
+   50/200 done, 14s
+   75/200 done, 22s
+   100/200 done, 34s
+   125/200 done, 43s
+   150/200 done, 53s
+   175/200 done, 62s
+   200/200 done, 67s
+
+SUMMARY
+  label=prefix_off gpu=48GB-A40-1.22 rate=$1.22/hr n=200 concurrency=8
+  completed 200/200, parsed JSON 200/200
+  wall 67.1s -> 2.98 articles/s
+  exec_ms p50 1573 p95 1819 max 2092
+  delay_ms p50 75 p95 5004 max 5153
+  prompt tokens/article 615, completion tokens/article 27
+  aggregate 1915 tok/s (81 generated tok/s)
+  worker cost for the batch $0.0227 -> $0.1136 per 1,000 articles (excludes cold start)
+
+## Run 9, 16:15 EDT, throughput.py --concurrency 8 --label prefix_on. MISLABELED: served by parked worker 0srxny843ech7c from run 8, prefix cache hit rate 0.0% in every engine stats line (logs/run9_prefix_on_worker.log). Treat as a prefix_off replicate.
+warm-up request...
+   delay=850 exec=1432 COMPLETED ""
+SUMMARY
+  label=prefix_on gpu=48GB-A40-1.22 rate=$1.22/hr n=200 concurrency=8
+  completed 200/200, parsed JSON 200/200
+  wall 68.1s -> 2.94 articles/s
+  exec_ms p50 1833 p95 2087 max 2246
+  delay_ms p50 163 p95 3550 max 5515
+  prompt tokens/article 615, completion tokens/article 27
+  aggregate 1885 tok/s (80 generated tok/s)
+  worker cost for the batch $0.0231 -> $0.1154 per 1,000 articles (excludes cold start)
+
+## Run 10, 16:21 EDT, throughput.py --concurrency 32 --label prefix_on_c32. Warm-up delay 845 ms = parked worker; release not verified (container log empty in console), so prefix caching state unknown.
+warm-up request...
+   delay=845 exec=1343 COMPLETED ""
+SUMMARY
+  label=prefix_on_c32 gpu=48GB-A40-1.22 rate=$1.22/hr n=200 concurrency=32
+  completed 200/200, parsed JSON 200/200
+  wall 36.2s -> 5.53 articles/s
+  exec_ms p50 3679 p95 4444 max 4608
+  delay_ms p50 614 p95 3129 max 5280
+  prompt tokens/article 615, completion tokens/article 27
+  aggregate 3548 tok/s (150 generated tok/s)
+  worker cost for the batch $0.0123 -> $0.0613 per 1,000 articles (excludes cold start)
+
+## c64 run started 16:23, halted: overlapped with CC's quality.py Runpod columns. Rerun pending.
+
+## Run 11, 16:27 EDT, throughput.py --concurrency 64 --label c64 (CC had not started its Runpod columns; no overlap)
+warm-up request...
+   delay=768 exec=1340 COMPLETED ""
+SUMMARY
+  label=c64 gpu=48GB-A40-1.22 rate=$1.22/hr n=200 concurrency=64
+  completed 200/200, parsed JSON 200/200
+  wall 36.0s -> 5.56 articles/s
+  exec_ms p50 3603 p95 4173 max 4393
+  delay_ms p50 5093 p95 7681 max 8787
+  prompt tokens/article 615, completion tokens/article 27
+  aggregate 3568 tok/s (151 generated tok/s)
+  worker cost for the batch $0.0122 -> $0.0610 per 1,000 articles (excludes cold start)
+# Same throughput as c32; delay p50 5.1 s = requests queued at Runpod behind worker-vllm MAX_CONCURRENCY (default 30). Knee is the worker setting, not the GPU.
+
+## Run 12, 16:43 EDT, throughput.py --concurrency 8 --label prefix_on_verified. Worker 75bvekk819begd, confirmed on the latest release (prefix caching on) in the Workers tab. Comparable to runs 8, 9 (prefix off).
+warm-up request...
+   delay=814 exec=1408 COMPLETED ""
+SUMMARY
+  label=prefix_on_verified gpu=48GB-A40-1.22 rate=$1.22/hr n=200 concurrency=8
+  completed 200/200, parsed JSON 200/200
+  wall 65.5s -> 3.06 articles/s
+  exec_ms p50 1906 p95 2292 max 3325
+  delay_ms p50 131 p95 611 max 5516
+  prompt tokens/article 615, completion tokens/article 27
+  aggregate 1962 tok/s (83 generated tok/s)
+  worker cost for the batch $0.0222 -> $0.1109 per 1,000 articles (excludes cold start)
+# vs prefix off: 2.98 / 2.94 articles/s, exec p50 1,573 / 1,833 ms. No measurable effect at c8.
+
+## Pulse end-to-end, 17:12 EDT. PULSE_SCORING_PROVIDER=runpod npm run dev with bench/.env (first attempt used ENDPOINT_ID, Pulse reads RUNPOD_ENDPOINT_ID -> unconfigured -> 2 AI(ollama) rows, correct degrade).
+[aiClient] runpod scoring returned null, falling back to ollama
+[runpod] endpoint cold; queued warmup job a0d110e7-2178-4df7-b65f-72d2d994dec8-u1 (IN_QUEUE)
+[aiClient] runpod scoring returned null, falling back to ollama
+[poller] 214 feeds in 13932ms — 15 new articles, 13 errors
+# Cold path verified: score-3 articles fell back to Ollama with no stall, one warm-up job queued. Warm-up still IN_QUEUE at 17:21 (9+ min, placement stuck, same afternoon pattern). Warm path (AI(runpod) rows from Pulse) not yet observed.
+
+## Endpoint 2: 29fqxvabtskzb8, Qwen3-32B-AWQ (served as qwen/qwen3-32b-awq), 48 GB tier, RTX A6000, EU-SE-1. Cold start 17:42:31 container start -> 17:45:53 healthy = 202 s (download 18 GiB 31.5 s, torch.compile 58.6 s, graph capture 19 s, KV cache 25.24 GiB = 103,360 tokens). First request 404 on proper-case model name (friction #37).
+cycle=0 cold wall=3387ms delay=718 exec=2442 tok=64 finish=length COMPLETED
+   text: ```json\n{"score": 2, "reason": "The news relates to monetary policy and inflation, which can have broad market implications, but it does not directly impact th
+cycle=0 warm wall=2692ms delay=54 exec=2420 tok=64 finish=length COMPLETED
+cycle=0 warm wall=2679ms delay=74 exec=2387 tok=64 finish=length COMPLETED
+cycle=0 warm wall=2618ms delay=50 exec=2307 tok=64 finish=length COMPLETED
+cycle=0 warm wall=2663ms delay=56 exec=2375 tok=64 finish=length COMPLETED
+cycle=0 warm wall=2565ms delay=51 exec=2308 tok=64 finish=length COMPLETED
+SUMMARY q32awq_c8: 200/200 parsed, wall 112.7s -> 1.77 articles/s, exec p50 3928 p95 4333, delay p50 266 p95 485, 615 in / 26 out, 1138 tok/s (47 gen), $0.1910 per 1,000
+SUMMARY q32awq_c32: 200/200 parsed, wall 95.2s -> 2.10 articles/s, exec p50 12029 p95 12984, delay p50 579 p95 12493, 615 in / 26 out, 1347 tok/s (56 gen), $0.1614 per 1,000
+
+## 32B, prefix caching ON (release after 17:55, --enable-prefix-caching in Starting vLLM, engine hit rate 90.5% / 93.0%), HF_TOKEN resolved (no unauthenticated warning; 18 GiB download 15.2 s vs 31.5 s without). logs/q32awq_prefix_worker.log
+SUMMARY q32awq_c32_prefix (contaminated: warm-up 204.6 s cold start, then batch queued up to 226.7 s behind a container restart): wall 247.5s -> 0.81 articles/s, exec p50 1795 p95 2892
+SUMMARY q32awq_c32_prefix_r2 (clean; warm-up delay 188.9 s absorbed a restart): 200/200 parsed, wall 24.4s -> 8.20 articles/s, exec p50 1949 p95 2724, delay p50 907 p95 2050, 615 in / 26 out, 5260 tok/s (217 gen), $0.0413 per 1,000
+# vs prefix off: 2.10 articles/s, exec p50 12,029 ms, $0.161 per 1,000. 3.9x throughput.
+# Each run a few minutes apart paid a full container restart (5 s idle timeout).
+
+## 8B endpoint, prefix caching ON (verified: container log, hit rate 93.2-97.0%), idle timeout 120 s, 48 GB tier $1.22/hr. One container for all three runs (vLLM started 18:20:27, healthy 18:22:21). logs/8b_prefix_c32_c64_worker.log
+SUMMARY 8b_c32_prefix (warm-up 122.1 s cold): 200/200, wall 15.6s -> 12.84 articles/s, exec p50 1055 p95 1212, delay p50 225 p95 1276, 8249 tok/s (350 gen), $0.0264 per 1,000
+SUMMARY 8b_c32_prefix_r2: 200/200, wall 19.1s -> 10.48 articles/s, exec p50 953 p95 1135, delay p50 201 p95 5072, 6730 tok/s (284 gen), $0.0323 per 1,000
+SUMMARY 8b_c64_prefix_mc64: 199/200 (1 failed client-side: DNS NameResolutionError for api.runpod.ai on the Mac, not a Runpod error), wall 13.8s -> 14.47 articles/s, exec p50 1018 p95 1177, delay p50 683 p95 1874, 9287 tok/s (392 gen), $0.0234 per 1,000
+# c64 did NOT get MAX_CONCURRENCY 64: same container (no second vLLM start in the log), warm-up delay 33 ms, worker reports "Jobs in progress: 30" max. It is c64 against the default cap of 30.

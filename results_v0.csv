@@ -1,0 +1,16 @@
+ts_utc,endpoint_id,gpu,model,kind,cycle,req,wall_ms,delay_ms,exec_ms,status,prompt_tokens,completion_tokens,workers_before,error
+2026-09-23T17:38:17+00:00,4ib59mjp0vgaao,24GB-0.69,Qwen/Qwen3-8B,cold,0,0,311827,311157,182,FAILED,,,"{""idle"": 0, ""initializing"": 0, ""ready"": 0, ""running"": 0, ""throttled"": 1, ""unhealthy"": 0}","{'message': 'vLLM returned HTTP 404: {""error"":{""message"":""The model `Qwen/Qwen3-8B` does not exist."",""type"":""NotFoundError"",""param"":""model"",""code"":404}}', 'type': 'worker_error', 'code': None}"
+2026-09-23T17:45:27+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,cold,0,0,237218,233850,2976,COMPLETED,140,64,"{""idle"": 1, ""initializing"": 0, ""ready"": 1, ""running"": 0, ""throttled"": 0, ""unhealthy"": 0}",
+2026-09-23T17:45:31+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,1,3032,23,2889,COMPLETED,140,64,,
+2026-09-23T17:45:34+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,2,3002,19,2863,COMPLETED,140,64,,
+2026-09-23T17:45:37+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,3,3090,17,2916,COMPLETED,140,64,,
+2026-09-23T17:45:40+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,4,3397,22,2902,COMPLETED,140,64,,
+2026-09-23T17:45:43+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,5,3075,25,2956,COMPLETED,140,64,,
+2026-09-23T17:45:46+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,6,3020,18,2897,COMPLETED,140,64,,
+2026-09-23T17:45:49+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,7,3011,17,2893,COMPLETED,140,64,,
+2026-09-23T17:45:52+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,8,3010,18,2893,COMPLETED,140,64,,
+2026-09-23T17:45:55+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,9,3044,21,2899,COMPLETED,140,64,,
+2026-09-23T17:45:58+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,10,3021,17,2893,COMPLETED,140,64,,
+2026-09-23T17:50:11+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,cold,0,0,3555,558,2867,COMPLETED,140,64,"{""idle"": 1, ""initializing"": 0, ""ready"": 1, ""running"": 0, ""throttled"": 0, ""unhealthy"": 0}",
+2026-09-23T17:50:14+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,1,3032,17,2913,COMPLETED,140,64,,
+2026-09-23T17:50:17+00:00,4ib59mjp0vgaao,24GB-0.69,qwen/qwen3-8b,warm,0,2,3193,24,2880,COMPLETED,140,64,,

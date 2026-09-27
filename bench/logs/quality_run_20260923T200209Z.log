@@ -1,0 +1,209 @@
+== ollama qwen3:8b
+[ 1/50] finance id=11714037 wall=13622ms tok=731/26 score=5 stop 
+[ 2/50] finance id=10661222 wall=3968ms tok=763/25 score=2 stop 
+[ 3/50] finance id=11711957 wall=3804ms tok=698/28 score=3 stop 
+[ 4/50] finance id=9854422 wall=3497ms tok=702/24 score=1 stop 
+[ 5/50] finance id=11712604 wall=4376ms tok=739/29 score=1 stop 
+[ 6/50] finance id=9710164 wall=4470ms tok=710/30 score=2 stop 
+[ 7/50] finance id=9709124 wall=4394ms tok=759/28 score=4 stop 
+[ 8/50] finance id=11116991 wall=3300ms tok=707/22 score=2 stop 
+[ 9/50] finance id=10720478 wall=3353ms tok=705/23 score=1 stop 
+[10/50] finance id=9708731 wall=4843ms tok=789/28 score=2 stop 
+[11/50] finance id=9710418 wall=3176ms tok=702/21 score=1 stop 
+[12/50] finance id=11678677 wall=3461ms tok=704/24 score=1 stop 
+[13/50] finance id=9711065 wall=3825ms tok=699/29 score=2 stop 
+[14/50] finance id=9710025 wall=3991ms tok=739/25 score=5 stop 
+[15/50] finance id=11716232 wall=3907ms tok=703/26 score=5 stop 
+[16/50] finance id=9710672 wall=3865ms tok=790/23 score=1 stop 
+[17/50] finance id=9709632 wall=4177ms tok=712/29 score=2 stop 
+[18/50] finance id=11086438 wall=3661ms tok=728/24 score=1 stop 
+[19/50] finance id=11680618 wall=3879ms tok=724/27 score=1 stop 
+[20/50] finance id=9933807 wall=4212ms tok=696/30 score=3 stop 
+[21/50] finance id=9744321 wall=4656ms tok=713/33 score=5 stop 
+[22/50] finance id=9709100 wall=4127ms tok=766/25 score=3 stop 
+[23/50] finance id=11716347 wall=5012ms tok=776/32 score=3 stop 
+[24/50] finance id=11712187 wall=3559ms tok=695/24 score=3 stop 
+[25/50] finance id=9709747 wall=4343ms tok=756/28 score=2 stop 
+[26/50] general id=10619114 wall=4313ms tok=199/21 score=3 stop 
+[27/50] general id=11707797 wall=4192ms tok=246/26 score=3 stop 
+[28/50] general id=11711171 wall=3155ms tok=176/23 score=5 stop 
+[29/50] general id=9707691 wall=3621ms tok=187/24 score=2 stop 
+[30/50] general id=11714938 wall=3900ms tok=162/28 score=3 stop 
+[31/50] general id=10426369 wall=3154ms tok=175/22 score=1 stop 
+[32/50] general id=9707552 wall=3996ms tok=252/24 score=3 stop 
+[33/50] general id=10545020 wall=3696ms tok=256/21 score=4 stop 
+[34/50] general id=9708199 wall=3444ms tok=175/25 score=2 stop 
+[35/50] general id=9707413 wall=3437ms tok=175/25 score=2 stop 
+[36/50] general id=11132428 wall=2938ms tok=170/21 score=3 stop 
+[37/50] general id=10702774 wall=3851ms tok=179/27 score=3 stop 
+[38/50] general id=9707528 wall=3313ms tok=154/23 score=3 stop 
+[39/50] general id=11707888 wall=3914ms tok=179/27 score=3 stop 
+[40/50] general id=11617432 wall=3356ms tok=204/22 score=4 stop 
+[41/50] general id=9943143 wall=3540ms tok=234/21 score=4 stop 
+[42/50] general id=10221259 wall=3688ms tok=165/26 score=5 stop 
+[43/50] general id=10729536 wall=3409ms tok=175/26 score=3 stop 
+[44/50] general id=10901596 wall=1624ms tok=204/24 score=2 stop 
+[45/50] general id=11711123 wall=1419ms tok=193/21 score=2 stop 
+[46/50] general id=11711631 wall=1552ms tok=196/25 score=5 stop 
+[47/50] general id=9853056 wall=1550ms tok=235/22 score=5 stop 
+[48/50] general id=11710845 wall=1394ms tok=169/24 score=3 stop 
+[49/50] general id=11393348 wall=1447ms tok=173/25 score=2 stop 
+[50/50] general id=9708012 wall=1453ms tok=177/22 score=2 stop 
+batch 5335d1cd: ollama qwen3:8b [] n=50 ok=50 parse_ok=50 wall=184888ms concurrency=1 est_cost=$?
+== ollama mistral:7b
+[ 1/50] finance id=11714037 wall=8471ms tok=831/24 score=2 stop 
+[ 2/50] finance id=10661222 wall=2078ms tok=858/35 score=2 stop 
+[ 3/50] finance id=11711957 wall=1682ms tok=793/36 score=2 stop 
+[ 4/50] finance id=9854422 wall=1383ms tok=793/28 score=1 stop 
+[ 5/50] finance id=11712604 wall=2143ms tok=831/44 score=3 stop 
+[ 6/50] finance id=9710164 wall=1450ms tok=796/30 score=3 stop 
+[ 7/50] finance id=9709124 wall=2173ms tok=856/42 score=3 stop 
+[ 8/50] finance id=11116991 wall=2184ms tok=804/46 score=2 stop 
+[ 9/50] finance id=10720478 wall=1316ms tok=793/23 score=1 stop 
+[10/50] finance id=9708731 wall=2660ms tok=888/37 score=3 stop 
+[11/50] finance id=9710418 wall=1762ms tok=789/29 score=2 stop 
+[12/50] finance id=11678677 wall=2182ms tok=799/27 score=2 stop 
+[13/50] finance id=9711065 wall=2335ms tok=789/29 score=3 stop 
+[14/50] finance id=9710025 wall=2499ms tok=836/25 score=3 stop 
+[15/50] finance id=11716232 wall=2187ms tok=794/27 score=3 stop 
+[16/50] finance id=9710672 wall=2507ms tok=888/22 score=2 stop 
+[17/50] finance id=9709632 wall=2680ms tok=805/32 score=3 stop 
+[18/50] finance id=11086438 wall=2209ms tok=816/25 score=1 stop 
+[19/50] finance id=11680618 wall=2120ms tok=813/23 score=1 stop 
+[20/50] finance id=9933807 wall=1827ms tok=787/29 score=3 stop 
+[21/50] finance id=9744321 wall=1767ms tok=802/34 score=3 stop 
+[22/50] finance id=9709100 wall=1861ms tok=869/31 score=3 stop 
+[23/50] finance id=11716347 wall=1636ms tok=883/25 score=3 stop 
+[24/50] finance id=11712187 wall=1090ms tok=792/21 score=3 stop 
+[25/50] finance id=9709747 wall=2608ms tok=848/33 score=2 stop 
+[26/50] general id=10619114 wall=3078ms tok=194/24 score=3 stop 
+[27/50] general id=11707797 wall=2729ms tok=252/25 score=4 stop 
+[28/50] general id=11711171 wall=1910ms tok=168/25 score=3 stop 
+[29/50] general id=9707691 wall=1630ms tok=186/28 score=4 stop 
+[30/50] general id=11714938 wall=1203ms tok=160/24 score=3 stop 
+[31/50] general id=10426369 wall=1396ms tok=171/26 score=1 stop 
+[32/50] general id=9707552 wall=1998ms tok=248/32 score=3 stop 
+[33/50] general id=10545020 wall=1628ms tok=264/23 score=3 stop 
+[34/50] general id=9708199 wall=1584ms tok=174/22 score=2 stop 
+[35/50] general id=9707413 wall=1829ms tok=173/33 score=2 stop 
+[36/50] general id=11132428 wall=1263ms tok=163/26 score=3 stop 
+[37/50] general id=10702774 wall=1189ms tok=177/24 score=3 stop 
+[38/50] general id=9707528 wall=1285ms tok=147/26 score=3 stop 
+[39/50] general id=11707888 wall=1335ms tok=177/27 score=3 stop 
+[40/50] general id=11617432 wall=1297ms tok=204/22 score=3 stop 
+[41/50] general id=9943143 wall=1805ms tok=243/29 score=3 stop 
+[42/50] general id=10221259 wall=1260ms tok=159/24 score=4 stop 
+[43/50] general id=10729536 wall=1596ms tok=169/29 score=3 stop 
+[44/50] general id=10901596 wall=1574ms tok=206/30 score=2 stop 
+[45/50] general id=11711123 wall=1229ms tok=193/21 score=2 stop 
+[46/50] general id=11711631 wall=1647ms tok=193/28 score=4 stop 
+[47/50] general id=9853056 wall=2678ms tok=243/27 score=4 stop 
+[48/50] general id=11710845 wall=1949ms tok=163/26 score=3 stop 
+[49/50] general id=11393348 wall=1426ms tok=172/26 score=2 stop 
+[50/50] general id=9708012 wall=1187ms tok=175/22 score=1 stop 
+batch 63c51015: ollama mistral:7b [] n=50 ok=50 parse_ok=50 wall=98563ms concurrency=1 est_cost=$?
+== claude haiku
+[ 1/50] finance id=11714037 wall=1423ms tok=859/44 score=4 end_turn 
+[ 2/50] finance id=10661222 wall=1076ms tok=883/46 score=1 end_turn 
+[ 3/50] finance id=11711957 wall=1129ms tok=822/44 score=2 end_turn 
+[ 4/50] finance id=9854422 wall=1200ms tok=822/46 score=2 end_turn 
+[ 5/50] finance id=11712604 wall=1363ms tok=856/52 score=2 end_turn 
+[ 6/50] finance id=9710164 wall=999ms tok=827/40 score=2 end_turn 
+[ 7/50] finance id=9709124 wall=1161ms tok=885/49 score=4 end_turn 
+[ 8/50] finance id=11116991 wall=1186ms tok=829/46 score=2 end_turn 
+[ 9/50] finance id=10720478 wall=1179ms tok=823/42 score=1 end_turn 
+[10/50] finance id=9708731 wall=1328ms tok=913/44 score=2 end_turn 
+[11/50] finance id=9710418 wall=1060ms tok=819/41 score=1 end_turn 
+[12/50] finance id=11678677 wall=958ms tok=829/45 score=1 end_turn 
+[13/50] finance id=9711065 wall=1228ms tok=818/42 score=2 end_turn 
+[14/50] finance id=9710025 wall=980ms tok=867/49 score=4 end_turn 
+[15/50] finance id=11716232 wall=1211ms tok=825/43 score=5 end_turn 
+[16/50] finance id=9710672 wall=931ms tok=908/42 score=2 end_turn 
+[17/50] finance id=9709632 wall=1133ms tok=833/47 score=3 end_turn 
+[18/50] finance id=11086438 wall=1780ms tok=844/42 score=1 end_turn 
+[19/50] finance id=11680618 wall=945ms tok=840/45 score=1 end_turn 
+[20/50] finance id=9933807 wall=1899ms tok=819/47 score=3 end_turn 
+[21/50] finance id=9744321 wall=2214ms tok=833/52 score=4 end_turn 
+[22/50] finance id=9709100 wall=1114ms tok=888/50 score=4 end_turn 
+[23/50] finance id=11716347 wall=1127ms tok=905/51 score=4 end_turn 
+[24/50] finance id=11712187 wall=995ms tok=820/47 score=3 end_turn 
+[25/50] finance id=9709747 wall=1181ms tok=866/46 score=2 end_turn 
+[26/50] general id=10619114 wall=1193ms tok=193/44 score=2 end_turn 
+[27/50] general id=11707797 wall=1156ms tok=254/44 score=2 end_turn 
+[28/50] general id=11711171 wall=1229ms tok=169/41 score=4 end_turn 
+[29/50] general id=9707691 wall=1179ms tok=186/38 score=2 end_turn 
+[30/50] general id=11714938 wall=1041ms tok=158/41 score=2 end_turn 
+[31/50] general id=10426369 wall=1069ms tok=174/43 score=1 end_turn 
+[32/50] general id=9707552 wall=1033ms tok=254/40 score=2 end_turn 
+[33/50] general id=10545020 wall=1229ms tok=263/44 score=2 end_turn 
+[34/50] general id=9708199 wall=1233ms tok=182/39 score=1 end_turn 
+[35/50] general id=9707413 wall=1269ms tok=170/44 score=2 end_turn 
+[36/50] general id=11132428 wall=1067ms tok=165/40 score=2 end_turn 
+[37/50] general id=10702774 wall=1720ms tok=178/43 score=2 end_turn 
+[38/50] general id=9707528 wall=1047ms tok=147/43 score=2 end_turn 
+[39/50] general id=11707888 wall=909ms tok=176/41 score=2 end_turn 
+[40/50] general id=11617432 wall=782ms tok=199/39 score=2 end_turn 
+[41/50] general id=9943143 wall=945ms tok=240/42 score=2 end_turn 
+[42/50] general id=10221259 wall=1034ms tok=161/43 score=5 end_turn 
+[43/50] general id=10729536 wall=906ms tok=170/42 score=2 end_turn 
+[44/50] general id=10901596 wall=809ms tok=198/42 score=1 end_turn 
+[45/50] general id=11711123 wall=937ms tok=184/41 score=1 end_turn 
+[46/50] general id=11711631 wall=1098ms tok=194/48 score=3 end_turn 
+[47/50] general id=9853056 wall=1018ms tok=239/43 score=3 end_turn 
+[48/50] general id=11710845 wall=1768ms tok=162/44 score=2 end_turn 
+[49/50] general id=11393348 wall=886ms tok=170/41 score=2 end_turn 
+[50/50] general id=9708012 wall=2486ms tok=175/43 score=1 end_turn 
+batch 5e3d5f75: claude claude-haiku-4-5-20251001 [] n=50 ok=50 parse_ok=50 wall=59943ms concurrency=1 est_cost=$0.036969
+== claude sonnet
+[ 1/50] finance id=11714037 wall=1803ms tok=860/38 score=3 end_turn 
+[ 2/50] finance id=10661222 wall=2532ms tok=884/32 score=1 end_turn 
+[ 3/50] finance id=11711957 wall=1789ms tok=823/38 score=2 end_turn 
+[ 4/50] finance id=9854422 wall=1729ms tok=823/31 score=2 end_turn 
+[ 5/50] finance id=11712604 wall=3327ms tok=857/45 score=3 end_turn 
+[ 6/50] finance id=9710164 wall=2188ms tok=828/30 score=2 end_turn 
+[ 7/50] finance id=9709124 wall=2252ms tok=886/41 score=4 end_turn 
+[ 8/50] finance id=11116991 wall=1932ms tok=830/32 score=2 end_turn 
+[ 9/50] finance id=10720478 wall=2171ms tok=824/30 score=1 end_turn 
+[10/50] finance id=9708731 wall=1788ms tok=914/36 score=2 end_turn 
+[11/50] finance id=9710418 wall=1689ms tok=820/32 score=1 end_turn 
+[12/50] finance id=11678677 wall=1711ms tok=830/34 score=1 end_turn 
+[13/50] finance id=9711065 wall=1489ms tok=819/35 score=2 end_turn 
+[14/50] finance id=9710025 wall=1625ms tok=868/38 score=4 end_turn 
+[15/50] finance id=11716232 wall=2033ms tok=826/44 score=4 end_turn 
+[16/50] finance id=9710672 wall=2009ms tok=909/33 score=2 end_turn 
+[17/50] finance id=9709632 wall=1731ms tok=834/34 score=2 end_turn 
+[18/50] finance id=11086438 wall=2964ms tok=845/36 score=1 end_turn 
+[19/50] finance id=11680618 wall=1828ms tok=841/34 score=1 end_turn 
+[20/50] finance id=9933807 wall=1513ms tok=820/37 score=2 end_turn 
+[21/50] finance id=9744321 wall=1954ms tok=834/36 score=3 end_turn 
+[22/50] finance id=9709100 wall=1746ms tok=889/39 score=4 end_turn 
+[23/50] finance id=11716347 wall=1950ms tok=906/42 score=3 end_turn 
+[24/50] finance id=11712187 wall=1825ms tok=821/30 score=3 end_turn 
+[25/50] finance id=9709747 wall=1900ms tok=867/40 score=2 end_turn 
+[26/50] general id=10619114 wall=1516ms tok=194/36 score=2 end_turn 
+[27/50] general id=11707797 wall=1890ms tok=255/34 score=2 end_turn 
+[28/50] general id=11711171 wall=1935ms tok=170/31 score=4 end_turn 
+[29/50] general id=9707691 wall=1501ms tok=187/37 score=2 end_turn 
+[30/50] general id=11714938 wall=1618ms tok=159/36 score=3 end_turn 
+[31/50] general id=10426369 wall=2019ms tok=175/30 score=1 end_turn 
+[32/50] general id=9707552 wall=1351ms tok=255/31 score=2 end_turn 
+[33/50] general id=10545020 wall=1796ms tok=264/35 score=2 end_turn 
+[34/50] general id=9708199 wall=1638ms tok=183/36 score=1 end_turn 
+[35/50] general id=9707413 wall=1881ms tok=171/36 score=2 end_turn 
+[36/50] general id=11132428 wall=1409ms tok=166/32 score=3 end_turn 
+[37/50] general id=10702774 wall=1560ms tok=179/35 score=2 end_turn 
+[38/50] general id=9707528 wall=1651ms tok=148/40 score=2 end_turn 
+[39/50] general id=11707888 wall=1481ms tok=177/35 score=2 end_turn 
+[40/50] general id=11617432 wall=1317ms tok=200/36 score=2 end_turn 
+[41/50] general id=9943143 wall=1819ms tok=241/31 score=2 end_turn 
+[42/50] general id=10221259 wall=1737ms tok=162/32 score=4 end_turn 
+[43/50] general id=10729536 wall=2203ms tok=171/32 score=2 end_turn 
+[44/50] general id=10901596 wall=2321ms tok=199/34 score=2 end_turn 
+[45/50] general id=11711123 wall=1572ms tok=185/33 score=1 end_turn 
+[46/50] general id=11711631 wall=1619ms tok=195/32 score=2 end_turn 
+[47/50] general id=9853056 wall=1514ms tok=240/36 score=3 end_turn 
+[48/50] general id=11710845 wall=1442ms tok=163/36 score=2 end_turn 
+[49/50] general id=11393348 wall=1788ms tok=171/36 score=2 end_turn 
+[50/50] general id=9708012 wall=1801ms tok=176/32 score=1 end_turn 
+batch 6267ceb2: claude claude-sonnet-4-6 [] n=50 ok=50 parse_ok=50 wall=91994ms concurrency=1 est_cost=$0.104397
+== ALL DONE

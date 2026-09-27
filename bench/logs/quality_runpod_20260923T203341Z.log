@@ -1,0 +1,107 @@
+== runpod sequential
+/health workers before batch: {"idle": 1, "initializing": 0, "ready": 1, "running": 0, "throttled": 0, "unhealthy": 0}
+[ 1/50] finance id=11714037 wall=168219ms tok=727/27 score=5 stop 
+[ 2/50] finance id=10661222 wall=2112ms tok=759/27 score=1 stop 
+[ 3/50] finance id=11711957 wall=2118ms tok=694/31 score=3 stop 
+[ 4/50] finance id=9854422 wall=1758ms tok=698/28 score=1 stop 
+[ 5/50] finance id=11712604 wall=1988ms tok=735/24 score=1 stop 
+[ 6/50] finance id=9710164 wall=1763ms tok=706/32 score=2 stop 
+[ 7/50] finance id=9709124 wall=1693ms tok=755/27 score=4 stop 
+[ 8/50] finance id=11116991 wall=1583ms tok=703/27 score=2 stop 
+[ 9/50] finance id=10720478 wall=1865ms tok=701/33 score=1 stop 
+[10/50] finance id=9708731 wall=1701ms tok=785/27 score=2 stop 
+[11/50] finance id=9710418 wall=1627ms tok=698/23 score=1 stop 
+[12/50] finance id=11678677 wall=1593ms tok=700/24 score=1 stop 
+[13/50] finance id=9711065 wall=1850ms tok=695/33 score=2 stop 
+[14/50] finance id=9710025 wall=1688ms tok=735/27 score=4 stop 
+[15/50] finance id=11716232 wall=1748ms tok=699/26 score=4 stop 
+[16/50] finance id=9710672 wall=2061ms tok=786/26 score=1 stop 
+[17/50] finance id=9709632 wall=1706ms tok=708/25 score=2 stop 
+[18/50] finance id=11086438 wall=1530ms tok=724/22 score=1 stop 
+[19/50] finance id=11680618 wall=1824ms tok=720/27 score=1 stop 
+[20/50] finance id=9933807 wall=1984ms tok=692/32 score=3 stop 
+[21/50] finance id=9744321 wall=1887ms tok=709/33 score=4 stop 
+[22/50] finance id=9709100 wall=1809ms tok=762/32 score=2 stop 
+[23/50] finance id=11716347 wall=2195ms tok=772/30 score=3 stop 
+[24/50] finance id=11712187 wall=1552ms tok=691/25 score=3 stop 
+[25/50] finance id=9709747 wall=1721ms tok=752/28 score=2 stop 
+[26/50] general id=10619114 wall=1485ms tok=195/25 score=4 stop 
+[27/50] general id=11707797 wall=1573ms tok=242/24 score=3 stop 
+[28/50] general id=11711171 wall=1544ms tok=172/26 score=4 stop 
+[29/50] general id=9707691 wall=1611ms tok=183/27 score=2 stop 
+[30/50] general id=11714938 wall=1401ms tok=158/23 score=2 stop 
+[31/50] general id=10426369 wall=1503ms tok=171/22 score=1 stop 
+[32/50] general id=9707552 wall=1582ms tok=248/26 score=3 stop 
+[33/50] general id=10545020 wall=2122ms tok=252/21 score=4 stop 
+[34/50] general id=9708199 wall=1518ms tok=171/25 score=2 stop 
+[35/50] general id=9707413 wall=1526ms tok=171/24 score=2 stop 
+[36/50] general id=11132428 wall=1441ms tok=166/21 score=3 stop 
+[37/50] general id=10702774 wall=1701ms tok=175/27 score=3 stop 
+[38/50] general id=9707528 wall=2027ms tok=150/24 score=3 stop 
+[39/50] general id=11707888 wall=1590ms tok=175/26 score=3 stop 
+[40/50] general id=11617432 wall=1662ms tok=200/30 score=3 stop 
+[41/50] general id=9943143 wall=1538ms tok=230/24 score=3 stop 
+[42/50] general id=10221259 wall=1577ms tok=161/25 score=5 stop 
+[43/50] general id=10729536 wall=1489ms tok=171/24 score=3 stop 
+[44/50] general id=10901596 wall=1521ms tok=200/23 score=2 stop 
+[45/50] general id=11711123 wall=1422ms tok=189/21 score=2 stop 
+[46/50] general id=11711631 wall=1582ms tok=192/26 score=5 stop 
+[47/50] general id=9853056 wall=1551ms tok=231/28 score=5 stop 
+[48/50] general id=11710845 wall=1511ms tok=165/24 score=3 stop 
+[49/50] general id=11393348 wall=1378ms tok=169/23 score=2 stop 
+[50/50] general id=9708012 wall=1552ms tok=173/26 score=2 stop 
+batch 48326694: runpod qwen/qwen3-8b [prefixcache-unverified] n=50 ok=50 parse_ok=50 wall=251071ms concurrency=1 est_cost=$0.085085 served=qwen/qwen3-8b
+== runpod concurrency 8
+/health workers before batch: {"idle": 0, "initializing": 0, "ready": 0, "running": 1, "throttled": 0, "unhealthy": 0}
+[ 1/50] finance id=10661222 wall=2528ms tok=759/27 score=1 stop 
+[ 2/50] finance id=11712604 wall=2945ms tok=735/25 score=1 stop 
+[ 3/50] finance id=9710164 wall=3016ms tok=706/27 score=2 stop 
+[ 4/50] finance id=11714037 wall=3060ms tok=727/27 score=5 stop 
+[ 5/50] finance id=11116991 wall=3062ms tok=703/27 score=2 stop 
+[ 6/50] finance id=9709124 wall=3078ms tok=755/27 score=4 stop 
+[ 7/50] finance id=9854422 wall=3112ms tok=698/28 score=1 stop 
+[ 8/50] finance id=11711957 wall=3180ms tok=694/31 score=3 stop 
+[ 9/50] finance id=10720478 wall=2572ms tok=701/33 score=1 stop 
+[10/50] finance id=9710418 wall=2166ms tok=698/23 score=1 stop 
+[11/50] finance id=11678677 wall=2204ms tok=700/24 score=1 stop 
+[12/50] finance id=9708731 wall=2347ms tok=785/27 score=2 stop 
+[13/50] finance id=11716232 wall=2238ms tok=699/26 score=4 stop 
+[14/50] finance id=9710025 wall=2279ms tok=735/27 score=4 stop 
+[15/50] finance id=9710672 wall=2194ms tok=786/26 score=1 stop 
+[16/50] finance id=9711065 wall=2479ms tok=695/33 score=2 stop 
+[17/50] finance id=9709632 wall=2318ms tok=708/25 score=2 stop 
+[18/50] finance id=11086438 wall=2622ms tok=724/22 score=1 stop 
+[19/50] finance id=11712187 wall=2318ms tok=691/25 score=3 stop 
+[20/50] finance id=11680618 wall=2682ms tok=720/27 score=1 stop 
+[21/50] finance id=11716347 wall=2704ms tok=772/30 score=3 stop 
+[22/50] finance id=9933807 wall=2782ms tok=692/33 score=3 stop 
+[23/50] finance id=9709100 wall=2720ms tok=762/32 score=2 stop 
+[24/50] finance id=9744321 wall=2762ms tok=709/33 score=4 stop 
+[25/50] finance id=9709747 wall=1787ms tok=752/28 score=2 stop 
+[26/50] general id=11707797 wall=1742ms tok=242/24 score=3 stop 
+[27/50] general id=10619114 wall=1798ms tok=195/25 score=4 stop 
+[28/50] general id=11711171 wall=1675ms tok=172/26 score=4 stop 
+[29/50] general id=11714938 wall=2235ms tok=158/23 score=2 stop 
+[30/50] general id=9707552 wall=2200ms tok=248/26 score=3 stop 
+[31/50] general id=10426369 wall=2231ms tok=171/22 score=1 stop 
+[32/50] general id=9707691 wall=2241ms tok=183/27 score=2 stop 
+[33/50] general id=10545020 wall=1880ms tok=252/21 score=4 stop 
+[34/50] general id=11132428 wall=1490ms tok=166/21 score=3 stop 
+[35/50] general id=9708199 wall=1732ms tok=171/26 score=2 stop 
+[36/50] general id=9707413 wall=1864ms tok=171/29 score=2 stop 
+[37/50] general id=9707528 wall=1755ms tok=150/24 score=3 stop 
+[38/50] general id=11707888 wall=1809ms tok=175/26 score=3 stop 
+[39/50] general id=10702774 wall=1878ms tok=175/27 score=3 stop 
+[40/50] general id=11617432 wall=2136ms tok=200/30 score=3 stop 
+[41/50] general id=10221259 wall=1644ms tok=161/25 score=5 stop 
+[42/50] general id=9943143 wall=1676ms tok=230/24 score=3 stop 
+[43/50] general id=10901596 wall=1654ms tok=200/23 score=2 stop 
+[44/50] general id=10729536 wall=1988ms tok=171/24 score=3 stop 
+[45/50] general id=11711123 wall=1640ms tok=189/21 score=2 stop 
+[46/50] general id=9853056 wall=1702ms tok=231/28 score=5 stop 
+[47/50] general id=11710845 wall=2070ms tok=165/24 score=3 stop 
+[48/50] general id=11711631 wall=2340ms tok=192/26 score=5 stop 
+[49/50] general id=9708012 wall=6995ms tok=173/26 score=2 stop 
+[50/50] general id=11393348 wall=7005ms tok=169/23 score=2 stop 
+batch bd5bda1c: runpod qwen/qwen3-8b [prefixcache-unverified] n=50 ok=50 parse_ok=50 wall=19767ms concurrency=8 est_cost=$0.006699 served=qwen/qwen3-8b
+== DONE

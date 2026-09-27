@@ -1,0 +1,31 @@
+# GPU and data center per placement, read off the Workers tab by hand (not exposed by /health or job status).
+# * runs 1-5: GPU model was not read off the Workers tab before those workers were gone. 21 tok/s single-stream on 8B bf16 is consistent with an L4 (a confirmed RTX 4090 does 51 tok/s in run 6), not a 3090/4090.
+# Tier "24 GB" = $0.69/hr flex; "24 GB PRO" = $1.10/hr flex. GPU priority was 24 GB -> 24 GB PRO until 14:41, then 24 GB PRO -> 24 GB.
+
+run 1 (13:33, 404 request)      24 GB tier, model not captured*   DC not recorded    24 GB   cold 311.2 s
+run 2 (13:41)                   24 GB tier, model not captured*   DC not recorded    24 GB   cold 233.9 s
+run 3 (13:50)                   same parked worker as run 2            24 GB   delay 558 ms (warm, not a cold start)
+run 4 (14:00)                   24 GB tier, model not captured*   DC not recorded    24 GB   cold 310.5 s (endpoint was throttled first)
+run 5 cycle 0 (14:07)           parked worker from run 4               24 GB   delay 502 ms, first exec 6,559 ms  <- FlashBoot hit
+run 5 cycle 1 (14:13) attempt 1 PRO 6000 MIG 24GB   US-PA-1            24 GB   hung at "initializing model files" 26 min, terminated (worker 1kqe82jxzym9d7)
+run 5 cycle 1 attempt 2         PRO 6000 MIG 24GB   US-PA-1            24 GB   hung, terminated
+run 5 cycle 1 attempt 3         PRO 6000 MIG 24GB   US-PA-1            24 GB   hung, terminated
+run 5 cycle 1 attempt 4 (14:35) PRO 6000 MIG 24GB   US-WA-1            24 GB   "cant create container; network must exist" every 4 s; terminate ignored; run 5 abandoned
+config change 14:41             GPU priority -> 24 GB PRO first; max workers 1 -> 2 at 14:45
+run 6 ghost                     PRO 6000 MIG 24GB   US-WA-1 (9i6d4594fu0rx1, v4)   hung at "initializing model files"
+run 6 cycle 0 (14:48)           RTX 4090            US-NC-1 (m4hst1d1pdv8v6, v4)    24 GB PRO   running
+14:55                           parked 4090 evicted; re-parked on PRO 6000 MIG 24GB US-PA-1 (ghost)
+config change ~14:57            Data Centers: US-WA-1 unchecked, all others left on (US-PA-1 is not in the list, cannot be excluded)
+run 6 cycle 1 (14:58)           RTX 4090            US-NC-1            24 GB PRO   cold 258.0 s (miss, includes rollout)
+run 6 cycle 2 (15:06)           RTX 4090            US-NC-1            24 GB PRO   cold 243.0 s (miss, no config change; parked worker evicted within the 5 min idle)
+15:18                           parked 4090 (NC-1) evicted; re-parked on two PRO 6000 MIG 24GB in US-PA-1 via the second-choice tier (friction #24); both terminated
+config change 15:19             GPU tiers -> 24 GB PRO only (24 GB removed)
+run 6 cycle 3 (15:15 enqueue)   RTX 4090            US-CA-2 -> re-placed to EUR-NO-1 within a minute   24 GB PRO   (cold, includes the rollout)
+15:25                           NO-1 4090 disappeared; Runpod later re-placed on the same host (nfdfu66kcqdv1f, EUR-NO-1, v6)
+config change 15:30             48 GB tier added as 2nd choice (whole cards only)
+15:38                           nfdfu66kcqdv1f RTX 4090 EUR-NO-1: "image ready, initializing model files" at 15:21:31, no container 17 min later (friction #25). Ghost of4nizua7px9xg MIG US-PA-1 v4 still "initializing".
+run 6 stopped 15:40             cycle 3's job (enqueued ~15:15) never served. Cycles completed: 0, 1, 2.
+config change 15:45             HF_TOKEN added from Secrets (version 7)
+run 7 (15:50)                   A40 EU-SE-1 (gepnzt391z1pa1, v7) hung at "initializing model files" from 15:50; RTX 4090 US-NC-1 (4c1sei453cbyfd, v7) throttled. 7 workers counted by the rollout banner (ghosts)
+run 7 (15:50)                   A40                 CA (yji6fzgmt48rg8; DC name not captured)   48 GB   cold 177.5 s; container start 15:50:28 -> healthy 15:52:59 = 151 s; host had "model ready" since 15:40
+run 8 (16:08)                   A40 (new worker)    CA?                48 GB   warm-up cold 171.1 s; then 200 req @ c=8 in 67.1 s; second A40 started mid-batch (max workers 2)
