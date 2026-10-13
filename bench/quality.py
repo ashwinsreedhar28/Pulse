@@ -612,6 +612,23 @@ def report(a):
     groups = {}
     for (g, aid), r in latest.items():
         groups.setdefault(g, {})[aid] = r
+    # Decision models (jev/clef/typical) return a probability per level; the row's
+    # `score` is argmax+1. The same call also gives the probability-weighted level
+    # (`extra.expected`, already 1-based), so each such group gets a sibling row
+    # labelled "<label>+ev" decoded as round(expected) — same calls, same timing
+    # and cost, only the decoder differs. Typical's argmax never produced a 1 or
+    # a 3 on the fixture (Oct 13), which is why both decoders are shown.
+    for g, rs in list(groups.items()):
+        ev = {}
+        for aid, r in rs.items():
+            try:
+                x = json.loads(r["extra"] or "{}").get("expected")
+            except json.JSONDecodeError:
+                x = None
+            if isinstance(x, (int, float)):
+                ev[aid] = {**r, "score": str(min(5, max(1, int(x + 0.5))))}
+        if ev and len(ev) == len(rs):
+            groups[(g[0], g[1], (g[2] + "+ev") if g[2] else "ev", g[3])] = ev
     ref_key = next((g for g in groups if g[0] == "claude" and g[1] == a.ref), None)
     if ref_key is None:
         sys.exit(f"reference {a.ref} has no rows yet")
