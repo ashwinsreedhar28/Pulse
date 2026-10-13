@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Typical (Oz Labs) behind a SystemOne-shaped HTTP endpoint, for bench/quality.py.
 
-Typical ships as a Python SDK only (`pip install typical-ai`), so this is the
+Typical ships as a Python SDK only (`pip install typical-ai`, import name `typical_ai`), so this is the
 smallest HTTP contract that lets the same `call_systemone` adapter score it.
 Only the `score` question type is implemented; the answer carries `p_null`
 (Typical's separate abstain head) as an extension field.
@@ -30,7 +30,7 @@ _model = None
 def model():
     global _model
     if _model is None:
-        from typical import Typical
+        from typical_ai import Typical
         t0 = time.perf_counter()
         _model = Typical.from_pretrained(MODEL, device="auto")
         print(f"loaded {MODEL} in {time.perf_counter() - t0:.1f}s", flush=True)
