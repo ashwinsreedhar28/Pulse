@@ -340,8 +340,109 @@ def call_openrouter(a, system, user):
     return call_openai_chat(OPENROUTER_URL, key, a.model, system, user, extra, timeout=120)
 
 
+# ---- decision models (SystemOne wire format: Jev, Clef, Typical shim) ------------
+#
+# One `score` question per article. `instructions` carries the chat system prompt
+# minus the "Respond in JSON only" sentence (these models return probabilities,
+# not text); `state` carries the same "Headline/Summary" text the chat models get.
+# The discrete score is argmax(probabilities)+1 so it lines up with the integer
+# the chat models emit; the expected value, the probability vector, confidence
+# and (Typical only) p_null go in `extra`. `text` is synthesized as the usual
+# {"score": N} JSON so parse_score and `report` work unchanged.
+#
+# Levels are bare "1".."5" on purpose: the chat prompt defines no per-level
+# meaning, and giving the decision models level descriptions would hand them
+# information the LLM rows never had. Try descriptions as a --label variant.
+SCORE_LEVELS = ["1", "2", "3", "4", "5"]
+SYSTEMONE_QUESTION = "urgency"
+
+
+def systemone_instructions(system):
+    s = system.replace(PROMPT_SUFFIX, "")
+    return re.sub(r"\s*Respond in JSON only:.*$", "", s, flags=re.S).strip()
+
+
+def systemone_body(model, system, user):
+    body = {"state": user,
+            "questions": {SYSTEMONE_QUESTION: {"type": "score",
+                                               "instructions": systemone_instructions(system),
+                                               "criteria": SCORE_LEVELS}}}
+    if model:
+        body["model"] = model
+    return body
+
+
+def systemone_probs(ans):
+    """Probability per level, in SCORE_LEVELS order, whatever shape the API used."""
+    p = ans.get("probabilities")
+    if isinstance(p, list):
+        return [float(x) for x in p]
+    if isinstance(p, dict):
+        if all(k in p for k in SCORE_LEVELS):
+            return [float(p[k]) for k in SCORE_LEVELS]
+        try:
+            return [float(p[k]) for k in sorted(p, key=lambda k: int(k))]
+        except (ValueError, TypeError):
+            return [float(v) for v in p.values()]
+    return None
+
+
+def call_systemone(url, headers, model, system, user, timeout):
+    body = systemone_body(model, system, user)
+    t0 = time.perf_counter()
+    r = requests.post(url, headers=headers, json=body, timeout=timeout)
+    wall = ms(t0)
+    if r.status_code != 200:
+        return {"wall_ms": wall, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+    j = r.json()
+    if "answers" not in j and isinstance(j.get("result"), dict):
+        j = j["result"]  # Workers AI wraps the model output in {"result": ..., "success": ...}
+    ans = (j.get("answers") or {}).get(SYSTEMONE_QUESTION) or {}
+    probs = systemone_probs(ans)
+    if not probs or len(probs) != len(SCORE_LEVELS):
+        return {"wall_ms": wall, "text": "", "error": f"no probabilities in answer: {json.dumps(ans)[:200]}",
+                "extra": {"raw": j}}
+    score = max(range(len(probs)), key=lambda i: probs[i]) + 1
+    expected = ans.get("score")  # 0-based probability-weighted level position
+    u = j.get("usage") or {}
+    extra = {"served_model": j.get("model"), "probabilities": [round(x, 4) for x in probs],
+             "expected": round(float(expected) + 1, 3) if isinstance(expected, (int, float)) else None,
+             "confidence": ans.get("confidence"), "p_null": ans.get("p_null")}
+    return {"wall_ms": wall, "text": json.dumps({"score": score, "reason": ""}),
+            "prompt_tokens": u.get("input_tokens"), "completion_tokens": u.get("output_tokens", 0),
+            "finish_reason": "decision", "extra": extra}
+
+
+def call_jev(a, system, user):
+    key = os.environ.get("TYPESAFE_API_KEY")
+    if not key:
+        sys.exit("TYPESAFE_API_KEY not set (console.typesafe.ai/keys)")
+    return call_systemone("https://api.typesafe.ai/v1/systemone",
+                          {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                          a.model, system, user, timeout=60)
+
+
+def call_clef(a, system, user):
+    acct, tok = os.environ.get("CF_ACCOUNT_ID"), os.environ.get("CF_API_TOKEN")
+    if not acct or not tok:
+        sys.exit("CF_ACCOUNT_ID and CF_API_TOKEN not set (Workers AI token)")
+    # Workers AI run route; the model id (@cf/cloudflare/clef-flash) is the path, not the body.
+    return call_systemone(f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run/{a.model}",
+                          {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"},
+                          None, system, user, timeout=60)
+
+
+def call_typical(a, system, user):
+    # bench/typical_shim.py on a GPU pod, reached through Runpod's HTTP proxy.
+    url = os.environ.get("TYPICAL_URL")
+    if not url:
+        sys.exit("TYPICAL_URL not set (e.g. https://<podid>-8000.proxy.runpod.net)")
+    return call_systemone(url.rstrip("/") + "/v1/systemone", {"Content-Type": "application/json"},
+                          a.model, system, user, timeout=120)
+
+
 BACKENDS = {"ollama": call_ollama, "claude": call_claude, "runpod": call_runpod,
-            "openrouter": call_openrouter}
+            "openrouter": call_openrouter, "jev": call_jev, "clef": call_clef, "typical": call_typical}
 
 
 # ---- run --------------------------------------------------------------------------
@@ -403,7 +504,8 @@ def run(a):
             sys.exit(f"{a.model} not installed in Ollama; ollama pull {a.model}")
     label = a.runpod_label if a.backend == "runpod" else a.label
     host = {"ollama": "mac-ollama", "claude": "anthropic",
-            "runpod": f"runpod:{label}", "openrouter": "openrouter"}[a.backend]
+            "runpod": f"runpod:{label}", "openrouter": "openrouter",
+            "jev": "typesafe", "clef": "workers-ai", "typical": "runpod-pod"}[a.backend]
     if a.backend == "openrouter" and a.rate_in is None:
         a.rate_in, a.rate_out, a.rate_source = openrouter_rates(a.model)
         print(f"openrouter list price: ${a.rate_in:.4f}/M in, ${a.rate_out:.4f}/M out", flush=True)
