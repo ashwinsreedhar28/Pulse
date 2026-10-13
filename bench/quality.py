@@ -350,10 +350,18 @@ def call_openrouter(a, system, user):
 # and (Typical only) p_null go in `extra`. `text` is synthesized as the usual
 # {"score": N} JSON so parse_score and `report` work unchanged.
 #
-# Levels are bare "1".."5" on purpose: the chat prompt defines no per-level
-# meaning, and giving the decision models level descriptions would hand them
-# information the LLM rows never had. Try descriptions as a --label variant.
-SCORE_LEVELS = ["1", "2", "3", "4", "5"]
+# Levels default to bare "1".."5": the chat prompt defines no per-level meaning,
+# so bare digits give the decision models exactly what the LLM rows had. Decision
+# models read the level text, though, and Typical returned the same distribution
+# for every article with bare digits (probe, Oct 13), so --levels described adds
+# a short gloss per level. Which set a row used is recorded in `extra.levels`.
+SCORE_LEVEL_SETS = {
+    "bare": ["1", "2", "3", "4", "5"],
+    "described": ["1: routine coverage, no urgency", "2: minor relevance, low urgency",
+                  "3: moderate urgency", "4: high urgency, worth knowing soon",
+                  "5: breaking and critical, must know immediately"],
+}
+SCORE_LEVELS = SCORE_LEVEL_SETS["bare"]  # set per run from --levels
 SYSTEMONE_QUESTION = "urgency"
 
 
@@ -405,7 +413,8 @@ def call_systemone(url, headers, model, system, user, timeout):
     score = max(range(len(probs)), key=lambda i: probs[i]) + 1
     expected = ans.get("score")  # 0-based probability-weighted level position
     u = j.get("usage") or {}
-    extra = {"served_model": j.get("model"), "probabilities": [round(x, 4) for x in probs],
+    extra = {"served_model": j.get("model"), "levels": next(k for k, v in SCORE_LEVEL_SETS.items() if v == SCORE_LEVELS),
+             "probabilities": [round(x, 4) for x in probs],
              "expected": round(float(expected) + 1, 3) if isinstance(expected, (int, float)) else None,
              "confidence": ans.get("confidence"), "p_null": ans.get("p_null")}
     return {"wall_ms": wall, "text": json.dumps({"score": score, "reason": ""}),
@@ -786,6 +795,8 @@ def main():
     pr.add_argument("--rate-out", type=float, default=None, help="$ per 1M output tokens")
     pr.add_argument("--rate-hr", type=float, default=None, help="$ per GPU hour (runpod)")
     pr.add_argument("--rate-source", default="", help="where/when the rate was read")
+    pr.add_argument("--levels", choices=sorted(SCORE_LEVEL_SETS), default="bare",
+                    help="jev/clef/typical: level text sent as the score criteria (recorded in extra.levels)")
     pr.add_argument("--allow-runpod", action="store_true",
                     help="required for --backend runpod; the endpoint may be under a cycle test")
     pr.set_defaults(fn=run)
@@ -800,6 +811,8 @@ def main():
     a = p.parse_args()
     if getattr(a, "max_tokens", None):
         globals()["MAX_TOKENS"] = a.max_tokens
+    if getattr(a, "levels", None):
+        globals()["SCORE_LEVELS"] = SCORE_LEVEL_SETS[a.levels]
     a.fn(a)
 
 
