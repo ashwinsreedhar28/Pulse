@@ -23,6 +23,12 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 MODEL = os.environ.get("TYPICAL_MODEL", "OzLabs/typical-medium")
+# Typical prefills `state` and reads the question + options as a short suffix. Handing it
+# the 730-token scorer brief as the question returned the same distribution for every
+# article (probe, Oct 13), so by default the brief is prepended to the state and the
+# question is one line. TYPICAL_SHAPE=question_is_instructions restores the Jev/Clef shape.
+SHAPE = os.environ.get("TYPICAL_SHAPE", "instructions_in_state")
+SHORT_QUESTION = "Given the brief above, how urgent is this news item?"
 app = FastAPI()
 _model = None
 
@@ -65,13 +71,17 @@ async def systemone(req: Request):
         if q.get("type") != "score":
             return JSONResponse({"error": f"question {name}: only type=score is implemented"}, 400)
         levels = [lv if isinstance(lv, str) else lv.get("label") for lv in q["criteria"]]
-        probs, p_null, expected = score_one(state, q.get("instructions", ""), levels)
+        instructions = q.get("instructions", "")
+        if SHAPE == "instructions_in_state" and instructions:
+            probs, p_null, expected = score_one(instructions + "\n\n" + state, SHORT_QUESTION, levels)
+        else:
+            probs, p_null, expected = score_one(state, instructions, levels)
         if expected is None:
             expected = sum(i * p for i, p in enumerate(probs))
         answers[name] = {"type": "score", "score": float(expected),
                          "legend": {str(i): lv for i, lv in enumerate(levels)},
                          "probabilities": probs, "confidence": max(probs) if probs else None,
-                         "p_null": float(p_null) if p_null is not None else None}
+                         "p_null": float(p_null) if p_null is not None else None, "shape": SHAPE}
     return {"model": MODEL, "answers": answers, "usage": {"input_tokens": None, "output_tokens": 0}}
 
 

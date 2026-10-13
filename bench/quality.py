@@ -417,6 +417,8 @@ def call_systemone(url, headers, model, system, user, timeout):
              "probabilities": [round(x, 4) for x in probs],
              "expected": round(float(expected) + 1, 3) if isinstance(expected, (int, float)) else None,
              "confidence": ans.get("confidence"), "p_null": ans.get("p_null")}
+    if ans.get("shape"):
+        extra["shape"] = ans["shape"]  # typical shim: how the brief and article were split
     return {"wall_ms": wall, "text": json.dumps({"score": score, "reason": ""}),
             "prompt_tokens": u.get("input_tokens"), "completion_tokens": u.get("output_tokens", 0),
             "finish_reason": "decision", "extra": extra}
