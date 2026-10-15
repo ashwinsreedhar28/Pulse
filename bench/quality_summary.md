@@ -1,6 +1,6 @@
 # Quality harness summary
 
-Generated 2026-09-27T21:24:38+00:00. Reference: `claude-haiku-4-5-20251001`, 50 scored articles. Source: `bench/quality.csv`, `bench/quality_batches.csv`.
+Generated 2026-10-13T19:29:23+00:00. Reference: `claude-haiku-4-5-20251001`, 50 scored articles. Source: `bench/quality.csv`, `bench/quality_batches.csv`.
 
 Agreement is against the reference model's score on the same article. "Urgent" is score >= 4, Pulse's notification threshold; precision/recall treat the reference as truth. Parse failures are excluded from agreement and reported separately.
 
@@ -8,6 +8,14 @@ Agreement is against the reference model's score on the same article. "Urgent" i
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | claude | claude-haiku-4-5-20251001 |  | 1 | 50 | 50/50 | 100% | 100% | 0.00 | 100% | 100% | 100% | 100% | 1127 | 2486 | 520 | 44 | $0.74 |
 | claude | claude-sonnet-4-6 |  | 1 | 50 | 50/50 | 76% | 100% | 0.24 | 100% | 67% | 72% | 80% | 1788 | 3327 | 521 | 35 | $2.09 |
+| clef | @cf/cloudflare/clef-flash |  | 1 | 50 | 50/50 | 46% | 100% | 0.54 | 80% | 44% | 56% | 36% | 481 | 1961 | 576 | 0 | $0.05 |
+| clef | @cf/cloudflare/clef-flash | ev | 1 | 50 | 50/50 | 40% | 98% | 0.62 | 75% | 33% | 44% | 36% | 481 | 1961 | 576 | 0 | $0.05 |
+| clef | @cf/cloudflare/clef-flash | probe | 1 | 3 | 3/3 | 0% | 100% | 1.00 | - | 0% | 0% | - | 484 | 574 | 842 | 0 | - |
+| clef | @cf/cloudflare/clef-flash | probe+ev | 1 | 3 | 3/3 | 33% | 100% | 0.67 | - | 0% | 33% | - | 484 | 574 | 842 | 0 | - |
+| jev | jev-1.13.0 |  | 1 | 50 | 50/50 | 70% | 98% | 0.32 | 60% | 33% | 60% | 80% | 233 | 1278 | 716 | 18 | $0.03 |
+| jev | jev-1.13.0 | ev | 1 | 50 | 50/50 | 76% | 94% | 0.30 | 100% | 22% | 68% | 84% | 233 | 1278 | 716 | 18 | $0.03 |
+| jev | jev-1.13.0 | probe | 1 | 3 | 3/3 | 67% | 100% | 0.33 | - | 0% | 67% | - | 240 | 357 | 988 | 18 | - |
+| jev | jev-1.13.0 | probe+ev | 1 | 3 | 3/3 | 33% | 100% | 0.67 | - | 0% | 33% | - | 240 | 357 | 988 | 18 | - |
 | ollama | mistral:7b |  | 1 | 50 | 50/50 | 28% | 92% | 0.80 | 20% | 11% | 40% | 16% | 1465 | 6583 | 507 | 28 | $0 marginal |
 | ollama | qwen3:8b |  | 1 | 50 | 50/50 | 38% | 90% | 0.72 | 58% | 78% | 56% | 20% | 1555 | 10364 | 460 | 25 | $0 marginal |
 | openrouter | deepseek/deepseek-v4.1-flash |  | 1 | 50 | 16/50 | 75% | 94% | 0.31 | 50% | 100% | 71% | 78% | 1575 | 12715 | 465 | 121 | $0.09 |
@@ -18,6 +26,10 @@ Agreement is against the reference model's score on the same article. "Urgent" i
 | runpod | qwen/qwen3-32b-awq | q32awq-prefix | 8 | 50 | 50/50 | 38% | 86% | 0.76 | 42% | 56% | 48% | 28% | 2096 | 6869 | 456 | 27 | $0.12 |
 | runpod | qwen/qwen3-8b | prefixcache-on | 1 | 50 | 50/50 | 46% | 90% | 0.64 | 64% | 78% | 64% | 28% | 1611 | 2195 | 456 | 26 | $0.57 | (excluded 1 call(s) >10x median: [168219] ms, $0.0570)
 | runpod | qwen/qwen3-8b | prefixcache-on | 8 | 50 | 50/50 | 46% | 90% | 0.64 | 64% | 78% | 64% | 28% | 2235 | 7005 | 456 | 26 | $0.13 |
+| typical | OzLabs/typical-medium |  | 1 | 50 | 50/50 | 58% | 90% | 0.54 | 50% | 100% | 56% | 60% | 512 | 1728 | - | 0 | - |
+| typical | OzLabs/typical-medium | ev | 1 | 50 | 50/50 | 32% | 90% | 0.78 | 86% | 67% | 28% | 36% | 512 | 1728 | - | 0 | - |
+| typical | OzLabs/typical-medium | probe | 1 | 3 | 3/3 | 67% | 100% | 0.33 | 100% | 100% | 67% | - | 815 | 1258 | - | 0 | - |
+| typical | OzLabs/typical-medium | probe+ev | 1 | 3 | 3/3 | 33% | 67% | 1.00 | 100% | 100% | 33% | - | 815 | 1258 | - | 0 | - |
 
 ## Local timing split (Ollama)
 
@@ -58,3 +70,12 @@ Notes:
 | f8c01662 | openrouter | moonshotai/kimi-k3 |  |  |  | 1 | 50 | 33 | 23 | 67851 | moonshotai/kimi-k3 |  | 0.095865 |  |
 | ecd7d2ad | openrouter | deepseek/deepseek-v4.1-flash | reasoning-off |  |  | 1 | 50 | 50 | 50 | 52533 | deepseek/deepseek-v4.1-flash |  | 0.001607 |  |
 | 9a0ac311 | openrouter | moonshotai/kimi-k3 | reasoning-off |  |  | 1 | 50 | 50 | 50 | 160376 | moonshotai/kimi-k3 |  | 0.095736 |  |
+| f93d49a5 | jev | jev-1.13.0 | probe |  |  | 1 | 3 | 3 | 3 | 837 | jev-1.13.0 |  |  |  |
+| 9bbea759 | clef | @cf/cloudflare/clef-flash | probe |  |  | 1 | 3 | 3 | 3 | 1505 | clef-flash |  |  |  |
+| 47624194 | typical | OzLabs/typical-medium | probe |  |  | 1 | 3 | 3 | 3 | 1830 | OzLabs/typical-medium |  |  |  |
+| e9d9ea99 | typical | OzLabs/typical-medium | probe |  |  | 1 | 3 | 3 | 3 | 2573 | OzLabs/typical-medium |  |  |  |
+| 6647f651 | typical | OzLabs/typical-medium | probe |  |  | 1 | 3 | 3 | 3 | 2637 | OzLabs/typical-medium |  |  |  |
+| 6ae47cca | typical | OzLabs/typical-medium | probe |  |  | 1 | 3 | 3 | 3 | 2507 | OzLabs/typical-medium |  |  |  |
+| bdfbc22a | jev | jev-1.13.0 |  |  |  | 1 | 50 | 50 | 50 | 13741 | jev-1.13.0 |  | 0.001501 |  |
+| cad64126 | clef | @cf/cloudflare/clef-flash |  |  |  | 1 | 50 | 50 | 50 | 28714 | clef-flash |  | 0.002588 |  |
+| 220e7865 | typical | OzLabs/typical-medium |  | RTX 4090 |  | 1 | 50 | 50 | 50 | 29581 | OzLabs/typical-medium |  |  | pod 9ahvy4iq0scfm7, typical_shim.py, instructions_in_state |
