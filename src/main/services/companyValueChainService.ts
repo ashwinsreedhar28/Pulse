@@ -2141,12 +2141,36 @@ async function webSearchAugmentCitations(
           accessionRaw.includes('-')
             ? accessionRaw
             : `${accessionRaw.slice(0, 10)}-${accessionRaw.slice(10, 12)}-${accessionRaw.slice(12)}`
+        // The URL must belong to one of the edge's endpoints. Web search
+        // returns sec.gov hits from unrelated issuers (a Huntsman 8-K for a
+        // Celanese↔Westlake edge, a GoDaddy 8-K for Alibaba↔Weibo — 4 of 20
+        // in the Oct 20 spot-check), and tagging those `filings` claims a
+        // provenance the document doesn't have. sec_cik_map stores CIKs
+        // zero-padded to 10; the URL carries them unpadded.
+        const owners = [focus, t.counterparty.toUpperCase()]
+          .map((sym) => lookupCik(sym))
+          .filter((c): c is string => !!c)
+          .map((c) => c.replace(/^0+/, ''))
+        if (owners.length > 0 && !owners.includes(cik.replace(/^0+/, ''))) {
+          console.log(
+            `[companyChain] web-search ${focus}↔${t.counterparty}: rejected sec.gov URL from CIK ${cik} (not ${owners.join('/')}): "${url}"`
+          )
+          continue
+        }
+        if (owners.length === 0) {
+          console.log(
+            `[companyChain] web-search ${focus}↔${t.counterparty}: no CIK on file for either endpoint; sec.gov URL not accepted as a filing cite: "${url}"`
+          )
+          continue
+        }
       } else {
-        // Synthetic placeholders. The renderer falls back to opening
-        // the URL externally; a comment-grade accession just means the
-        // SEC pill doesn't claim a specific doc but the URL still works.
-        cik = '0000000000'
-        accession = 'web-search'
+        // Non-Archives sec.gov page (full-text-search hit, filing index
+        // without an accession). Not a verifiable filing citation; skip
+        // rather than attach a placeholder that gets tagged `filings`.
+        console.log(
+          `[companyChain] web-search ${focus}↔${t.counterparty}: sec.gov URL without an Archives accession, skipped: "${url}"`
+        )
+        continue
       }
       const formType =
         typeof parsed.formType === 'string' && parsed.formType.trim()
