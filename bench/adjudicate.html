@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pulse adjudication</title>
+<style>
+  :root { --bg:#fafaf7; --fg:#1b1b1b; --muted:#6b6b6b; --card:#fff; --line:#e3e1da; --acc:#2b5aa8; --held:#1f6b3a; --warn:#b4541a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141414; --fg:#ececec; --muted:#9a9a9a; --card:#1e1e1e; --line:#333; --acc:#7aa2e8; --held:#6fcf8f; --warn:#f0a070; } }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 ui-sans-serif,system-ui,-apple-system,Helvetica,Arial; }
+  .wrap { max-width:900px; margin:0 auto; padding:16px; }
+  .top { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; color:var(--muted); font-size:13px; }
+  .top b { color:var(--fg) }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin-top:12px; }
+  h1 { font-size:19px; margin:0 0 8px; line-height:1.3 }
+  .links { margin-top:10px; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; white-space:pre-wrap; border-top:1px dashed var(--line); padding-top:8px; }
+  .links .h { color:var(--held); font-weight:600 }
+  .votes { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:14px; }
+  .vote { border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13.5px }
+  .vote b { font-size:22px; display:block }
+  .vote .who { color:var(--muted); font-size:12px }
+  .vote.flip { border-color:var(--warn) }
+  .scale { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-top:14px; }
+  .scale button { font:inherit; padding:10px 6px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg); cursor:pointer; }
+  .scale button b { display:block; font-size:18px }
+  .scale button small { color:var(--muted); font-size:11.5px; display:block }
+  .scale button.on { border-color:var(--acc); box-shadow:0 0 0 2px var(--acc) inset }
+  .ctl { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center }
+  .ctl button { font:inherit; font-size:13px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); cursor:pointer }
+  .ctl input { font:inherit; font-size:13px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); flex:1; min-width:200px }
+  kbd { font:12px ui-monospace,Menlo,monospace; border:1px solid var(--line); border-radius:4px; padding:0 4px; color:var(--muted) }
+  .bar { height:4px; background:var(--line); border-radius:2px; margin-top:10px; overflow:hidden } .bar i { display:block; height:100%; background:var(--acc); width:0 }
+  .done { text-align:center; padding:40px 0; color:var(--muted) }
+  .why { color:var(--muted); font-size:12.5px; margin-top:8px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <span><b id="pos">–</b> of <span id="n">–</span> to adjudicate · decided <b id="cnt">0</b></span>
+    <span><kbd>1</kbd>–<kbd>5</kbd> final · <kbd>k</kbd> keep mine · <kbd>←</kbd> <kbd>→</kbd> · <kbd>n</kbd> note</span>
+  </div>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="card" id="card">
+    <h1 id="title"></h1>
+    <div id="summary"></div>
+    <div class="links" id="links"></div>
+    <div class="why" id="why"></div>
+    <div class="votes" id="votes"></div>
+    <div class="scale" id="scale">
+      <button data-s="k"><b>k</b><small>keep mine</small></button>
+      <button data-s="1"><b>1</b><small>ignore</small></button>
+      <button data-s="2"><b>2</b><small>routine</small></button>
+      <button data-s="3"><b>3</b><small>glance</small></button>
+      <button data-s="4"><b>4</b><small>look today</small></button>
+      <button data-s="5"><b>5</b><small>act today</small></button>
+    </div>
+    <div class="ctl">
+      <input id="note" placeholder="why (optional; n to focus, Enter to save)">
+      <button id="exp">export gold</button>
+    </div>
+  </div>
+  <div class="done" id="done" hidden>All adjudicated. Export, then drop <code>gold.json</code> into <code>bench/</code>.</div>
+</div>
+<script>
+(async () => {
+  const KEY = 'pulse-adjudication-v2';
+  const [fx, H, O, S] = await Promise.all(['articles_300.json', 'labels_ashwin.json', 'labels_anthropic-claude-opus-5-5.json', 'labels_openai-gpt-5-6-sol.json'].map(u => fetch(u).then(r => r.json())));
+  const arts = fx.articles.filter(a => a.domain === 'finance');
+  const votes = id => [{ who: 'ashwin', ...H.labels[id] }, { who: 'opus 5.5', ...O.labels[id] }, { who: 'gpt-5.6 sol', ...S.labels[id] }];
+  const needs = a => { const v = votes(String(a.id)); for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) { if (Math.abs(v[i].score - v[j].score) >= 2 || (v[i].score >= 4) !== (v[j].score >= 4)) return true; } return false; };
+  const queue = arts.filter(needs);
+  let dec = {}; try { dec = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(dec)); } catch {} };
+  const $ = id => document.getElementById(id);
+  $('n').textContent = queue.length;
+  let i = 0; while (i < queue.length && dec[queue[i].id]) i++;
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  function render() {
+    const a = queue[i];
+    if (!a) { $('card').hidden = true; $('done').hidden = false; return; }
+    $('card').hidden = false; $('done').hidden = true;
+    $('pos').textContent = i + 1; $('cnt').textContent = Object.keys(dec).length;
+    $('bar').style.width = (100 * Object.keys(dec).length / queue.length) + '%';
+    $('title').textContent = a.title; $('summary').textContent = a.summary || '';
+    $('links').innerHTML = esc(a.links_text || 'none').replace(/\[held\]/g, '<span class="h">[held]</span>');
+    const v = votes(String(a.id));
+    const flips = new Set(v.map(x => x.score >= 4)).size > 1;
+    $('why').textContent = flips ? 'alert flips between labelers' : 'scores 2+ apart';
+    $('votes').innerHTML = v.map(x => `<div class="vote ${flips ? 'flip' : ''}"><span class="who">${x.who}</span><b>${x.score}</b>${esc(x.reason || x.note || '')}</div>`).join('');
+    const cur = dec[a.id];
+    document.querySelectorAll('#scale button').forEach(b => b.classList.toggle('on', !!cur && (b.dataset.s === 'k' ? cur.kept : +b.dataset.s === cur.score)));
+    $('note').value = cur?.note || '';
+  }
+  function set(s) {
+    const a = queue[i]; if (!a) return;
+    const mine = H.labels[String(a.id)].score;
+    dec[a.id] = s === 'k' ? { score: mine, kept: true, note: $('note').value || undefined, at: new Date().toISOString() }
+                          : { score: +s, kept: +s === mine, note: $('note').value || undefined, at: new Date().toISOString() };
+    save(); i++; render();
+  }
+  document.querySelectorAll('#scale button').forEach(b => b.onclick = () => set(b.dataset.s));
+  document.addEventListener('keydown', e => {
+    if (e.target === $('note')) { if (e.key === 'Enter') { const a = queue[i]; if (a && dec[a.id]) { dec[a.id].note = $('note').value; save(); } $('note').blur(); } return; }
+    if (e.key >= '1' && e.key <= '5') set(e.key);
+    else if (e.key === 'k') set('k');
+    else if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+    else if (e.key === 'ArrowRight' && i < queue.length) { i++; render(); }
+    else if (e.key === 'n') { e.preventDefault(); $('note').focus(); }
+  });
+  $('exp').onclick = () => {
+    const labels = {};
+    for (const a of arts) {
+      const id = String(a.id), v = votes(id), d = dec[a.id];
+      labels[id] = d ? { score: d.score, source: d.kept ? 'adjudicated:kept' : 'adjudicated:changed', note: d.note, votes: v.map(x => x.score) }
+                     : { score: H.labels[id].score, source: needs(a) ? 'pending' : 'ashwin', votes: v.map(x => x.score) };
+    }
+    const out = { fixture: 'articles_300.json', frozen_at: fx.frozen_at, brief: fx.brief, brief_sha: fx.brief_sha,
+      labelers: ['ashwin', O.labeler, S.labeler], rule: 'adjudicate when any pair differs by >=2 or the alert (>=4) flips; otherwise ashwin\'s label stands',
+      n: arts.length, n_adjudicated: Object.keys(dec).length, n_queue: queue.length, exported_at: new Date().toISOString(), labels };
+    const u = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' }));
+    const el = document.createElement('a'); el.href = u; el.download = 'gold.json'; el.click();
+  };
+  render();
+})();
+</script>
+</body>
+</html>

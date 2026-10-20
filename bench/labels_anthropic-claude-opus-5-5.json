@@ -1,0 +1,2182 @@
+{
+ "fixture": "articles_300.json",
+ "frozen_at": "2026-10-20T17:21:50+00:00",
+ "brief": "v2",
+ "brief_sha": "0557b06c179b",
+ "labeler": "anthropic/claude-opus-5.5",
+ "saw_links": true,
+ "reasoning_effort": "low",
+ "max_tokens": 4096,
+ "exported_at": "2026-10-20T17:47:29+00:00",
+ "n": 271,
+ "labels": {
+  "9707044": {
+   "score": 1,
+   "reason": "Human-interest story about a lucky flea market find of used Samsung SSDs. Samsung links to AMAT and MU, but there is no business, pricing, or supply news here. Nothing material for any held name.",
+   "at": "2026-10-20T17:44:25+00:00",
+   "wall_ms": 2604,
+   "cost": 0.008428,
+   "reasoning_tokens": null
+  },
+  "10816527": {
+   "score": 1,
+   "reason": "This is a generic explainer on ETFs for new investors. It names no held or linked company and has no market-moving content.",
+   "at": "2026-10-20T17:44:25+00:00",
+   "wall_ms": 2772,
+   "cost": 0.007488,
+   "reasoning_tokens": null
+  },
+  "10968573": {
+   "score": 1,
+   "reason": "The article covers EPR Properties preferred share yields. EPR is a REIT that is neither held nor linked to any holding. The listed value-chain links involve ATEYY and its partners, none of which appear in the article.",
+   "at": "2026-10-20T17:44:26+00:00",
+   "wall_ms": 2989,
+   "cost": 0.008504,
+   "reasoning_tokens": null
+  },
+  "11084243": {
+   "score": 2,
+   "reason": "Routine ETF Channel piece on the implied analyst target for the FNK ETF. No held name is mentioned in the excerpt, and the value-chain links do not apply.",
+   "at": "2026-10-20T17:44:26+00:00",
+   "wall_ms": 3011,
+   "cost": 0.008008,
+   "reasoning_tokens": null
+  },
+  "10098357": {
+   "score": 1,
+   "reason": "A technical RSI note on a municipal bond ETF. It has no connection to any held semiconductor or tech name or their linked companies.",
+   "at": "2026-10-20T17:44:26+00:00",
+   "wall_ms": 3714,
+   "cost": 0.007936,
+   "reasoning_tokens": null
+  },
+  "10057150": {
+   "score": 1,
+   "reason": "Safehold (SAFE) is a ground-lease REIT that is neither held nor linked to any holding. The article is routine technical-chart news about it, with no connection to the semiconductor or tech holdings.",
+   "at": "2026-10-20T17:45:07+00:00",
+   "wall_ms": 2585,
+   "cost": 0.008404,
+   "reasoning_tokens": null
+  },
+  "10411948": {
+   "score": 1,
+   "reason": "Geopolitical news about Russia's hybrid campaign against Europe. It names no held or linked company and has no clear tie to the semiconductor or tech holdings.",
+   "at": "2026-10-20T17:45:07+00:00",
+   "wall_ms": 2596,
+   "cost": 0.0069,
+   "reasoning_tokens": null
+  },
+  "9707945": {
+   "score": 2,
+   "reason": "Macro currency and Treasury market news with no held or linked company named. Yen intervention may indirectly touch Japanese holdings like Advantest, but this is general market coverage.",
+   "at": "2026-10-20T17:45:07+00:00",
+   "wall_ms": 2827,
+   "cost": 0.007016,
+   "reasoning_tokens": null
+  },
+  "11085144": {
+   "score": 2,
+   "reason": "Routine ETF movers piece. The summary is cut off before naming SOXX components, and the visible names (Birkenstock, Vail) are not held. SOXX holds many held semis, so this is general sector-ETF coverage, not material news for any one holding.",
+   "at": "2026-10-20T17:45:08+00:00",
+   "wall_ms": 2869,
+   "cost": 0.008704,
+   "reasoning_tokens": null
+  },
+  "9709378": {
+   "score": 2,
+   "reason": "The article covers Aehr Test Systems (AEHR), which is neither held nor linked in the provided value chain. It does touch the semiconductor test sector where FORM and COHU operate, but neither is named. This is routine sector news with no direct relevance to a held name.",
+   "at": "2026-10-20T17:45:08+00:00",
+   "wall_ms": 3380,
+   "cost": 0.008424,
+   "reasoning_tokens": null
+  },
+  "9852596": {
+   "score": 2,
+   "reason": "Consumer fraud story involving NVIDIA RTX 5090 cards. NVDA is named only incidentally, and the story has no material impact on its business or the semiconductor sector.",
+   "at": "2026-10-20T17:45:08+00:00",
+   "wall_ms": 3523,
+   "cost": 0.007168,
+   "reasoning_tokens": null
+  },
+  "9744853": {
+   "score": 3,
+   "reason": "This is a general market recap of chipmaker and AI-infrastructure weakness. It touches the sector most of these holdings sit in, but the summary names no held stock specifically, so it is worth a glance rather than action.",
+   "at": "2026-10-20T17:45:10+00:00",
+   "wall_ms": 2522,
+   "cost": 0.008224,
+   "reasoning_tokens": null
+  },
+  "11722079": {
+   "score": 2,
+   "reason": "Routine macro release of FOMC economic projections. It names no held or linked company and has only a general market impact.",
+   "at": "2026-10-20T17:45:10+00:00",
+   "wall_ms": 2648,
+   "cost": 0.006592,
+   "reasoning_tokens": null
+  },
+  "11713759": {
+   "score": 2,
+   "reason": "Geopolitical news with broad market and oil implications, but it names no held or linked company. Any effect on the semiconductor and tech holdings would be indirect, through general risk sentiment.",
+   "at": "2026-10-20T17:45:10+00:00",
+   "wall_ms": 2650,
+   "cost": 0.007156,
+   "reasoning_tokens": null
+  },
+  "11723766": {
+   "score": 4,
+   "reason": "Substantive coverage of held name CRDO: new 1.6T optics product and a management target of more than $600M in FY2027 optical revenue. It is product and strategy news rather than earnings or a guidance change. It also touches held competitor AAOI and held suppliers TSM, CDNS and SNPS.",
+   "at": "2026-10-20T17:45:11+00:00",
+   "wall_ms": 2654,
+   "cost": 0.008392,
+   "reasoning_tokens": null
+  },
+  "10712019": {
+   "score": 3,
+   "reason": "Apple is not held. The 'supplier oligopoly' warning likely points to memory makers like MU, but no held name is explicitly mentioned. It touches the memory/component market, so it's worth a glance.",
+   "at": "2026-10-20T17:45:11+00:00",
+   "wall_ms": 2616,
+   "cost": 0.008308,
+   "reasoning_tokens": null
+  },
+  "10430136": {
+   "score": 4,
+   "reason": "A podcast segment centered on NVDA CEO Jensen Huang's view of AI capex is substantive coverage of a held name. It also bears on linked holdings (CRWV, AMKR, ASX, ARM, CDNS). It is commentary, not a material corporate event.",
+   "at": "2026-10-20T17:45:11+00:00",
+   "wall_ms": 3427,
+   "cost": 0.008664,
+   "reasoning_tokens": null
+  },
+  "11718566": {
+   "score": 1,
+   "reason": "Sugar commodity price news driven by the Brazilian real. No held or linked semiconductor/tech names are involved, so it is unrelated to the portfolio.",
+   "at": "2026-10-20T17:45:12+00:00",
+   "wall_ms": 2533,
+   "cost": 0.008204,
+   "reasoning_tokens": null
+  },
+  "9707159": {
+   "score": 1,
+   "reason": "Defense procurement news about Croatia buying South Korean rocket artillery. No held names or linked companies are involved.",
+   "at": "2026-10-20T17:45:13+00:00",
+   "wall_ms": 2869,
+   "cost": 0.006656,
+   "reasoning_tokens": null
+  },
+  "9708846": {
+   "score": 2,
+   "reason": "Stock-pick piece on Semtech, which is not held and has no listed link to any holding. It touches the AI connectivity theme shared by CRDO, MRVL and COHR, but none of them is named.",
+   "at": "2026-10-20T17:45:13+00:00",
+   "wall_ms": 2610,
+   "cost": 0.008032,
+   "reasoning_tokens": null
+  },
+  "11716093": {
+   "score": 2,
+   "reason": "The article is about TTM Technologies (TTMI), which is neither held nor linked in the provided value-chain data. It covers a PCB technology ramp tied to AI data-center demand, which touches the market of held names like APH only indirectly, and none of them is named.",
+   "at": "2026-10-20T17:45:13+00:00",
+   "wall_ms": 2540,
+   "cost": 0.008384,
+   "reasoning_tokens": null
+  },
+  "9852711": {
+   "score": 1,
+   "reason": "An EU political and defense advisory panel being shelved has no direct bearing on any held name, and the article lists no value-chain links. It is unrelated to the semiconductor, networking, and industrial holdings.",
+   "at": "2026-10-20T17:45:14+00:00",
+   "wall_ms": 3446,
+   "cost": 0.007264,
+   "reasoning_tokens": null
+  },
+  "11712580": {
+   "score": 3,
+   "reason": "This is a generic stock-pick listicle. Amazon is named but not held. The other two picks are unnamed and could include a held name like TSM or NVDA, but that can't be confirmed from the headline and summary. Worth a glance at most.",
+   "at": "2026-10-20T17:45:15+00:00",
+   "wall_ms": 2695,
+   "cost": 0.008332,
+   "reasoning_tokens": null
+  },
+  "10085206": {
+   "score": 2,
+   "reason": "General data center siting story about Patagonia. No held or linked company is named, and the theme touches the AI infrastructure sector only loosely.",
+   "at": "2026-10-20T17:45:15+00:00",
+   "wall_ms": 2710,
+   "cost": 0.007624,
+   "reasoning_tokens": null
+  },
+  "11589122": {
+   "score": 3,
+   "reason": "Speculative stock-split piece about two trillion-dollar companies, likely Meta and another megacap. It may touch a held AI name such as TSM, but no material news is implied. NVDA already split in 2024, so it is not the subject.",
+   "at": "2026-10-20T17:45:16+00:00",
+   "wall_ms": 4977,
+   "cost": 0.01246,
+   "reasoning_tokens": null
+  },
+  "10589716": {
+   "score": 2,
+   "reason": "This is general coverage of quantum computing stocks, probably pure-plays like IONQ, RGTI and QBTS. None of them are held names or linked companies, and the value-chain links listed here (around ATEYY) don't connect to the article.",
+   "at": "2026-10-20T17:45:16+00:00",
+   "wall_ms": 3262,
+   "cost": 0.008504,
+   "reasoning_tokens": null
+  },
+  "11725314": {
+   "score": 1,
+   "reason": "Trucking freight market update on tender rejections, diesel and spot rates. It names no held company and has no value-chain link, so it is unrelated to the semiconductor and tech holdings.",
+   "at": "2026-10-20T17:45:16+00:00",
+   "wall_ms": 3051,
+   "cost": 0.00756,
+   "reasoning_tokens": null
+  },
+  "10491333": {
+   "score": 1,
+   "reason": "Carlsmed is a medical technology company that is neither held nor linked to any holding. An executive promotion there has no bearing on the semiconductor and tech portfolio, and the listed ATEYY value-chain links do not apply to this article.",
+   "at": "2026-10-20T17:45:17+00:00",
+   "wall_ms": 2326,
+   "cost": 0.008552,
+   "reasoning_tokens": null
+  },
+  "11725961": {
+   "score": 1,
+   "reason": "Sugar commodity price news. It does not involve any held semiconductor or tech name or any linked company.",
+   "at": "2026-10-20T17:45:18+00:00",
+   "wall_ms": 2404,
+   "cost": 0.00788,
+   "reasoning_tokens": null
+  },
+  "10732541": {
+   "score": 1,
+   "reason": "This is a merger between two multifamily REITs, Independence Realty Trust and Centerspace. Neither company is held or linked, and the deal has no connection to the semiconductor or tech holdings. The supplied ATEYY links are irrelevant to this article.",
+   "at": "2026-10-20T17:45:18+00:00",
+   "wall_ms": 3901,
+   "cost": 0.008684,
+   "reasoning_tokens": null
+  },
+  "11725568": {
+   "score": 3,
+   "reason": "Eaton (ETN) is a held name, but this is a generic historical-return piece with no new information, guidance, or catalyst. It is direct coverage, so it rates above routine, but it is only worth a glance.",
+   "at": "2026-10-20T17:45:19+00:00",
+   "wall_ms": 2950,
+   "cost": 0.007948,
+   "reasoning_tokens": null
+  },
+  "10531361": {
+   "score": 1,
+   "reason": "The article covers biotech stocks hitting 52-week highs (PHVS, ROIV, BLSM, ATRC, FTH). None of them is a held name or linked to one, and the semiconductor value-chain links listed don't apply to this news.",
+   "at": "2026-10-20T17:45:19+00:00",
+   "wall_ms": 3568,
+   "cost": 0.008816,
+   "reasoning_tokens": null
+  },
+  "11712441": {
+   "score": 3,
+   "reason": "A likely Fed rate hike this week is macro news that broadly affects valuations of the growth-heavy semiconductor and tech holdings. No held name is covered directly, so it is worth a glance only.",
+   "at": "2026-10-20T17:45:19+00:00",
+   "wall_ms": 3034,
+   "cost": 0.0083,
+   "reasoning_tokens": null
+  },
+  "11710361": {
+   "score": 1,
+   "reason": "AI safety story about Anthropic's Claude blocking bioweapon research attempts. It names no held company and has no linked company or market impact on the holdings.",
+   "at": "2026-10-20T17:45:20+00:00",
+   "wall_ms": 2807,
+   "cost": 0.007076,
+   "reasoning_tokens": null
+  },
+  "9744829": {
+   "score": 2,
+   "reason": "The article covers Apple CEO succession and iPhone sales. Apple is not held, and none of the provided links connect to it. The listed links all involve Advantest, which the article does not mention.",
+   "at": "2026-10-20T17:45:21+00:00",
+   "wall_ms": 2867,
+   "cost": 0.008088,
+   "reasoning_tokens": null
+  },
+  "11722055": {
+   "score": 1,
+   "reason": "The article covers USAF airlift and tanker planning, including a possible C-17 restart (Boeing). None of the held names is mentioned and no value-chain links apply, so it is not relevant to these holdings.",
+   "at": "2026-10-20T17:45:21+00:00",
+   "wall_ms": 2743,
+   "cost": 0.007452,
+   "reasoning_tokens": null
+  },
+  "9856593": {
+   "score": 3,
+   "reason": "Musk comment on rare earths is sector/macro news touching supply chains (magnets, chips) relevant to holdings like SPCX, but no direct material news about a held name.",
+   "at": "2026-10-20T17:45:22+00:00",
+   "wall_ms": 3105,
+   "cost": 0.0075,
+   "reasoning_tokens": null
+  },
+  "10946316": {
+   "score": 1,
+   "reason": "The article covers EVgo and Regency Centers, neither of which is held or linked to a held name. The value-chain links listed involve Advantest and its partners, which have no connection to this EV charging news.",
+   "at": "2026-10-20T17:45:22+00:00",
+   "wall_ms": 3143,
+   "cost": 0.008284,
+   "reasoning_tokens": null
+  },
+  "11713735": {
+   "score": 1,
+   "reason": "Port infrastructure news with no held or linked companies mentioned and no clear relevance to the semiconductor/tech holdings.",
+   "at": "2026-10-20T17:45:23+00:00",
+   "wall_ms": 3237,
+   "cost": 0.006728,
+   "reasoning_tokens": null
+  },
+  "9710255": {
+   "score": 2,
+   "reason": "The article is about Southern Copper's (SCCO) investment plan. SCCO is not a held name and has no listed link to any holding. It is a copper peer of FCX, but that is only loose sector context, so this counts as routine industry coverage.",
+   "at": "2026-10-20T17:45:23+00:00",
+   "wall_ms": 3197,
+   "cost": 0.008004,
+   "reasoning_tokens": null
+  },
+  "11723996": {
+   "score": 3,
+   "reason": "GPU financing by USD.AI, a company not in the holdings, for an undisclosed borrower. It touches NVDA's demand ecosystem only indirectly and names no held company. At $128.9M it is a small deal and not material.",
+   "at": "2026-10-20T17:45:24+00:00",
+   "wall_ms": 3112,
+   "cost": 0.00838,
+   "reasoning_tokens": null
+  },
+  "10773585": {
+   "score": 1,
+   "reason": "The article is about Meta's stock rally and Zuckerberg's net worth. Meta is not held and has no listed links to any holding, and no held name is mentioned.",
+   "at": "2026-10-20T17:45:24+00:00",
+   "wall_ms": 2325,
+   "cost": 0.007956,
+   "reasoning_tokens": null
+  },
+  "11059628": {
+   "score": 1,
+   "reason": "Geopolitical military news about a Ukrainian drone strike on a Russian energy plant. It names no held or linked company and has no direct bearing on the semiconductor or tech holdings.",
+   "at": "2026-10-20T17:45:25+00:00",
+   "wall_ms": 2758,
+   "cost": 0.007268,
+   "reasoning_tokens": null
+  },
+  "9710370": {
+   "score": 1,
+   "reason": "Trade secret lawsuit between two private trucking/logistics firms. No held or linked names, and no semiconductor or tech sector relevance.",
+   "at": "2026-10-20T17:45:25+00:00",
+   "wall_ms": 2427,
+   "cost": 0.006992,
+   "reasoning_tokens": null
+  },
+  "11699683": {
+   "score": 3,
+   "reason": "Sector piece on ABF substrate supply constraints for AI accelerators. It touches the packaging and AI chip markets of held names (NVDA, AMD, AVGO, TSM, AMKR, ASX), but the summary names none of them directly and no filing links apply.",
+   "at": "2026-10-20T17:45:26+00:00",
+   "wall_ms": 2762,
+   "cost": 0.007804,
+   "reasoning_tokens": null
+  },
+  "11721662": {
+   "score": 4,
+   "reason": "No held name is mentioned, but a coordinated call by the leading frontier-AI labs (Anthropic, OpenAI, xAI, Google) to slow model development directly threatens the AI capex thesis. That thesis underpins many holdings, including NVDA, AMD, AVGO, TSM, MU, CRWV, ANET and the semi-equipment names. The sector implications are significant enough to warrant a look today.",
+   "at": "2026-10-20T17:45:26+00:00",
+   "wall_ms": 5289,
+   "cost": 0.014328,
+   "reasoning_tokens": null
+  },
+  "10434641": {
+   "score": 2,
+   "reason": "Macro FX piece on the British pound and BOE policy. It names no held or linked company and has little direct bearing on the semiconductor or tech holdings.",
+   "at": "2026-10-20T17:45:27+00:00",
+   "wall_ms": 2430,
+   "cost": 0.006908,
+   "reasoning_tokens": null
+  },
+  "11018167": {
+   "score": 1,
+   "reason": "Perma-Pipe (PPIH) earnings. The company is not held and has no value-chain link to any holding. The provided links involve ATEYY, which this article does not mention.",
+   "at": "2026-10-20T17:45:27+00:00",
+   "wall_ms": 3310,
+   "cost": 0.008224,
+   "reasoning_tokens": null
+  },
+  "11040908": {
+   "score": 1,
+   "reason": "The article covers Cathie Wood buying Ionis Pharmaceuticals, a biotech stock. Ionis is not in the holdings and has no listed value-chain link to any held name.",
+   "at": "2026-10-20T17:45:27+00:00",
+   "wall_ms": 2522,
+   "cost": 0.008116,
+   "reasoning_tokens": null
+  },
+  "11710337": {
+   "score": 1,
+   "reason": "A Kickstarter consumer CD player gadget story. It names no held companies and shows no value-chain links, so it is unrelated to the portfolio.",
+   "at": "2026-10-20T17:45:28+00:00",
+   "wall_ms": 2606,
+   "cost": 0.00704,
+   "reasoning_tokens": null
+  },
+  "11712024": {
+   "score": 3,
+   "reason": "General semiconductor ETF roundup. It touches the sector of many held names, but any mention of them is likely incidental to fund holdings, with no company-specific news.",
+   "at": "2026-10-20T17:45:29+00:00",
+   "wall_ms": 3003,
+   "cost": 0.007604,
+   "reasoning_tokens": null
+  },
+  "9710624": {
+   "score": 3,
+   "reason": "Routine analysis of ADI, a non-held company that is a customer of AMKR and CDNS. It also touches the auto semiconductor market where STM, NXPI, ON and MCHP compete. Nothing material for a held name.",
+   "at": "2026-10-20T17:45:29+00:00",
+   "wall_ms": 3229,
+   "cost": 0.00834,
+   "reasoning_tokens": null
+  },
+  "11713711": {
+   "score": 1,
+   "reason": "Railroad merger and access-rights news involving BNSF, CPKC, CSX, UP and NS. None are held names or linked companies, and it has no direct bearing on the semiconductor or tech holdings.",
+   "at": "2026-10-20T17:45:30+00:00",
+   "wall_ms": 2187,
+   "cost": 0.007364,
+   "reasoning_tokens": null
+  },
+  "9910371": {
+   "score": 1,
+   "reason": "Swiss market and Novartis drug news has no connection to any held semiconductor or tech name or its linked companies.",
+   "at": "2026-10-20T17:45:31+00:00",
+   "wall_ms": 3811,
+   "cost": 0.007664,
+   "reasoning_tokens": null
+  },
+  "9709584": {
+   "score": 2,
+   "reason": "General market wrap on rising bond yields and an index decline. The summary names no held or linked company. The Nasdaq drop touches tech broadly, but this is routine market coverage.",
+   "at": "2026-10-20T17:45:31+00:00",
+   "wall_ms": 4661,
+   "cost": 0.00828,
+   "reasoning_tokens": null
+  },
+  "9709838": {
+   "score": 3,
+   "reason": "A micro-cap (Edgewater Wireless) promoting its invitation to a GlobalFoundries summit. GFS is named only in passing, and attending a summit is not material news for GFS or its linked names.",
+   "at": "2026-10-20T17:45:33+00:00",
+   "wall_ms": 3412,
+   "cost": 0.008492,
+   "reasoning_tokens": null
+  },
+  "9709191": {
+   "score": 4,
+   "reason": "The quarterly S&P index rebalance likely involves held names. The value-chain links point to SNDK and WDC, possibly moving into the S&P 100 or among the indices, though the summary doesn't confirm it. An index addition can bring forced buying from index funds, so holders should check the full list today.",
+   "at": "2026-10-20T17:45:33+00:00",
+   "wall_ms": 5038,
+   "cost": 0.011736,
+   "reasoning_tokens": null
+  },
+  "11726052": {
+   "score": 1,
+   "reason": "The article covers Grab's buyout of a majority stake in Atome Financial, a Southeast Asian fintech deal. No held name or linked company is involved, so it is unrelated to the portfolio.",
+   "at": "2026-10-20T17:45:33+00:00",
+   "wall_ms": 3129,
+   "cost": 0.007908,
+   "reasoning_tokens": null
+  },
+  "9708798": {
+   "score": 2,
+   "reason": "TTM Technologies is not a held name and has no listed value-chain link. The article covers TTMI's AI data-center PCB growth, which is only general sector context for held names like CLS and ANET.",
+   "at": "2026-10-20T17:45:33+00:00",
+   "wall_ms": 3375,
+   "cost": 0.00764,
+   "reasoning_tokens": null
+  },
+  "11721892": {
+   "score": 2,
+   "reason": "Consumer retail deal on a V-Color DDR5 kit. No held name is mentioned, though the $429 price for 32GB hints at elevated DRAM pricing, which touches MU's market only indirectly.",
+   "at": "2026-10-20T17:45:34+00:00",
+   "wall_ms": 2281,
+   "cost": 0.007348,
+   "reasoning_tokens": null
+  },
+  "10960320": {
+   "score": 3,
+   "reason": "Apple product launch news (folding iPhone) touches suppliers like QCOM, SWKS, QRVO, CRUS, GLW, and TSM, but none of them is named in the piece and no value-chain links are given. Worth a glance at most.",
+   "at": "2026-10-20T17:45:35+00:00",
+   "wall_ms": 3572,
+   "cost": 0.007492,
+   "reasoning_tokens": null
+  },
+  "11723579": {
+   "score": 4,
+   "reason": "A sector move piece that names MTSI (Macom), a held name, as the standout. The SOX rally also touches many other holdings. This is substantive coverage of a held name, but not material company news.",
+   "at": "2026-10-20T17:45:35+00:00",
+   "wall_ms": 2543,
+   "cost": 0.008132,
+   "reasoning_tokens": null
+  },
+  "9710092": {
+   "score": 1,
+   "reason": "Executive hire at Alcatraz AI, a private access-control company that is neither held nor linked in the filings. No held name is mentioned.",
+   "at": "2026-10-20T17:45:35+00:00",
+   "wall_ms": 2643,
+   "cost": 0.007828,
+   "reasoning_tokens": null
+  },
+  "9711132": {
+   "score": 4,
+   "reason": "Substantive stock-focused coverage of held name SPCX, discussing its price decline after early trading. It is analysis, not a material event.",
+   "at": "2026-10-20T17:45:36+00:00",
+   "wall_ms": 2814,
+   "cost": 0.00688,
+   "reasoning_tokens": null
+  },
+  "11710452": {
+   "score": 1,
+   "reason": "The article covers a Ukrainian defense firm's missile program. It names no held company and no linked company, and it doesn't touch the semiconductor or tech hardware markets the holdings sit in.",
+   "at": "2026-10-20T17:45:37+00:00",
+   "wall_ms": 3135,
+   "cost": 0.0072,
+   "reasoning_tokens": null
+  },
+  "11590368": {
+   "score": 2,
+   "reason": "General macro/commodity news on oil prices and Middle East tensions. No held name is mentioned and no value-chain link applies. Any effect on these semiconductor and tech holdings would be indirect.",
+   "at": "2026-10-20T17:45:37+00:00",
+   "wall_ms": 3979,
+   "cost": 0.007152,
+   "reasoning_tokens": null
+  },
+  "11725266": {
+   "score": 2,
+   "reason": "IonQ is neither held nor linked. This is quantum computing sector news with no direct tie to any held name.",
+   "at": "2026-10-20T17:45:37+00:00",
+   "wall_ms": 2174,
+   "cost": 0.006552,
+   "reasoning_tokens": null
+  },
+  "11564114": {
+   "score": 2,
+   "reason": "General robotics industry story about a Chinese humanoid robot with no held or linked company named; only loosely touches the semiconductor and AI hardware theme.",
+   "at": "2026-10-20T17:45:38+00:00",
+   "wall_ms": 2600,
+   "cost": 0.006852,
+   "reasoning_tokens": null
+  },
+  "9708659": {
+   "score": 2,
+   "reason": "General market and macro coverage of a Fed inflation pledge and index moves. The visible text names no held stock. The value-chain links centered on AMAT suggest it may be mentioned further in, but nothing specific is shown.",
+   "at": "2026-10-20T17:45:38+00:00",
+   "wall_ms": 2899,
+   "cost": 0.00864,
+   "reasoning_tokens": null
+  },
+  "10439170": {
+   "score": 1,
+   "reason": "The article covers Japan using drones to deter bears. It names no held company and has no value-chain link, so it is unrelated to the portfolio.",
+   "at": "2026-10-20T17:45:39+00:00",
+   "wall_ms": 2968,
+   "cost": 0.006728,
+   "reasoning_tokens": null
+  },
+  "11707586": {
+   "score": 1,
+   "reason": "Defense procurement news about the Saab GlobalEye surveillance aircraft. It does not involve any held name or linked company.",
+   "at": "2026-10-20T17:45:40+00:00",
+   "wall_ms": 2707,
+   "cost": 0.006652,
+   "reasoning_tokens": null
+  },
+  "9855898": {
+   "score": 1,
+   "reason": "Visa stablecoin/blockchain lending news; no held or linked semiconductor/tech hardware names involved.",
+   "at": "2026-10-20T17:45:41+00:00",
+   "wall_ms": 2268,
+   "cost": 0.006688,
+   "reasoning_tokens": null
+  },
+  "11713040": {
+   "score": 5,
+   "reason": "JPMorgan named KLAC, a held name, its top chip-equipment pick and raised its WFE market forecasts. That is a direct analyst call with a bullish thesis. The higher WFE outlook also touches held peers AMAT, LRCX and ASML, and KLAC suppliers AEIS and UCTT.",
+   "at": "2026-10-20T17:45:41+00:00",
+   "wall_ms": 2472,
+   "cost": 0.008916,
+   "reasoning_tokens": null
+  },
+  "11609596": {
+   "score": 4,
+   "reason": "An in-depth HBM industry report (SemiAnalysis-style) covering vendor dynamics and the HBM4 roadmap with custom base dies. This bears directly on MU as an HBM vendor and on NVDA, AMD, TSM, AVGO, MRVL, ASX and AMKR through custom base dies and packaging. It is substantive sector coverage touching held names, not a discrete material event.",
+   "at": "2026-10-20T17:45:41+00:00",
+   "wall_ms": 4380,
+   "cost": 0.008832,
+   "reasoning_tokens": null
+  },
+  "10929767": {
+   "score": 3,
+   "reason": "This is AI safety and policy news about OpenAI, which is neither held nor linked. It touches the broader AI buildout that NVDA, CRWV and others depend on, but no held name is directly affected. It only raises a general question about AI capex sentiment.",
+   "at": "2026-10-20T17:45:41+00:00",
+   "wall_ms": 3535,
+   "cost": 0.008644,
+   "reasoning_tokens": null
+  },
+  "9707226": {
+   "score": 1,
+   "reason": "Defense/naval news about Japan's ASEV warship radar installation. It names no held companies and has no value-chain links, so it is irrelevant to the portfolio.",
+   "at": "2026-10-20T17:45:42+00:00",
+   "wall_ms": 4756,
+   "cost": 0.00712,
+   "reasoning_tokens": null
+  },
+  "9982476": {
+   "score": 1,
+   "reason": "Insider sale at Performance Food Group, which is neither held nor linked to any held name. Not relevant to the semiconductor and tech holdings.",
+   "at": "2026-10-20T17:45:43+00:00",
+   "wall_ms": 2463,
+   "cost": 0.007828,
+   "reasoning_tokens": null
+  },
+  "11722007": {
+   "score": 1,
+   "reason": "This is military/defense operations news about Navy destroyer deployments. None of the held names or linked companies are involved, and it has no clear bearing on the semiconductor or tech holdings.",
+   "at": "2026-10-20T17:45:44+00:00",
+   "wall_ms": 3688,
+   "cost": 0.006988,
+   "reasoning_tokens": null
+  },
+  "10165722": {
+   "score": 1,
+   "reason": "The article covers Archer Aviation, which is neither held nor linked to any held name. The listed links all involve Advantest and its partners and peers, none of which relate to this story.",
+   "at": "2026-10-20T17:45:44+00:00",
+   "wall_ms": 3567,
+   "cost": 0.00794,
+   "reasoning_tokens": null
+  },
+  "9709517": {
+   "score": 4,
+   "reason": "ASX, a held name, was added to the Zacks Rank #5 (Strong Sell) list. That is direct coverage of a held name, but it is a routine quant-rank change rather than an analyst downgrade with a new thesis, so it sits below 'act today'.",
+   "at": "2026-10-20T17:45:44+00:00",
+   "wall_ms": 3059,
+   "cost": 0.008484,
+   "reasoning_tokens": null
+  },
+  "11724691": {
+   "score": 3,
+   "reason": "Small private European cybersecurity M&A. Arista (ANET) is mentioned only in passing as a vendor that Orbcom partners with, and the deal is immaterial to ANET or the companies linked to it.",
+   "at": "2026-10-20T17:45:45+00:00",
+   "wall_ms": 3053,
+   "cost": 0.008804,
+   "reasoning_tokens": null
+  },
+  "11712254": {
+   "score": 3,
+   "reason": "Covers AI stock positioning by a prominent fund manager (Situational Awareness, which has disclosed holdings like CRWV and other AI infrastructure names), but the summary names no held company directly. It is sector sentiment news touching held AI names in passing, so worth a glance.",
+   "at": "2026-10-20T17:45:45+00:00",
+   "wall_ms": 3847,
+   "cost": 0.008512,
+   "reasoning_tokens": null
+  },
+  "11710524": {
+   "score": 1,
+   "reason": "A Fed approval of a Santander banking application has no bearing on any held semiconductor, tech, or industrial name, and there are no value-chain links to the holdings.",
+   "at": "2026-10-20T17:45:46+00:00",
+   "wall_ms": 2811,
+   "cost": 0.006996,
+   "reasoning_tokens": null
+  },
+  "11085537": {
+   "score": 3,
+   "reason": "WOLF is a held name, but this is a routine options-volume roundup that mentions it in passing. It carries no material news or thesis change.",
+   "at": "2026-10-20T17:45:47+00:00",
+   "wall_ms": 2794,
+   "cost": 0.0079,
+   "reasoning_tokens": null
+  },
+  "11723905": {
+   "score": 4,
+   "reason": "Stock-pick coverage of held MU, with analysts raising profit estimates and the stock clearing a technical buy point. Other AI leaders are likely named too, possibly LITE or COHR. This is substantive coverage but not a thesis-changing event, and MU's suppliers are only indirectly relevant.",
+   "at": "2026-10-20T17:45:47+00:00",
+   "wall_ms": 3089,
+   "cost": 0.00884,
+   "reasoning_tokens": null
+  },
+  "11725338": {
+   "score": 3,
+   "reason": "Routine Zacks-style daily price recap on held name CDNS (-3.56%) with no new catalyst, earnings, or guidance news. It mentions a held name directly but adds no material information.",
+   "at": "2026-10-20T17:45:47+00:00",
+   "wall_ms": 3969,
+   "cost": 0.008132,
+   "reasoning_tokens": null
+  },
+  "11724552": {
+   "score": 4,
+   "reason": "Direct coverage of held name RMBS: a product launch (Caliptra-ready Root of Trust security IP) framed in a bull-case piece. It is substantive product news, but not earnings, guidance or M&A. It is also relevant to competitors CDNS and SNPS.",
+   "at": "2026-10-20T17:45:48+00:00",
+   "wall_ms": 3317,
+   "cost": 0.00922,
+   "reasoning_tokens": null
+  },
+  "11724806": {
+   "score": 2,
+   "reason": "Zacks value-stock screen covering ADM, Delek and Sanmina. None of them are held or linked names, so this is routine market coverage.",
+   "at": "2026-10-20T17:45:49+00:00",
+   "wall_ms": 2484,
+   "cost": 0.007776,
+   "reasoning_tokens": null
+  },
+  "11723512": {
+   "score": 4,
+   "reason": "APH, a held name, was added to the Zacks Rank #1 Strong Buy list. That is a stock-pick piece naming it directly, but it is a routine quant-ranking update rather than a thesis-changing analyst action.",
+   "at": "2026-10-20T17:45:49+00:00",
+   "wall_ms": 4330,
+   "cost": 0.00818,
+   "reasoning_tokens": null
+  },
+  "9744714": {
+   "score": 4,
+   "reason": "This is a valuation and stock-pick piece focused directly on held name VICR, covering its AI demand, backlog and royalties. It is substantive coverage but brings no new material event.",
+   "at": "2026-10-20T17:45:50+00:00",
+   "wall_ms": 3114,
+   "cost": 0.007488,
+   "reasoning_tokens": null
+  },
+  "11725060": {
+   "score": 4,
+   "reason": "Direct news on held name FCX, but it is a routine quarterly dividend declaration. The $0.15 total (base $0.075 plus variable $0.075) follows the existing performance-based payout framework, with no sign of a change in policy. Worth a look as company-specific news, but not material enough to act on.",
+   "at": "2026-10-20T17:45:50+00:00",
+   "wall_ms": 3031,
+   "cost": 0.008916,
+   "reasoning_tokens": null
+  },
+  "9710787": {
+   "score": 4,
+   "reason": "Stock-pick piece directly covering held name MCHP, arguing for a contrarian rebound to $85. It is substantive coverage but carries no material corporate news.",
+   "at": "2026-10-20T17:45:51+00:00",
+   "wall_ms": 2759,
+   "cost": 0.007912,
+   "reasoning_tokens": null
+  },
+  "11723627": {
+   "score": 4,
+   "reason": "Stock-pick piece directly covering held names AVGO and VRT as dividend-paying AI plays. This is substantive coverage, but it is not material news.",
+   "at": "2026-10-20T17:45:51+00:00",
+   "wall_ms": 3312,
+   "cost": 0.007912,
+   "reasoning_tokens": null
+  },
+  "10827411": {
+   "score": 2,
+   "reason": "Opinion piece on AGI definitions and AI hype. It names no held stock and no linked company. At most it is general AI-sector commentary.",
+   "at": "2026-10-20T17:45:52+00:00",
+   "wall_ms": 3253,
+   "cost": 0.007884,
+   "reasoning_tokens": null
+  },
+  "10625191": {
+   "score": 4,
+   "reason": "Substantive coverage of held name QCOM, laying out the CEO's diversification strategy into 6G, robotics and data centers. It is a strategy profile, not a material event like earnings or guidance, so it is worth a look rather than action. Data-center ambitions touch competitors NVDA and INTC.",
+   "at": "2026-10-20T17:45:52+00:00",
+   "wall_ms": 3042,
+   "cost": 0.00902,
+   "reasoning_tokens": null
+  },
+  "11724921": {
+   "score": 4,
+   "reason": "Direct product news at held LSCC: a new Mach-N2 secure control FPGA family with post-quantum cryptography. It is substantive product coverage but routine, with no earnings, guidance or contract impact. Linked suppliers (TSM, UMC, AMKR, ASX, CDNS, SNPS) and competitors (AMD, INTC) are only marginally affected.",
+   "at": "2026-10-20T17:45:53+00:00",
+   "wall_ms": 2705,
+   "cost": 0.009972,
+   "reasoning_tokens": null
+  },
+  "9710394": {
+   "score": 1,
+   "reason": "Covers HERE Technologies and agentic AI for logistics routing. No held name is mentioned, no value-chain link applies, and nothing here bears on the semiconductor or hardware holdings.",
+   "at": "2026-10-20T17:45:53+00:00",
+   "wall_ms": 2350,
+   "cost": 0.007632,
+   "reasoning_tokens": null
+  },
+  "10705894": {
+   "score": 4,
+   "reason": "Substantive coverage of held name QCOM: the CEO discusses 6G strategy and the company's direction. It is strategic commentary, not material news like earnings, guidance or contracts, so it rates 'look today' rather than 'act today'.",
+   "at": "2026-10-20T17:45:54+00:00",
+   "wall_ms": 2821,
+   "cost": 0.00846,
+   "reasoning_tokens": null
+  },
+  "9709354": {
+   "score": 4,
+   "reason": "Direct coverage of held name LRCX. It is a stock-focused piece on implied volatility in the options market, not a material event like earnings or guidance, so it lands at substantive coverage rather than act-today.",
+   "at": "2026-10-20T17:45:54+00:00",
+   "wall_ms": 2957,
+   "cost": 0.008092,
+   "reasoning_tokens": null
+  },
+  "9743142": {
+   "score": 4,
+   "reason": "Substantive analysis piece on held name AMAT, covering its re-rating and the forecast management raised twice. It is not new material news, so not a 5, but it is direct coverage worth reading today.",
+   "at": "2026-10-20T17:45:55+00:00",
+   "wall_ms": 2844,
+   "cost": 0.008464,
+   "reasoning_tokens": null
+  },
+  "9724168": {
+   "score": 4,
+   "reason": "Substantive coverage of held name TSM: a ~3% stock move tied to Taiwan using TSMC's $265B overseas investment as diplomatic leverage, with implications for TSM's margins. Linked held names (AMAT, ASML, AMD, etc.) are touched only indirectly. Not a guidance change or other act-today event.",
+   "at": "2026-10-20T17:45:55+00:00",
+   "wall_ms": 3484,
+   "cost": 0.009032,
+   "reasoning_tokens": null
+  },
+  "11723488": {
+   "score": 4,
+   "reason": "Stock-pick piece directly covering held name APH (Zacks growth ranking). It is substantive coverage of a held name, but it is routine promotional content with no thesis change.",
+   "at": "2026-10-20T17:45:56+00:00",
+   "wall_ms": 3107,
+   "cost": 0.00786,
+   "reasoning_tokens": null
+  },
+  "11708928": {
+   "score": 5,
+   "reason": "Direct coverage of held INTC: a possible 10% chip price hike drove a stock surge, and the piece weighs analyst skepticism about the fundamentals. A pricing change is material to the thesis. AMD, a held competitor, could also be affected.",
+   "at": "2026-10-20T17:45:56+00:00",
+   "wall_ms": 2612,
+   "cost": 0.008652,
+   "reasoning_tokens": null
+  },
+  "11724528": {
+   "score": 4,
+   "reason": "This is direct coverage of ONTO, a held name, but it is a routine Zacks ABR piece summarizing existing broker ratings. It reports no new upgrade, downgrade or thesis change, so it is substantive coverage rather than something to act on.",
+   "at": "2026-10-20T17:45:56+00:00",
+   "wall_ms": 3533,
+   "cost": 0.008668,
+   "reasoning_tokens": null
+  },
+  "10719275": {
+   "score": 4,
+   "reason": "This is a stock-pick piece that directly covers three held names (LITE, COHR, MTSI) on AI data center photonics demand. That is substantive coverage, but there is no material event like earnings, guidance or M&A.",
+   "at": "2026-10-20T17:45:57+00:00",
+   "wall_ms": 3637,
+   "cost": 0.008248,
+   "reasoning_tokens": null
+  },
+  "11723742": {
+   "score": 3,
+   "reason": "GLW, a held name, is mentioned only as a component of the SPMO ETF in a routine ETF flow report. There is no company-specific news.",
+   "at": "2026-10-20T17:45:58+00:00",
+   "wall_ms": 3007,
+   "cost": 0.0079,
+   "reasoning_tokens": null
+  },
+  "11085374": {
+   "score": 4,
+   "reason": "Stock-pick comparison piece directly covering held name UCTT (vs. TTMI). This is substantive coverage, but it is not a material event like earnings or a rating change.",
+   "at": "2026-10-20T17:45:59+00:00",
+   "wall_ms": 3375,
+   "cost": 0.008032,
+   "reasoning_tokens": null
+  },
+  "9709215": {
+   "score": 4,
+   "reason": "Stock-pick piece directly naming held TSM and NVDA as buys on strong AI-driven semiconductor sales. This is substantive coverage of held names but not material company news. ADI, TXN and ACMR are not held.",
+   "at": "2026-10-20T17:45:59+00:00",
+   "wall_ms": 2626,
+   "cost": 0.008368,
+   "reasoning_tokens": null
+  },
+  "9710902": {
+   "score": 4,
+   "reason": "A 'Bull of the Day' stock-pick piece on held name AEIS is substantive coverage. It is not a material event like earnings or a rating change with a new thesis, so it rates 4 rather than 5.",
+   "at": "2026-10-20T17:45:59+00:00",
+   "wall_ms": 2907,
+   "cost": 0.008044,
+   "reasoning_tokens": null
+  },
+  "9709862": {
+   "score": 2,
+   "reason": "Generic Zacks Rank explainer with no specific news. SMCI may be featured, but nothing material or specific to any held name.",
+   "at": "2026-10-20T17:46:00+00:00",
+   "wall_ms": 2369,
+   "cost": 0.007644,
+   "reasoning_tokens": null
+  },
+  "10694708": {
+   "score": 1,
+   "reason": "Casey's General Stores is a convenience store chain. It is not held and not linked to any held name, so the article is unrelated to the portfolio. The listed ATEYY links do not apply to this article.",
+   "at": "2026-10-20T17:46:01+00:00",
+   "wall_ms": 4282,
+   "cost": 0.008216,
+   "reasoning_tokens": null
+  },
+  "11137743": {
+   "score": 3,
+   "reason": "Routine Zacks-style price-move recap on held LRCX (-2.08%). It has no new catalyst, earnings, guidance or thesis change, so it amounts to a passing mention rather than substantive coverage. Linked held names (AEIS, MKSI, ENTG, AMAT, ASML, TSM, INTC) are not materially affected.",
+   "at": "2026-10-20T17:46:01+00:00",
+   "wall_ms": 2610,
+   "cost": 0.009184,
+   "reasoning_tokens": null
+  },
+  "11725036": {
+   "score": 3,
+   "reason": "Routine options-volume note on held name STX. It mentions the name but gives no fundamental news or thesis change, so it is only worth a glance.",
+   "at": "2026-10-20T17:46:01+00:00",
+   "wall_ms": 2707,
+   "cost": 0.007816,
+   "reasoning_tokens": null
+  },
+  "9709469": {
+   "score": 4,
+   "reason": "Stock-pick piece that names AMKR, a held name, as a value buy. That is substantive coverage of a held name, though it carries no material company news.",
+   "at": "2026-10-20T17:46:02+00:00",
+   "wall_ms": 2555,
+   "cost": 0.007804,
+   "reasoning_tokens": null
+  },
+  "10156017": {
+   "score": 3,
+   "reason": "General market wrap on Middle East tensions and oil ahead of inflation data. QCOM and AVGO are named only in a 'stocks in focus' list, with no specific held-name news in the summary.",
+   "at": "2026-10-20T17:46:02+00:00",
+   "wall_ms": 3418,
+   "cost": 0.008236,
+   "reasoning_tokens": null
+  },
+  "9854374": {
+   "score": 5,
+   "reason": "Corning (GLW, held) signed a multi-year fiber supply agreement with Verizon running through 2032, covering 80 million miles of fiber. That is a major contract win for a held name. It also matters for CIEN, which supplies Verizon, and for LITE, which competes with GLW.",
+   "at": "2026-10-20T17:46:02+00:00",
+   "wall_ms": 2789,
+   "cost": 0.008704,
+   "reasoning_tokens": null
+  },
+  "11723603": {
+   "score": 3,
+   "reason": "Generic Zacks Earnings ESP screen piece. The value-chain links point to ASML, but the summary names no specific held company, so it is at most worth a glance for possible mentions.",
+   "at": "2026-10-20T17:46:03+00:00",
+   "wall_ms": 2801,
+   "cost": 0.007796,
+   "reasoning_tokens": null
+  },
+  "9710116": {
+   "score": 1,
+   "reason": "The article is about Strike Energy, an Australian gas company. It only shares ticker letters with holdings: ASX here is the Australian Securities Exchange, not ASE Technology, and STX here is Strike Energy, not Seagate. No held or linked name is involved.",
+   "at": "2026-10-20T17:46:04+00:00",
+   "wall_ms": 3017,
+   "cost": 0.008836,
+   "reasoning_tokens": null
+  },
+  "11713203": {
+   "score": 4,
+   "reason": "Substantive product and strategy coverage of held name SMCI, focused on its DCBBS and direct liquid cooling (DLC) offerings. It is analysis rather than a material event like earnings, guidance or a contract, so it does not warrant a 5.",
+   "at": "2026-10-20T17:46:05+00:00",
+   "wall_ms": 3373,
+   "cost": 0.008492,
+   "reasoning_tokens": null
+  },
+  "11725937": {
+   "score": 4,
+   "reason": "Substantive valuation coverage of held name SIMO covering its conference schedule, recent share performance and NAND controller business. It is not a material event like earnings or guidance. The supplier links (CDNS, SNPS, TSM) are not materially affected.",
+   "at": "2026-10-20T17:46:05+00:00",
+   "wall_ms": 2759,
+   "cost": 0.0084,
+   "reasoning_tokens": null
+  },
+  "9708683": {
+   "score": 4,
+   "reason": "Substantive valuation coverage of held name AMAT, discussing its recent pullback after a large multi-year run. It is a stock-analysis piece with no new material event such as earnings, guidance, or a rating change.",
+   "at": "2026-10-20T17:46:05+00:00",
+   "wall_ms": 3341,
+   "cost": 0.008608,
+   "reasoning_tokens": null
+  },
+  "11725290": {
+   "score": 2,
+   "reason": "General trade/macro coverage of US import declines after tariffs. No held or linked company is named, and there is no specific semiconductor or electronics angle.",
+   "at": "2026-10-20T17:46:05+00:00",
+   "wall_ms": 4034,
+   "cost": 0.007004,
+   "reasoning_tokens": null
+  },
+  "11084449": {
+   "score": 5,
+   "reason": "Direct news on held LIN: a $1B investment backed by a new long-term supply contract for ultra-high-purity gases to a major chipmaker in Arizona. That counts as a major contract win. The unnamed customer is likely TSM (or INTC), which also makes it relevant to those holdings.",
+   "at": "2026-10-20T17:46:07+00:00",
+   "wall_ms": 3452,
+   "cost": 0.008624,
+   "reasoning_tokens": null
+  },
+  "11723857": {
+   "score": 4,
+   "reason": "Stock-pick coverage of held name LITE covering AI optical demand, OCS growth and margin expansion. Substantive, but no new material event like earnings, a guidance change or a rating change.",
+   "at": "2026-10-20T17:46:07+00:00",
+   "wall_ms": 3115,
+   "cost": 0.008052,
+   "reasoning_tokens": null
+  },
+  "11712810": {
+   "score": 4,
+   "reason": "Direct stock-focused coverage of held name ON (Zacks trending-stock piece). It is substantive but routine, with no new material event.",
+   "at": "2026-10-20T17:46:07+00:00",
+   "wall_ms": 2278,
+   "cost": 0.007744,
+   "reasoning_tokens": null
+  },
+  "10573699": {
+   "score": 1,
+   "reason": "Pharvaris is a biotech company with no relation to the held semiconductor and tech names or their value chain. Irrelevant to the portfolio.",
+   "at": "2026-10-20T17:46:08+00:00",
+   "wall_ms": 2751,
+   "cost": 0.008232,
+   "reasoning_tokens": null
+  },
+  "9743118": {
+   "score": 4,
+   "reason": "Substantive analysis piece on AMAT, a held name, covering AI-driven WFE demand in advanced packaging, DRAM and HBM. It is not a material event like earnings or a rating change. It also touches linked held names: LRCX and ACLS as competitors, MU as a customer, AEIS as a supplier.",
+   "at": "2026-10-20T17:46:08+00:00",
+   "wall_ms": 2961,
+   "cost": 0.009016,
+   "reasoning_tokens": null
+  },
+  "10754472": {
+   "score": 5,
+   "reason": "QCOM, a held name, reportedly won a major AI data center deal with Amazon. A major contract win that pushes it beyond handsets is material to the thesis. Linked holders (AMKR, ATEYY) are also affected.",
+   "at": "2026-10-20T17:46:10+00:00",
+   "wall_ms": 2822,
+   "cost": 0.008336,
+   "reasoning_tokens": null
+  },
+  "11722031": {
+   "score": 2,
+   "reason": "Military/geopolitical coverage of U.S. aircraft losses in the Iran war. No held or linked company is named, and the article has no direct bearing on semiconductor or tech holdings beyond general macro and geopolitical context.",
+   "at": "2026-10-20T17:46:10+00:00",
+   "wall_ms": 2682,
+   "cost": 0.008516,
+   "reasoning_tokens": null
+  },
+  "9709977": {
+   "score": 2,
+   "reason": "The article covers Sanmina (SANM), which is not held and has no listed value-chain links. It is a competitor in the EMS space to FLEX/CLS, but no filing link is shown, so it gets a routine score. The ZT Systems integration ties indirectly to AMD's AI server ecosystem, but the article mentions no held name directly.",
+   "at": "2026-10-20T17:46:11+00:00",
+   "wall_ms": 5527,
+   "cost": 0.009044,
+   "reasoning_tokens": null
+  },
+  "11712671": {
+   "score": 4,
+   "reason": "Stock-pick piece directly recommending three held names: NVDA, ANET and VRT. It is substantive coverage of the AI capex cycle, but it has no material event such as earnings or a guidance change.",
+   "at": "2026-10-20T17:46:11+00:00",
+   "wall_ms": 3714,
+   "cost": 0.008212,
+   "reasoning_tokens": null
+  },
+  "10552506": {
+   "score": 4,
+   "reason": "Stock-pick piece focused directly on held name INTC, citing strong Q2 revenue growth of 25% to $16.1B. This is substantive coverage of a held name, not a new event, so it rates a look today rather than action.",
+   "at": "2026-10-20T17:46:11+00:00",
+   "wall_ms": 3227,
+   "cost": 0.008292,
+   "reasoning_tokens": null
+  },
+  "11712278": {
+   "score": 4,
+   "reason": "Substantive coverage of held name NVDA: the CEO's comments on a $4T AI infrastructure opportunity and demand outpacing supply. These are conference remarks, not earnings or a guidance change. The demand read-through also touches linked suppliers AMKR, ASX, ARM, CDNS and COHU.",
+   "at": "2026-10-20T17:46:12+00:00",
+   "wall_ms": 3952,
+   "cost": 0.009252,
+   "reasoning_tokens": null
+  },
+  "11725012": {
+   "score": 3,
+   "reason": "Routine PR from JCI's Sensormatic retail unit about holiday foot-traffic predictions. It mentions held name JCI but has no financial materiality.",
+   "at": "2026-10-20T17:46:12+00:00",
+   "wall_ms": 2748,
+   "cost": 0.008408,
+   "reasoning_tokens": null
+  },
+  "9709052": {
+   "score": 4,
+   "reason": "Substantive coverage of held name COHR, focused on its AI-driven datacenter growth. It is an analysis piece rather than new earnings or guidance, so not act-today. It also touches linked holdings ANET, LITE, FN and MRVL.",
+   "at": "2026-10-20T17:46:13+00:00",
+   "wall_ms": 2915,
+   "cost": 0.00848,
+   "reasoning_tokens": null
+  },
+  "9742840": {
+   "score": 4,
+   "reason": "Substantive coverage of held name CRDO, discussing its AEC growth drivers: hyperscaler penetration, the 1.6T transition and Neocloud customer expansion. It is an analysis piece rather than material news, so it rates a look today, not action.",
+   "at": "2026-10-20T17:46:14+00:00",
+   "wall_ms": 3089,
+   "cost": 0.008548,
+   "reasoning_tokens": null
+  },
+  "10706239": {
+   "score": 3,
+   "reason": "The article covers anticipated tech IPOs, with Anthropic as the focus. SpaceX (SPCX) is a held name and may well come up among the expected IPOs, but the summary doesn't name it. At most it would be a passing mention in sector/IPO-market coverage, so it's worth a glance.",
+   "at": "2026-10-20T17:46:14+00:00",
+   "wall_ms": 2850,
+   "cost": 0.008184,
+   "reasoning_tokens": null
+  },
+  "9709306": {
+   "score": 4,
+   "reason": "Substantive coverage of held names MU and NVDA. Nvidia's $160B rise in supply commitments, mostly for memory, bears on Micron's demand outlook. This is analysis rather than a direct company event, so it ranks below act-today.",
+   "at": "2026-10-20T17:46:14+00:00",
+   "wall_ms": 3193,
+   "cost": 0.008432,
+   "reasoning_tokens": null
+  },
+  "11714473": {
+   "score": 4,
+   "reason": "Stock-pick comparison piece directly covering two held names, ALAB and MRVL. It discusses customer concentration and valuation, but there is no material event or thesis change.",
+   "at": "2026-10-20T17:46:15+00:00",
+   "wall_ms": 2507,
+   "cost": 0.008068,
+   "reasoning_tokens": null
+  },
+  "10760688": {
+   "score": 3,
+   "reason": "ASX is held, but it's only mentioned in passing as a component of VYMI in a routine ETF-flow piece. The article has no company-specific news.",
+   "at": "2026-10-20T17:46:16+00:00",
+   "wall_ms": 3223,
+   "cost": 0.00804,
+   "reasoning_tokens": null
+  },
+  "11710313": {
+   "score": 3,
+   "reason": "NVDA, a held name, is mentioned among several companies restricting internal use of third-party AI models over IP concerns. This is operational and corporate-policy news, not material to NVDA's revenue, guidance or competitive position. It also has no meaningful read-through to linked holdings.",
+   "at": "2026-10-20T17:46:18+00:00",
+   "wall_ms": 3556,
+   "cost": 0.008724,
+   "reasoning_tokens": null
+  },
+  "9710600": {
+   "score": 4,
+   "reason": "Direct stock-focused coverage of held name PH, covering its relative performance and analyst optimism. There is no new material event such as earnings, guidance or a rating change.",
+   "at": "2026-10-20T17:46:18+00:00",
+   "wall_ms": 4070,
+   "cost": 0.007732,
+   "reasoning_tokens": null
+  },
+  "9856545": {
+   "score": 2,
+   "reason": "This is a generic Motley Fool podcast teaser. The summary names no held stock and no linked company, and it does not say whose earnings report is being discussed, so it reads as routine market commentary.",
+   "at": "2026-10-20T17:46:18+00:00",
+   "wall_ms": 3475,
+   "cost": 0.008096,
+   "reasoning_tokens": null
+  },
+  "9709560": {
+   "score": 4,
+   "reason": "Comparative stock-pick piece directly covering two held names (ARM and SNDK). It is substantive coverage, but it is analytical with no new material event.",
+   "at": "2026-10-20T17:46:18+00:00",
+   "wall_ms": 3632,
+   "cost": 0.007876,
+   "reasoning_tokens": null
+  },
+  "9744388": {
+   "score": 5,
+   "reason": "M&A by held name VRT: Vertiv is acquiring microgrid specialist UtilityInnovation Group to address AI data center power constraints. This is material for VRT holders and relevant to competitors JCI and ETN.",
+   "at": "2026-10-20T17:46:19+00:00",
+   "wall_ms": 3777,
+   "cost": 0.00828,
+   "reasoning_tokens": null
+  },
+  "10789669": {
+   "score": 4,
+   "reason": "Stock-pick piece that names ASML (held) as a winner in a higher-rate environment, which counts as substantive coverage of a held name. Oracle is named as a laggard; it is linked only as a customer of ARM, so that does not raise the score. The 'Rocket' laggard is likely Rocket Companies, not RKLB.",
+   "at": "2026-10-20T17:46:21+00:00",
+   "wall_ms": 7769,
+   "cost": 0.009088,
+   "reasoning_tokens": null
+  },
+  "10822024": {
+   "score": 5,
+   "reason": "Major contract win for held QCOM: custom data center chips for Amazon, potentially up to $60B over ten years per a securities filing. This is a thesis-changing data center entry. It is also relevant to linked holdings: ARM (QCOM is its customer), suppliers AMKR, GFS and CDNS, and competitors NVDA and INTC.",
+   "at": "2026-10-20T17:46:21+00:00",
+   "wall_ms": 3478,
+   "cost": 0.009144,
+   "reasoning_tokens": null
+  },
+  "9708774": {
+   "score": 4,
+   "reason": "This is a stock-pick piece that names Broadcom (AVGO, held) directly as undervalued on a cash-flow screen. That counts as substantive coverage of a held name, but there's no new fundamental news or thesis change.",
+   "at": "2026-10-20T17:46:21+00:00",
+   "wall_ms": 3009,
+   "cost": 0.008668,
+   "reasoning_tokens": null
+  },
+  "9710461": {
+   "score": 4,
+   "reason": "Product news directly from held name CDNS: its PCIe 6.0 IP, built on held TSM's N3 process, passed first-pass compliance at the industry's first PCIe 6.0 workshop. This is substantive product news but not earnings-level material. It also touches PCIe-related holders like ALAB and RMBS.",
+   "at": "2026-10-20T17:46:22+00:00",
+   "wall_ms": 3800,
+   "cost": 0.009604,
+   "reasoning_tokens": null
+  },
+  "9855366": {
+   "score": 5,
+   "reason": "Direct earnings-driven coverage of held SMCI: a gross-margin beat sent shares surging, but management signaled the margin is temporary. That is a thesis-relevant guidance issue, and it also matters for linked holdings APH, AVGO, CLS, CSCO, FLEX, INTC and MU.",
+   "at": "2026-10-20T17:46:23+00:00",
+   "wall_ms": 3240,
+   "cost": 0.008956,
+   "reasoning_tokens": null
+  },
+  "10059019": {
+   "score": 3,
+   "reason": "NVDA is mentioned only in passing as a benchmark. The article is about an AI-linked commodity rally, possibly copper (FCX), which touches held names' markets indirectly.",
+   "at": "2026-10-20T17:46:23+00:00",
+   "wall_ms": 4554,
+   "cost": 0.009096,
+   "reasoning_tokens": null
+  },
+  "11085187": {
+   "score": 5,
+   "reason": "Direct material news on held RMBS: Q2 earnings, a 19.8% stock drop, and a Tier-1 hyperscaler HBM IP design win. The selloff after record results raises a thesis question. Linked names (ALAB, CDNS, SNPS, MU, AMD) have secondary relevance.",
+   "at": "2026-10-20T17:46:23+00:00",
+   "wall_ms": 2811,
+   "cost": 0.009524,
+   "reasoning_tokens": null
+  },
+  "9711108": {
+   "score": 4,
+   "reason": "This is direct coverage of held name ALAB, a Zacks-style piece comparing its year-to-date performance with sector peers. It counts as stock-pick coverage, but it reports no material event. Avnet is neither held nor linked.",
+   "at": "2026-10-20T17:46:24+00:00",
+   "wall_ms": 3337,
+   "cost": 0.008116,
+   "reasoning_tokens": null
+  },
+  "11127942": {
+   "score": 1,
+   "reason": "ServiceTitan is a field-service software company. It is not held and has no value-chain link to any held name, so its earnings call is irrelevant to this portfolio.",
+   "at": "2026-10-20T17:46:25+00:00",
+   "wall_ms": 2692,
+   "cost": 0.007956,
+   "reasoning_tokens": null
+  },
+  "10804598": {
+   "score": 4,
+   "reason": "Substantive analysis of held name AVGO: covers the stock's decline after a fiscal Q4 guide that missed estimates, and a revenue schedule extending to FY2028. It reads as commentary on news already out, not new material news.",
+   "at": "2026-10-20T17:46:25+00:00",
+   "wall_ms": 2799,
+   "cost": 0.008732,
+   "reasoning_tokens": null
+  },
+  "9709028": {
+   "score": 1,
+   "reason": "The article is about Lindian Resources (Australian ticker ASX:LIN), a small rare earth miner. It is unrelated to Linde (LIN) or ASE Technology (ASX). The tickers only coincidentally overlap with held names, so it has no relevance to the holdings.",
+   "at": "2026-10-20T17:46:26+00:00",
+   "wall_ms": 4661,
+   "cost": 0.00898,
+   "reasoning_tokens": null
+  },
+  "11130022": {
+   "score": 4,
+   "reason": "VRT is a held name and fell 9.6% in one session, a significant move. This is direct coverage, but the piece appears to be a routine recap with no stated catalyst such as earnings, guidance or a downgrade.",
+   "at": "2026-10-20T17:46:26+00:00",
+   "wall_ms": 4242,
+   "cost": 0.00816,
+   "reasoning_tokens": null
+  },
+  "11713155": {
+   "score": 3,
+   "reason": "HPE is not held or linked. Its AI server and networking strength is sector news that touches the markets of held names like ANET, CSCO, SMCI and suppliers, but no held name is directly covered.",
+   "at": "2026-10-20T17:46:27+00:00",
+   "wall_ms": 3729,
+   "cost": 0.008196,
+   "reasoning_tokens": null
+  },
+  "9708635": {
+   "score": 4,
+   "reason": "APH (held) is named as the worst-performing S&P 500 component in early trading. A sharp price move in a held name is worth a look today, though the article gives no cause such as earnings or a downgrade. HOOD is not held.",
+   "at": "2026-10-20T17:46:27+00:00",
+   "wall_ms": 2921,
+   "cost": 0.008308,
+   "reasoning_tokens": null
+  },
+  "11086323": {
+   "score": 5,
+   "reason": "Direct earnings call coverage of held name CE (Q2 2026), with commentary on supply disruptions, raw material inflation, divestitures and deleveraging. That is material to the CE thesis.",
+   "at": "2026-10-20T17:46:28+00:00",
+   "wall_ms": 2696,
+   "cost": 0.007876,
+   "reasoning_tokens": null
+  },
+  "11713505": {
+   "score": 4,
+   "reason": "This is direct coverage of FCX, a held name, and functions as a stock-pick/outlook piece. It weighs the 20% gain on higher copper prices against rising costs and weaker volumes. It does not report an earnings release, guidance change, or rating change, so it falls short of act-today material.",
+   "at": "2026-10-20T17:46:29+00:00",
+   "wall_ms": 3476,
+   "cost": 0.00838,
+   "reasoning_tokens": null
+  },
+  "9708592": {
+   "score": 5,
+   "reason": "CRDO is held and plunged 20% after its earnings release, a material post-earnings move with valuation-thesis implications. It also touches linked names AAOI (competitor) and CDNS (supplier).",
+   "at": "2026-10-20T17:46:29+00:00",
+   "wall_ms": 3076,
+   "cost": 0.008384,
+   "reasoning_tokens": null
+  },
+  "11085398": {
+   "score": 3,
+   "reason": "Routine scheduling notice for ADEA's Q2 earnings date. It names a held company but has no new financial content. Worth noting the August 3 date.",
+   "at": "2026-10-20T17:46:29+00:00",
+   "wall_ms": 2334,
+   "cost": 0.007992,
+   "reasoning_tokens": null
+  },
+  "9991769": {
+   "score": 2,
+   "reason": "Promotional newsletter press release about Elon Musk. NVIDIA comes up only as a past call, and SpaceX (SPCX) only in passing. The piece has no substantive news on any held name.",
+   "at": "2026-10-20T17:46:30+00:00",
+   "wall_ms": 2608,
+   "cost": 0.008776,
+   "reasoning_tokens": null
+  },
+  "11716740": {
+   "score": 4,
+   "reason": "Substantive valuation analysis of held name TER, questioning whether its 51.7x trailing P/E is justified by test-business growth. It's a stock-pick style piece, not a material event like earnings or a rating change, so it rates 4 rather than 5.",
+   "at": "2026-10-20T17:46:31+00:00",
+   "wall_ms": 2602,
+   "cost": 0.008516,
+   "reasoning_tokens": null
+  },
+  "11723881": {
+   "score": 4,
+   "reason": "Substantive coverage of held name INTC: the CEO says Intel can fill only about half of CPU demand. That signals a supply constraint against strong demand, with implications for revenue and for linked names SMCI (an Intel customer) and TSM (an Intel supplier). This is commentary rather than a formal guidance change.",
+   "at": "2026-10-20T17:46:32+00:00",
+   "wall_ms": 3120,
+   "cost": 0.00922,
+   "reasoning_tokens": null
+  },
+  "11708995": {
+   "score": 4,
+   "reason": "Substantive product and technology news directly involving two held names: TSM and ASML are collaborating on 12-inch High-NA EUV photomasks. This is not an earnings or guidance event, so it doesn't reach act-today level. Linked names AMAT, AMD, AMKR, ASX and MU are indirectly relevant.",
+   "at": "2026-10-20T17:46:32+00:00",
+   "wall_ms": 7145,
+   "cost": 0.009024,
+   "reasoning_tokens": null
+  },
+  "11724667": {
+   "score": 5,
+   "reason": "Direct analyst upgrade of held name CIEN to Outperform with a sharply raised price target ($375 to $550), moving the stock. This is a thesis-changing rating action. Linked held names FN and LITE are also relevant.",
+   "at": "2026-10-20T17:46:33+00:00",
+   "wall_ms": 3348,
+   "cost": 0.00834,
+   "reasoning_tokens": null
+  },
+  "11724135": {
+   "score": 4,
+   "reason": "Stock-comparison piece directly covering two held names, ETN and VRT. It cites VRT's raised 2026 outlook and stronger estimates. This is substantive coverage, but there is no new material event.",
+   "at": "2026-10-20T17:46:33+00:00",
+   "wall_ms": 3333,
+   "cost": 0.008116,
+   "reasoning_tokens": null
+  },
+  "11713989": {
+   "score": 4,
+   "reason": "This is substantive coverage of held name PH, but it is a retrospective earnings recap comparing it with peers, not new earnings or guidance. Worth a look today, but nothing to act on.",
+   "at": "2026-10-20T17:46:33+00:00",
+   "wall_ms": 2762,
+   "cost": 0.00806,
+   "reasoning_tokens": null
+  },
+  "11712302": {
+   "score": 4,
+   "reason": "KeyBanc initiated coverage of held name Linde (LIN) at Overweight. This is direct analyst coverage, but an initiation is not a rating change that shifts the thesis, so it rates a look today rather than action.",
+   "at": "2026-10-20T17:46:34+00:00",
+   "wall_ms": 3771,
+   "cost": 0.008168,
+   "reasoning_tokens": null
+  },
+  "9707250": {
+   "score": 2,
+   "reason": "The SEC advisory committee meeting on AI in public markets is a regulatory process item. It names no held or linked company and has no direct bearing on the semiconductor or hardware holdings.",
+   "at": "2026-10-20T17:46:35+00:00",
+   "wall_ms": 2535,
+   "cost": 0.007276,
+   "reasoning_tokens": null
+  },
+  "11723464": {
+   "score": 4,
+   "reason": "Comparative stock-pick piece covering two held names, ARM and AMD, discussing their recent earnings and data center CPU strategies. It is substantive coverage, but it is analysis of results already reported, not new material news.",
+   "at": "2026-10-20T17:46:35+00:00",
+   "wall_ms": 2346,
+   "cost": 0.008412,
+   "reasoning_tokens": null
+  },
+  "9709723": {
+   "score": 4,
+   "reason": "This is direct coverage of a held name, MKSI: a stock-pick piece built on upward earnings estimate revisions. It is substantive, but there is no guidance change or thesis shift, which keeps it out of the act-today tier.",
+   "at": "2026-10-20T17:46:36+00:00",
+   "wall_ms": 3285,
+   "cost": 0.008324,
+   "reasoning_tokens": null
+  },
+  "11712163": {
+   "score": 4,
+   "reason": "Substantive stock-pick coverage of held AVGO, covering its earnings beat and Anthropic as a major AI customer expected to surpass Google. It is analysis of already-reported results rather than new material news. Read-through to linked names (MRVL, NVDA, ANET, AMKR).",
+   "at": "2026-10-20T17:46:36+00:00",
+   "wall_ms": 3431,
+   "cost": 0.008856,
+   "reasoning_tokens": null
+  },
+  "9708937": {
+   "score": 5,
+   "reason": "Earnings for held name CRDO: record fiscal Q1 2027 revenue of $479M, up 115% year over year on AI connectivity demand. Earnings results are directly material to holders.",
+   "at": "2026-10-20T17:46:37+00:00",
+   "wall_ms": 3280,
+   "cost": 0.00836,
+   "reasoning_tokens": null
+  },
+  "11085743": {
+   "score": 4,
+   "reason": "Stock-pick piece naming COHU (held) for a Q2 EPS beat of more than 50% alongside a Strong Buy rating. This is substantive coverage, but it is a recap list rather than a fresh earnings release or thesis change. Linked holders such as TER, FORM and ATEYY may also find it relevant.",
+   "at": "2026-10-20T17:46:37+00:00",
+   "wall_ms": 3557,
+   "cost": 0.00908,
+   "reasoning_tokens": null
+  },
+  "11085350": {
+   "score": 5,
+   "reason": "Q2 earnings beat on both EPS and revenue for ADEA, a held name. Earnings results are directly material to holders.",
+   "at": "2026-10-20T17:46:38+00:00",
+   "wall_ms": 2941,
+   "cost": 0.007288,
+   "reasoning_tokens": null
+  },
+  "11072870": {
+   "score": 5,
+   "reason": "Earnings call transcript for Broadcom (AVGO), a held name. Earnings and guidance are directly material. It also affects linked holdings: its supplier AMKR, its customers ANET and SMCI, and its competitors MRVL and NVDA.",
+   "at": "2026-10-20T17:46:38+00:00",
+   "wall_ms": 2864,
+   "cost": 0.008584,
+   "reasoning_tokens": null
+  },
+  "11086251": {
+   "score": 5,
+   "reason": "Q2 2026 earnings coverage for held name Celanese (CE), comparing key metrics against Wall Street estimates. Earnings results for a held name are directly material.",
+   "at": "2026-10-20T17:46:38+00:00",
+   "wall_ms": 2386,
+   "cost": 0.007772,
+   "reasoning_tokens": null
+  },
+  "9709445": {
+   "score": 5,
+   "reason": "Earnings call transcript for held name ENTG is direct material earnings news. Results may also signal demand trends at linked held customers like TSM, MU, INTC and LRCX.",
+   "at": "2026-10-20T17:46:38+00:00",
+   "wall_ms": 2560,
+   "cost": 0.008032,
+   "reasoning_tokens": null
+  },
+  "11714219": {
+   "score": 5,
+   "reason": "A new analyst initiation at Overweight on CE, a held name, is a direct rating action. It is material to holders even though it is an initiation rather than an upgrade.",
+   "at": "2026-10-20T17:46:39+00:00",
+   "wall_ms": 2389,
+   "cost": 0.007728,
+   "reasoning_tokens": null
+  },
+  "11709019": {
+   "score": 4,
+   "reason": "Substantive coverage of held name LRCX's capital returns ($5.12B, 27% dividend hike). This is an analysis piece, not new material news like earnings or a guidance change.",
+   "at": "2026-10-20T17:46:40+00:00",
+   "wall_ms": 2461,
+   "cost": 0.008096,
+   "reasoning_tokens": null
+  },
+  "11712115": {
+   "score": 4,
+   "reason": "This is a stock-pick comparison piece directly covering two held names, NVDA and AVGO, built around their latest earnings and NVDA's ~70% growth guidance. It is substantive coverage rather than a new material event, so it rates a look today, not action.",
+   "at": "2026-10-20T17:46:41+00:00",
+   "wall_ms": 2681,
+   "cost": 0.008604,
+   "reasoning_tokens": null
+  },
+  "9709675": {
+   "score": 4,
+   "reason": "Direct coverage of held KLAC: a post-earnings review of estimate revisions and the outlook. It is substantive stock-pick coverage, but the earnings themselves were 30 days ago, so there is no new material event.",
+   "at": "2026-10-20T17:46:41+00:00",
+   "wall_ms": 2724,
+   "cost": 0.008152,
+   "reasoning_tokens": null
+  },
+  "9708913": {
+   "score": 3,
+   "reason": "A generic ResearchAndMarkets report promo that profiles Corning (GLW, held) among other fiber cable makers. It offers sector context for fiber demand but no company-specific material news.",
+   "at": "2026-10-20T17:46:41+00:00",
+   "wall_ms": 3197,
+   "cost": 0.0087,
+   "reasoning_tokens": null
+  },
+  "9709790": {
+   "score": 4,
+   "reason": "Stock-pick piece directly covering held name CIEN after its record earnings report. This is substantive coverage, but it recaps results rather than reporting new material news. NTAP is not held and does not raise the score.",
+   "at": "2026-10-20T17:46:42+00:00",
+   "wall_ms": 2674,
+   "cost": 0.008196,
+   "reasoning_tokens": null
+  },
+  "9710207": {
+   "score": 4,
+   "reason": "Direct coverage of held name FN: analyst price targets imply 64% upside and earnings estimates are being revised up. It is a stock-pick style piece, not a discrete material event such as a rating change or guidance.",
+   "at": "2026-10-20T17:46:43+00:00",
+   "wall_ms": 4812,
+   "cost": 0.008364,
+   "reasoning_tokens": null
+  },
+  "9709651": {
+   "score": 4,
+   "reason": "NXPI (held) IR commentary at a KeyBanc conference says demand is improving, with book-to-bill above one across end markets. This is substantive direct coverage and signals a positive demand trend, but it is not a formal guidance change or earnings release. It also touches linked holdings AMAT, CDNS, ASX and SNPS.",
+   "at": "2026-10-20T17:46:44+00:00",
+   "wall_ms": 3147,
+   "cost": 0.009324,
+   "reasoning_tokens": null
+  },
+  "9710691": {
+   "score": 4,
+   "reason": "Direct coverage of held name ETN. The upgrade is a quantitative Zacks Rank change based on earnings estimate revisions, not an analyst thesis change, so it rates as substantive coverage rather than act-today material.",
+   "at": "2026-10-20T17:46:44+00:00",
+   "wall_ms": 3312,
+   "cost": 0.008172,
+   "reasoning_tokens": null
+  },
+  "9710945": {
+   "score": 4,
+   "reason": "Direct coverage of held name TEL, but it is a routine post-earnings recap 30 days after the report, looking at estimate trends. There is no new material event, so it rates look-today rather than act-today.",
+   "at": "2026-10-20T17:46:45+00:00",
+   "wall_ms": 2610,
+   "cost": 0.008092,
+   "reasoning_tokens": null
+  },
+  "10927778": {
+   "score": 3,
+   "reason": "Apple isn't held and no held name is mentioned. The iPhone 18 Pro launch still touches the handset market that held suppliers depend on (e.g., CRUS, SWKS, QRVO, QCOM, TSM), so it is worth a glance but not urgent.",
+   "at": "2026-10-20T17:46:46+00:00",
+   "wall_ms": 4814,
+   "cost": 0.011808,
+   "reasoning_tokens": null
+  },
+  "11086318": {
+   "score": 5,
+   "reason": "Earnings call coverage for held name CE, with an outlook for Acetyl Chain supply conditions to moderate in 2H 2026 plus strategy and free-cash-flow commentary. This is material, guidance-relevant news.",
+   "at": "2026-10-20T17:46:46+00:00",
+   "wall_ms": 3032,
+   "cost": 0.008176,
+   "reasoning_tokens": null
+  },
+  "11725889": {
+   "score": 4,
+   "reason": "Direct coverage of held name VICR. It is a stock-pick style piece on rising earnings estimate revisions, not an earnings release or a guidance change, so it is substantive but not an act-today item.",
+   "at": "2026-10-20T17:46:47+00:00",
+   "wall_ms": 8111,
+   "cost": 0.007592,
+   "reasoning_tokens": null
+  },
+  "9709373": {
+   "score": 4,
+   "reason": "Substantive coverage of FORM, a held name: consensus price target implies 28.9% upside and earnings estimates are being revised upward. It is routine Zacks-style analyst commentary, not a rating change or thesis shift, so it falls short of act-today.",
+   "at": "2026-10-20T17:46:48+00:00",
+   "wall_ms": 2585,
+   "cost": 0.008572,
+   "reasoning_tokens": null
+  },
+  "9742514": {
+   "score": 4,
+   "reason": "Stock-pick coverage of held LRCX covering AI demand, record revenue, margins and earnings outlook. Substantive, but it is analysis with no new material event.",
+   "at": "2026-10-20T17:46:48+00:00",
+   "wall_ms": 3715,
+   "cost": 0.007976,
+   "reasoning_tokens": null
+  },
+  "11084238": {
+   "score": 3,
+   "reason": "II-VI is the former name of COHR (Coherent), a held name. This is a backward-looking Simply Wall St-style piece on past shareholder returns versus earnings growth. It contains no new catalyst, so it is worth only a glance.",
+   "at": "2026-10-20T17:46:48+00:00",
+   "wall_ms": 4038,
+   "cost": 0.008608,
+   "reasoning_tokens": null
+  },
+  "9708587": {
+   "score": 5,
+   "reason": "Direct material news for held AMD: a commitment to invest up to $5B in Anthropic plus a deal to deploy up to 2GW of Instinct MI450 GPUs, which is a major contract win. Anthropic's pending IPO could reprice the stake. Linked suppliers (TSM, AMKR, MPWR, RMBS, SNPS, ADEA, ATEYY) also benefit from higher MI450 volume.",
+   "at": "2026-10-20T17:46:49+00:00",
+   "wall_ms": 2917,
+   "cost": 0.00988,
+   "reasoning_tokens": null
+  },
+  "11085139": {
+   "score": 4,
+   "reason": "Logistics notice for RMBS's Q2 2026 earnings call, a held name. The results themselves would score 5, but this item only gives the call time, so worth looking at today without acting on it. Linked holdings (ALAB, CDNS, SNPS, AMD, MU, MRVL, TSM, ASX) may react to the results.",
+   "at": "2026-10-20T17:46:49+00:00",
+   "wall_ms": 3667,
+   "cost": 0.009112,
+   "reasoning_tokens": null
+  },
+  "11725841": {
+   "score": 4,
+   "reason": "Direct coverage of held name VICR: a stock-pick piece on the 60.6% mean analyst price-target upside and rising earnings estimates. It is not a specific upgrade or thesis change, so it stops short of a 5.",
+   "at": "2026-10-20T17:46:50+00:00",
+   "wall_ms": 2642,
+   "cost": 0.007988,
+   "reasoning_tokens": null
+  },
+  "9708841": {
+   "score": 5,
+   "reason": "NVDA's $2B equity investment in COHR plus a multiyear strategic deal with purchase commitments and capacity access is material, direct news for two held names. It is also relevant to ANET, which COHR supplies.",
+   "at": "2026-10-20T17:46:51+00:00",
+   "wall_ms": 3067,
+   "cost": 0.008712,
+   "reasoning_tokens": null
+  },
+  "11723622": {
+   "score": 4,
+   "reason": "Substantive stock-pick coverage of held name AVGO, citing its AI revenue roadmap from the earnings call. This is an opinion piece rather than new material news, so it scores 4, not 5.",
+   "at": "2026-10-20T17:46:51+00:00",
+   "wall_ms": 2712,
+   "cost": 0.008312,
+   "reasoning_tokens": null
+  },
+  "11084214": {
+   "score": 5,
+   "reason": "Earnings report for held name UCTT, with a large beat on both EPS (+34.6%) and revenue (+10.2%). This is material for UCTT holders. It is also a read-through for linked held names AEIS (a supplier) and KLIC (a partner).",
+   "at": "2026-10-20T17:46:51+00:00",
+   "wall_ms": 3157,
+   "cost": 0.008708,
+   "reasoning_tokens": null
+  },
+  "9710135": {
+   "score": 5,
+   "reason": "Earnings report for held name WOLF: Q4 FY2026 revenue of $150M at the midpoint of guidance, with AI data-center growth offsetting softer automotive demand. This is material to WOLF and also relevant to linked holdings ACLS, COHR, ON, STM, SWKS and COHU.",
+   "at": "2026-10-20T17:46:52+00:00",
+   "wall_ms": 3029,
+   "cost": 0.00912,
+   "reasoning_tokens": null
+  },
+  "10732536": {
+   "score": 4,
+   "reason": "Substantive stock-forecast coverage of held name NVDA after its earnings, including its growth and outlook. This is analysis rather than new material news, so it rates 'look today' rather than 'act today'.",
+   "at": "2026-10-20T17:46:53+00:00",
+   "wall_ms": 3245,
+   "cost": 0.00816,
+   "reasoning_tokens": null
+  },
+  "9709996": {
+   "score": 5,
+   "reason": "Earnings call transcript for held name LSCC. Earnings are material and may carry guidance changes. Read-through to linked held names: suppliers TSM, UMC, AMKR, ASX, CDNS, SNPS and competitors AMD, INTC.",
+   "at": "2026-10-20T17:46:54+00:00",
+   "wall_ms": 3373,
+   "cost": 0.0086,
+   "reasoning_tokens": null
+  },
+  "9743923": {
+   "score": 4,
+   "reason": "This is a stock-pick piece directly on held name CLS, covering rising earnings estimates driven by AI and hyperscaler demand. That is substantive coverage, but there is no actual earnings release, guidance change or rating change, so it stops short of a 5. Linked holders (ANET as a customer; FLEX, SMCI, FN and JBL as competitors) get indirect read-through.",
+   "at": "2026-10-20T17:46:54+00:00",
+   "wall_ms": 4659,
+   "cost": 0.009324,
+   "reasoning_tokens": null
+  },
+  "11085762": {
+   "score": 4,
+   "reason": "CAMT, a held name, is scheduled to report earnings pre-market. This is a calendar listing rather than the results themselves, but the event is imminent and material, and linked holders (TSM, INTC, KLAC, AMAT, ONTO) may also be affected.",
+   "at": "2026-10-20T17:46:54+00:00",
+   "wall_ms": 3119,
+   "cost": 0.008604,
+   "reasoning_tokens": null
+  },
+  "10387999": {
+   "score": 5,
+   "reason": "Northland upgraded INTC, a held name, from Market Perform to Outperform. An analyst upgrade with a rating change on a held stock falls in the act-today tier. Linked holders (ACLS, ENTG, FORM, CDNS, CAMT, TSM) are secondary.",
+   "at": "2026-10-20T17:46:54+00:00",
+   "wall_ms": 2638,
+   "cost": 0.008936,
+   "reasoning_tokens": null
+  },
+  "9709603": {
+   "score": 4,
+   "reason": "Stock-pick piece focused directly on held name ONTO, citing a 29% average analyst price-target upside and positive estimate revisions. It is substantive coverage, but there is no new rating change or thesis shift, so it does not rise to act-today.",
+   "at": "2026-10-20T17:46:55+00:00",
+   "wall_ms": 3555,
+   "cost": 0.008688,
+   "reasoning_tokens": null
+  },
+  "11085369": {
+   "score": 5,
+   "reason": "Earnings call coverage for held name UCTT: record Q2 revenue, with management citing AI-driven semiconductor demand. Also relevant to linked held suppliers and customers (AEIS, MKSI, KLAC, ONTO, TER, KLIC).",
+   "at": "2026-10-20T17:46:56+00:00",
+   "wall_ms": 2989,
+   "cost": 0.00882,
+   "reasoning_tokens": null
+  },
+  "11725817": {
+   "score": 4,
+   "reason": "Stock-pick analysis piece directly on held name AEIS following its Q2 earnings and a 20% six-month drop. This is substantive coverage, but it is commentary rather than new material news.",
+   "at": "2026-10-20T17:46:57+00:00",
+   "wall_ms": 2725,
+   "cost": 0.00796,
+   "reasoning_tokens": null
+  },
+  "11084444": {
+   "score": 5,
+   "reason": "Earnings call transcript for Linde (LIN), a held name. Earnings and guidance are material. Also relevant to held customer CE.",
+   "at": "2026-10-20T17:46:57+00:00",
+   "wall_ms": 2190,
+   "cost": 0.007452,
+   "reasoning_tokens": null
+  },
+  "11086270": {
+   "score": 5,
+   "reason": "SWKS, a held name, reported Q3 earnings with profit down year over year. Earnings news is material to a direct holding.",
+   "at": "2026-10-20T17:46:57+00:00",
+   "wall_ms": 3038,
+   "cost": 0.00754,
+   "reasoning_tokens": null
+  },
+  "9708678": {
+   "score": 4,
+   "reason": "This is a stock-pick piece that names AMKR, a held name, as a value pick based on its EV-to-EBITDA ratio. That makes it substantive coverage of a held name, but it carries no material company news.",
+   "at": "2026-10-20T17:46:57+00:00",
+   "wall_ms": 3000,
+   "cost": 0.008252,
+   "reasoning_tokens": null
+  },
+  "9710619": {
+   "score": 4,
+   "reason": "Direct coverage of held name ETN: an options-income (covered call) strategy piece noting the stock's strength. It is substantive stock-specific content but contains no new fundamental news.",
+   "at": "2026-10-20T17:46:59+00:00",
+   "wall_ms": 2737,
+   "cost": 0.007912,
+   "reasoning_tokens": null
+  },
+  "11724245": {
+   "score": 3,
+   "reason": "A routine Zacks analyst blog roundup that mentions held names Cisco and Lam Research in passing among several stocks. It carries no material news or thesis change for either.",
+   "at": "2026-10-20T17:47:00+00:00",
+   "wall_ms": 5643,
+   "cost": 0.008132,
+   "reasoning_tokens": null
+  },
+  "11609591": {
+   "score": 5,
+   "reason": "Major NVDA product announcement: the Rubin CPX prefill-optimized accelerator and rack, framed as a game changer for inference. It could shift the competitive landscape against AVGO and others, and it bears on held suppliers AMKR, ASX and CDNS.",
+   "at": "2026-10-20T17:47:00+00:00",
+   "wall_ms": 2958,
+   "cost": 0.008952,
+   "reasoning_tokens": null
+  },
+  "11712388": {
+   "score": 4,
+   "reason": "Substantive coverage of CIEN, a held name, after a 15.2% weekly drop, focused on supply, customer-concentration and valuation risks. It is an analysis piece, not a new earnings, guidance or rating event. The supply-risk angle also touches linked holdings LITE and FN.",
+   "at": "2026-10-20T17:47:00+00:00",
+   "wall_ms": 2778,
+   "cost": 0.008768,
+   "reasoning_tokens": null
+  },
+  "9711127": {
+   "score": 4,
+   "reason": "Earnings preview of held name CRDO, covering estimates, AI demand, and valuation, supply and customer-concentration risks. This is substantive stock-pick coverage, not the earnings release itself.",
+   "at": "2026-10-20T17:47:00+00:00",
+   "wall_ms": 3305,
+   "cost": 0.008196,
+   "reasoning_tokens": null
+  },
+  "9744661": {
+   "score": 4,
+   "reason": "Substantive coverage of held APH's Communications Solutions growth from AI datacom demand, with competitive mention of held TEL. Analysis piece, not a material event.",
+   "at": "2026-10-20T17:47:01+00:00",
+   "wall_ms": 4034,
+   "cost": 0.007948,
+   "reasoning_tokens": null
+  },
+  "11713936": {
+   "score": 5,
+   "reason": "Material M&A update directly affecting held names SWKS and QRVO. The CEO says the $22B merger is in its final stages, moving both stocks sharply. QCOM, also held, is mentioned too.",
+   "at": "2026-10-20T17:47:02+00:00",
+   "wall_ms": 2850,
+   "cost": 0.008412,
+   "reasoning_tokens": null
+  },
+  "9710456": {
+   "score": 4,
+   "reason": "Direct product news at held name CDNS: its PCIe 6.0 subsystem passed PCI-SIG compliance and is now listed on the Integrators List. This is a substantive milestone for its AI/HPC interconnect IP but not financially material on its own. It may also interest holders of ALAB, CRDO and RMBS, which compete in or touch this market.",
+   "at": "2026-10-20T17:47:03+00:00",
+   "wall_ms": 3115,
+   "cost": 0.009768,
+   "reasoning_tokens": null
+  },
+  "11721863": {
+   "score": 4,
+   "reason": "Direct coverage of NVDA: ByteDance reportedly reached B200 chips through a Norway data center, which raises export-control and regulatory scrutiny risk. No action has been taken yet, so this is a look-today item rather than act-today.",
+   "at": "2026-10-20T17:47:03+00:00",
+   "wall_ms": 3115,
+   "cost": 0.008688,
+   "reasoning_tokens": null
+  },
+  "9709416": {
+   "score": 4,
+   "reason": "Sector move directly naming held names TER and FORM with notable price drops (5-6%). Competitors COHU and ATEYY are likely affected too. The cause isn't earnings or downgrades, so it falls short of a thesis change.",
+   "at": "2026-10-20T17:47:03+00:00",
+   "wall_ms": 3239,
+   "cost": 0.008536,
+   "reasoning_tokens": null
+  },
+  "11085829": {
+   "score": 5,
+   "reason": "Earnings results for held name CRUS: record Q1 revenue of $460M and EPS of $1.84, driven by smartphone demand and the HPMS pipeline. Earnings are material and warrant action today.",
+   "at": "2026-10-20T17:47:04+00:00",
+   "wall_ms": 3309,
+   "cost": 0.008008,
+   "reasoning_tokens": null
+  },
+  "9710964": {
+   "score": 4,
+   "reason": "Direct valuation coverage of held name AEIS. It is a substantive stock-analysis piece, but it carries no new material event such as earnings, guidance, or a rating change.",
+   "at": "2026-10-20T17:47:04+00:00",
+   "wall_ms": 2575,
+   "cost": 0.008188,
+   "reasoning_tokens": null
+  },
+  "11723804": {
+   "score": 5,
+   "reason": "UBS initiated coverage of CRWV, a held name, with a Buy rating and a $120 target implying ~40% upside, against cautious Street sentiment. That is a new bullish thesis from a major bank. It also matters for held suppliers NVDA, ANET and AAOI.",
+   "at": "2026-10-20T17:47:06+00:00",
+   "wall_ms": 5222,
+   "cost": 0.008764,
+   "reasoning_tokens": null
+  },
+  "9709138": {
+   "score": 4,
+   "reason": "Direct coverage of AMD, a held name, but only an options-implied volatility analysis. There is no new event, earnings, guidance or rating change, so it is substantive coverage rather than something to act on.",
+   "at": "2026-10-20T17:47:06+00:00",
+   "wall_ms": 2974,
+   "cost": 0.008388,
+   "reasoning_tokens": null
+  },
+  "11086337": {
+   "score": 5,
+   "reason": "Earnings call transcript for held name Vicor (VICR). Earnings are material, and they may also bear on competitor AEIS, which is held.",
+   "at": "2026-10-20T17:47:06+00:00",
+   "wall_ms": 3169,
+   "cost": 0.007272,
+   "reasoning_tokens": null
+  },
+  "9707058": {
+   "score": 4,
+   "reason": "Product news directly naming AMD: Microsoft's developer-focused Windows 11 build, Project Zenith, debuts on AMD's Ryzen AI Halo platform. It is substantive product coverage, but not material enough to move earnings or the investment thesis.",
+   "at": "2026-10-20T17:47:06+00:00",
+   "wall_ms": 2752,
+   "cost": 0.008968,
+   "reasoning_tokens": null
+  },
+  "9709785": {
+   "score": 5,
+   "reason": "Earnings beat at held name CIEN (EPS +21%, revenue +1.4%) is material and calls for action today. It also bears on linked holdings FN (supplier to CIEN) and LITE (supplies CIEN).",
+   "at": "2026-10-20T17:47:07+00:00",
+   "wall_ms": 3228,
+   "cost": 0.00806,
+   "reasoning_tokens": null
+  },
+  "9709392": {
+   "score": 4,
+   "reason": "Stock-pick piece that features Lam Research (LRCX), a held name, as a GARP candidate. Fortinet is the main focus; it links to AVGO only as a customer, so it adds no weight. Substantive stock-pick coverage of a held name, but no thesis change.",
+   "at": "2026-10-20T17:47:07+00:00",
+   "wall_ms": 3044,
+   "cost": 0.008676,
+   "reasoning_tokens": null
+  },
+  "9709646": {
+   "score": 4,
+   "reason": "Substantive coverage of held NXPI: a Q2 earnings recap benchmarking it against analog peers. The results are already reported, so this is review rather than new material news, and it doesn't reach act-today level.",
+   "at": "2026-10-20T17:47:09+00:00",
+   "wall_ms": 2556,
+   "cost": 0.008332,
+   "reasoning_tokens": null
+  },
+  "9710547": {
+   "score": 5,
+   "reason": "SNPS is a held name and this covers its Q3 earnings: results beat the top of guidance, with an apparent guidance raise. The stock fell while analysts raised targets. This is also directly relevant to competitor CDNS and to customers AMD, NVDA, AVGO, ARM, QCOM and NXPI.",
+   "at": "2026-10-20T17:47:09+00:00",
+   "wall_ms": 2561,
+   "cost": 0.0092,
+   "reasoning_tokens": null
+  },
+  "9709507": {
+   "score": 4,
+   "reason": "This is direct coverage of AMKR, a held name. It is a Zacks-style stock-pick piece on analyst price targets and upward earnings estimate revisions. No new rating change or thesis shift, so substantive but not actionable.",
+   "at": "2026-10-20T17:47:09+00:00",
+   "wall_ms": 3089,
+   "cost": 0.008616,
+   "reasoning_tokens": null
+  },
+  "11724681": {
+   "score": 4,
+   "reason": "Substantive analysis piece on held name ANET, covering its valuation, supply-chain constraints, and margin risk. It also bears on linked suppliers AAOI, APH, AVGO, and COHR. There's no hard news event like earnings or guidance, so it falls short of 5.",
+   "at": "2026-10-20T17:47:10+00:00",
+   "wall_ms": 2914,
+   "cost": 0.008964,
+   "reasoning_tokens": null
+  },
+  "9710293": {
+   "score": 4,
+   "reason": "Substantive coverage of held name CRUS, reviewing its 8.4% decline since earnings and estimate revisions. It is a routine post-earnings recap with no new material event, so it does not rise to act-today.",
+   "at": "2026-10-20T17:47:10+00:00",
+   "wall_ms": 3724,
+   "cost": 0.0079,
+   "reasoning_tokens": null
+  },
+  "11713754": {
+   "score": 3,
+   "reason": "MSFT isn't held, but it's a key customer of ALAB, ETN, NVDA, STX, VRT and SNPS. The story is AI governance policy, not a capex or spending change, so it's routine news at a linked company with only an indirect read-through on AI infrastructure demand.",
+   "at": "2026-10-20T17:47:12+00:00",
+   "wall_ms": 2845,
+   "cost": 0.008576,
+   "reasoning_tokens": null
+  },
+  "9710662": {
+   "score": 4,
+   "reason": "Sector move naming held names NVDA and ASML ahead of NVDA's imminent earnings, which matter across many linked holdings. The article itself is a pre-earnings positioning piece, not the results.",
+   "at": "2026-10-20T17:47:12+00:00",
+   "wall_ms": 3138,
+   "cost": 0.008304,
+   "reasoning_tokens": null
+  },
+  "10859890": {
+   "score": 1,
+   "reason": "Consumer deal and scalping news about the Nintendo Switch 2. Amazon appears only as a retailer, which is not material to the AMZN links or any held name.",
+   "at": "2026-10-20T17:47:12+00:00",
+   "wall_ms": 3001,
+   "cost": 0.00796,
+   "reasoning_tokens": null
+  },
+  "9707211": {
+   "score": 3,
+   "reason": "This is routine Boeing defense program news about an F-15EX delivery to Japan, with some sustainment concerns raised. Boeing is linked to held names PH (supplier/partner) and SPCX (competitor), but the article is not material to either.",
+   "at": "2026-10-20T17:47:13+00:00",
+   "wall_ms": 2806,
+   "cost": 0.008332,
+   "reasoning_tokens": null
+  },
+  "11245471": {
+   "score": 4,
+   "reason": "Material news at Kioxia (KXIAY), which is closely linked to several holdings: a JV partner of SNDK and WDC, a customer of AMAT and LRCX, and a competitor of MU. Dismissing an SK Hynix tie-up, vowing to ease chip price rises and adding capacity all bear on NAND pricing, on SNDK/WDC through the JV, and on equipment demand.",
+   "at": "2026-10-20T17:47:13+00:00",
+   "wall_ms": 3581,
+   "cost": 0.009408,
+   "reasoning_tokens": null
+  },
+  "11085134": {
+   "score": 5,
+   "reason": "Earnings beat and upbeat Q3 guidance at Rambus (RMBS), a held name. Record AI and data center product sales are also relevant to linked holdings: customers MU, AMD and MRVL, and competitors ALAB, CDNS and SNPS.",
+   "at": "2026-10-20T17:47:14+00:00",
+   "wall_ms": 6777,
+   "cost": 0.008688,
+   "reasoning_tokens": null
+  },
+  "9725298": {
+   "score": 2,
+   "reason": "An Amazon cargo jet crash is a logistics and air-safety story. It has no bearing on Amazon's purchases of the chips, networking, storage or infrastructure supplied by the linked held names (ALAB, ANET, GLW, JBL, NVDA, STX, VRT), and nothing in it touches CRWV's competition with Amazon.",
+   "at": "2026-10-20T17:47:15+00:00",
+   "wall_ms": 3502,
+   "cost": 0.009072,
+   "reasoning_tokens": null
+  },
+  "11714678": {
+   "score": 3,
+   "reason": "The article covers Leidos (LDOS) product and contract news, a cruise missile program with possible wide adoption. LDOS is not held. It is linked to NVDA, but only as an NVDA customer per a 2021 filing. Since this is routine news at a linked company, it is worth a glance at most.",
+   "at": "2026-10-20T17:47:16+00:00",
+   "wall_ms": 4007,
+   "cost": 0.008484,
+   "reasoning_tokens": null
+  },
+  "9710359": {
+   "score": 2,
+   "reason": "An Amazon Air cargo jet accident is an operational and logistics event. It has no bearing on Amazon's demand for the products its linked suppliers (ALAB, ANET, GLW, NVDA, STX, VRT, JBL) provide. No held name is affected.",
+   "at": "2026-10-20T17:47:16+00:00",
+   "wall_ms": 3049,
+   "cost": 0.00864,
+   "reasoning_tokens": null
+  },
+  "10421848": {
+   "score": 2,
+   "reason": "An Amazon Air freighter accident in Miami is an operational/logistics event with no bearing on Amazon's tech or data-center spending. Amazon is linked to held suppliers (NVDA, ANET, ALAB, VRT, etc.), but this news is immaterial to them.",
+   "at": "2026-10-20T17:47:16+00:00",
+   "wall_ms": 2775,
+   "cost": 0.00868,
+   "reasoning_tokens": null
+  },
+  "10590400": {
+   "score": 1,
+   "reason": "A court sentence for an Olympic swimmer over dangerous driving has nothing to do with any held name or linked company. The link to HMC (Honda Motor) holds only if the article involves Honda the company, and it does not.",
+   "at": "2026-10-20T17:47:16+00:00",
+   "wall_ms": 3768,
+   "cost": 0.007644,
+   "reasoning_tokens": null
+  },
+  "11710345": {
+   "score": 3,
+   "reason": "This is a routine consumer SSD review of a product from Kioxia, a linked company (SNDK/WDC partner, MU competitor, AMAT/LRCX customer). It also mentions held names in passing: Silicon Motion's SM2508 controller (SIMO) and the WD Black SN8100 as a competing drive (SNDK/WDC). Nothing in it is material to any held name.",
+   "at": "2026-10-20T17:47:18+00:00",
+   "wall_ms": 3684,
+   "cost": 0.011632,
+   "reasoning_tokens": null
+  },
+  "11270684": {
+   "score": 2,
+   "reason": "Consumer product marketing news at Samsung (SSNLF), which links to held AMAT (supplier) and MU (competitor). Foldable phone positioning against Apple is routine and not material to AMAT or MU. Apple is not held or linked.",
+   "at": "2026-10-20T17:47:18+00:00",
+   "wall_ms": 3027,
+   "cost": 0.008284,
+   "reasoning_tokens": null
+  },
+  "11721871": {
+   "score": 2,
+   "reason": "A consumer deal on a Samsung microSD card sold through Amazon. It touches linked companies only trivially, through Samsung's link to MU as a competitor and Amazon's supplier links. Nothing here is material to any held name.",
+   "at": "2026-10-20T17:47:18+00:00",
+   "wall_ms": 2762,
+   "cost": 0.008264,
+   "reasoning_tokens": null
+  },
+  "10743514": {
+   "score": 2,
+   "reason": "Routine consumer-pricing news at Microsoft, which is linked to several held names (NVDA, ALAB, ETN, STX, VRT as suppliers, SNPS as vendor). Xbox Game Pass discounts are immaterial to data center or chip demand, so it barely touches any held name.",
+   "at": "2026-10-20T17:47:19+00:00",
+   "wall_ms": 3202,
+   "cost": 0.008764,
+   "reasoning_tokens": null
+  },
+  "11070644": {
+   "score": 2,
+   "reason": "Amazon's board appointment is routine governance news at a linked customer and has no material impact on suppliers like NVDA, ANET or ALAB, or on competitor CRWV.",
+   "at": "2026-10-20T17:47:20+00:00",
+   "wall_ms": 3909,
+   "cost": 0.0079,
+   "reasoning_tokens": null
+  },
+  "11725250": {
+   "score": 3,
+   "reason": "The news concerns Amazon, a customer of several held names (ALAB, ANET, GLW, JBL, NVDA, STX, VRT), and Meta, which is not linked. A dispute over a consumer AI agent app is routine for Amazon and has no direct bearing on demand for its suppliers' infrastructure.",
+   "at": "2026-10-20T17:47:20+00:00",
+   "wall_ms": 4660,
+   "cost": 0.00882,
+   "reasoning_tokens": null
+  },
+  "10948892": {
+   "score": 2,
+   "reason": "An NTSB investigation of a crash involving an Amazon-contracted cargo jet is an aviation and logistics story. It has no bearing on AMZN's demand for the tech products held names like NVDA, ANET, ALAB, VRT, GLW, STX and JBL supply to it, so it is not material to any holding.",
+   "at": "2026-10-20T17:47:21+00:00",
+   "wall_ms": 3373,
+   "cost": 0.009288,
+   "reasoning_tokens": null
+  },
+  "11725316": {
+   "score": 3,
+   "reason": "Regulatory relief letting Boeing keep building the legacy 777 freighter. BA is linked to held PH, which supplies and partners with Boeing, and to held SPCX as a competitor. This is modest news at a linked company and is not material to the held names directly.",
+   "at": "2026-10-20T17:47:21+00:00",
+   "wall_ms": 3023,
+   "cost": 0.00848,
+   "reasoning_tokens": null
+  },
+  "10328194": {
+   "score": 3,
+   "reason": "Samsung (SSNLF) opening its Yokohama R&D hub is routine news at a company linked to AMAT (supplier) and MU (competitor). It does not materially affect either held name.",
+   "at": "2026-10-20T17:47:22+00:00",
+   "wall_ms": 2726,
+   "cost": 0.007892,
+   "reasoning_tokens": null
+  },
+  "9707051": {
+   "score": 1,
+   "reason": "This is a consumer retail deal on a Samsung SSD sold through Amazon, with no material business news. Both Samsung and Amazon are linked to held names (MU, AMAT; ALAB, NVDA and others), but a single product discount is not meaningful for any of them.",
+   "at": "2026-10-20T17:47:22+00:00",
+   "wall_ms": 4231,
+   "cost": 0.008616,
+   "reasoning_tokens": null
+  },
+  "11609593": {
+   "score": 3,
+   "reason": "Analysis of AWS's Trainium expansion with Anthropic. AMZN is a linked customer of ALAB, ANET, GLW and JBL and a competitor of CRWV, but no held name is covered directly. This is routine strategic commentary rather than material news at the customer, though multi-gigawatt AI capex touches suppliers' markets.",
+   "at": "2026-10-20T17:47:23+00:00",
+   "wall_ms": 3240,
+   "cost": 0.009444,
+   "reasoning_tokens": null
+  },
+  "11713775": {
+   "score": 3,
+   "reason": "Oracle is not held. It is linked as an ARM customer, but the founder cancelling a stock sale is insider/governance news. It has no bearing on Oracle's demand for ARM-based compute, so it counts as routine news at a linked company.",
+   "at": "2026-10-20T17:47:24+00:00",
+   "wall_ms": 3536,
+   "cost": 0.008232,
+   "reasoning_tokens": null
+  },
+  "9707007": {
+   "score": 3,
+   "reason": "Product/technology news at Kioxia, which is linked to several held names: it is a partner of SNDK and WDC, a supplier customer of AMAT and LRCX, and a competitor to MU. This is routine R&D coverage rather than material news, and the held names are not mentioned directly, so it is worth a glance.",
+   "at": "2026-10-20T17:47:24+00:00",
+   "wall_ms": 3108,
+   "cost": 0.00894,
+   "reasoning_tokens": null
+  },
+  "10000445": {
+   "score": 3,
+   "reason": "Boeing deliveries are routine news at a company linked to PH (supplier) and SPCX (competitor); the drug stock news involves no held names.",
+   "at": "2026-10-20T17:47:24+00:00",
+   "wall_ms": 2967,
+   "cost": 0.007556,
+   "reasoning_tokens": null
+  },
+  "9771434": {
+   "score": 2,
+   "reason": "An Amazon cargo jet crash is a logistics and safety story. It is not material to Amazon's demand for the data-center or AI hardware that held suppliers like NVDA, ANET, VRT, GLW and STX sell it. No held name is directly affected.",
+   "at": "2026-10-20T17:47:25+00:00",
+   "wall_ms": 3290,
+   "cost": 0.008708,
+   "reasoning_tokens": null
+  },
+  "9707064": {
+   "score": 3,
+   "reason": "The article is routine consumer product news at Microsoft, which is linked to several held names (NVDA, ALAB, ETN, STX, VRT as suppliers; SNPS as vendor). Cloud gaming usage caps carry minimal read-through to MSFT data center spending.",
+   "at": "2026-10-20T17:47:27+00:00",
+   "wall_ms": 3302,
+   "cost": 0.008732,
+   "reasoning_tokens": null
+  },
+  "9707021": {
+   "score": 3,
+   "reason": "This is regulatory action against Amazon, a linked company that is a customer of several held names (NVDA, ALAB, ANET, GLW, JBL, STX, VRT). However, the ad-auction allegations concern Amazon's retail advertising business, not its AI and cloud capex, so the direct impact on held suppliers is limited. It is routine-to-material news at a linked company, worth a glance.",
+   "at": "2026-10-20T17:47:27+00:00",
+   "wall_ms": 4559,
+   "cost": 0.009268,
+   "reasoning_tokens": null
+  },
+  "11676099": {
+   "score": 3,
+   "reason": "Amazon (a customer of several held names) is buying launches from Ariane for Kuiper. That is routine news at a linked company and not material to its suppliers' semiconductor or datacenter business. It is a minor competitive note for space names like RKLB and SPCX, but neither is linked.",
+   "at": "2026-10-20T17:47:28+00:00",
+   "wall_ms": 3212,
+   "cost": 0.00854,
+   "reasoning_tokens": null
+  },
+  "11713726": {
+   "score": 2,
+   "reason": "An Amazon cargo jet incident and wrongful-death lawsuit is operational and legal news for Amazon's logistics arm. It has no bearing on the AWS and data-center purchasing that links the held suppliers (NVDA, ANET, VRT, etc.) to Amazon. No held name is mentioned.",
+   "at": "2026-10-20T17:47:28+00:00",
+   "wall_ms": 3957,
+   "cost": 0.009076,
+   "reasoning_tokens": null
+  },
+  "11725319": {
+   "score": 3,
+   "reason": "Routine news at Amazon, a linked customer of several held names (ANET, NVDA, VRT, GLW, ALAB, STX, JBL). It signals continued data center buildout, but the contract goes to Kuehne+Nagel, which is not held, so there is no direct impact on any held name.",
+   "at": "2026-10-20T17:47:28+00:00",
+   "wall_ms": 3032,
+   "cost": 0.008796,
+   "reasoning_tokens": null
+  },
+  "11725257": {
+   "score": 1,
+   "reason": "The article is about McDonald's launching a retail media network. Amazon is mentioned only as an example of an ad business, which has no bearing on its hardware or cloud demand from the linked held suppliers. No held name is affected.",
+   "at": "2026-10-20T17:47:28+00:00",
+   "wall_ms": 4032,
+   "cost": 0.008056,
+   "reasoning_tokens": null
+  },
+  "10705482": {
+   "score": 1,
+   "reason": "ArcBest is a trucking/logistics company that is not in the holdings and has no value-chain link to any held name. The provided links all concern WB, which does not appear in this article.",
+   "at": "2026-10-20T17:47:29+00:00",
+   "wall_ms": 2633,
+   "cost": 0.00782,
+   "reasoning_tokens": null
+  }
+ }
+}

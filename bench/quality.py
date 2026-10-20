@@ -148,6 +148,22 @@ def freeze(a):
           f"finance system prompt {len(fx['system_prompt']['finance'])} chars")
 
 
+def render_fixture_system(fx, art, links):
+    """v1 fixtures (articles_50.json) carry one system prompt per domain. v2 fixtures
+    (articles_300.json, brief v2) carry the finance brief, a links block and the JSON suffix
+    separately so the same fixture serves both variants: --links inserts the article's
+    filing-sourced value-chain edges (the text the human labeler saw); without it the
+    block is omitted entirely (never "none"), so the model is not told there are no links."""
+    sp = fx["system_prompt"]
+    if "finance_links_block" not in sp or art["domain"] != "finance":
+        return sp[art["domain"]]
+    parts = [sp["finance"]]
+    if links:
+        parts.append(sp["finance_links_block"].replace("{links}", art.get("links_text") or "none"))
+    parts.append(sp["suffix"])
+    return "\n\n".join(parts)
+
+
 def load_fixture():
     with open(FIXTURE, "rb") as f:
         raw = f.read()
@@ -533,7 +549,7 @@ def run(a):
             "fixture_sha": fx["_sha"], **pf}
 
     def one(art):
-        system = fx["system_prompt"][art["domain"]]
+        system = render_fixture_system(fx, art, getattr(a, "links", False))
         try:
             res = fn(a, system, render_user(art))
         except requests.RequestException as e:
@@ -548,7 +564,9 @@ def run(a):
                "parse_ok": 1 if score is not None else 0,
                "text": (res.get("text") or "")[:300].replace("\n", "\\n"),
                "error": res.get("error", ""), "est_cost_usd": row_cost(a, pf, res),
-               "extra": json.dumps(res.get("extra", {}), ensure_ascii=False)}
+               "extra": json.dumps({**res.get("extra", {}), "brief": fx.get("brief", "v1"),
+                                    "links": 1 if getattr(a, "links", False) else 0,
+                                    "fixture": os.path.basename(FIXTURE)}, ensure_ascii=False)}
         return row
 
     t0 = time.perf_counter()
@@ -807,6 +825,9 @@ def main():
     pr.add_argument("--reasoning", action="store_true",
                     help="openrouter: leave the model's reasoning on (default: send reasoning.enabled=false)")
     pr.add_argument("--limit", type=int, default=0, help="first N articles only (smoke test)")
+    pr.add_argument("--fixture", default=None, help=f"fixture file (default {os.path.basename(FIXTURE)}); e.g. articles_300.json")
+    pr.add_argument("--links", action="store_true",
+                    help="v2 fixtures: include the article's value-chain links block in the system prompt")
     pr.add_argument("--sleep", type=float, default=0.0, help="seconds between calls")
     pr.add_argument("--ollama-url", default=os.environ.get("OLLAMA_URL", "http://localhost:11434"))
     pr.add_argument("--db", default=DEFAULT_DB)
@@ -828,6 +849,8 @@ def main():
     pp.set_defaults(fn=report)
 
     a = p.parse_args()
+    if getattr(a, "fixture", None):
+        globals()["FIXTURE"] = os.path.join(HERE, a.fixture) if not os.path.isabs(a.fixture) else a.fixture
     if getattr(a, "max_tokens", None):
         globals()["MAX_TOKENS"] = a.max_tokens
     if getattr(a, "levels", None):

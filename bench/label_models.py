@@ -39,6 +39,8 @@ def main():
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--no-links", action="store_true", help="omit the links block (not for gold; for checks)")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--effort", default="low", help="reasoning effort sent to OpenRouter (low|medium|high)")
+    ap.add_argument("--max-tokens", type=int, default=4096, help="completion budget incl. reasoning tokens")
     a = ap.parse_args()
     a.reasoning = False
 
@@ -60,31 +62,42 @@ def main():
     slug = re.sub(r"[^a-z0-9]+", "-", a.model.lower()).strip("-") + ("-nolinks" if a.no_links else "")
     out_path = os.path.join(HERE, f"labels_{slug}.json")
     out = {"fixture": os.path.basename(FIXTURE), "frozen_at": fx["frozen_at"], "brief": fx["brief"], "brief_sha": fx["brief_sha"],
-           "labeler": a.model, "saw_links": not a.no_links, "exported_at": None, "n": 0, "labels": {}}
+           "labeler": a.model, "saw_links": not a.no_links, "reasoning_effort": a.effort, "max_tokens": a.max_tokens, "exported_at": None, "n": 0, "labels": {}}
     if os.path.exists(out_path):
         out["labels"] = json.load(open(out_path, encoding="utf-8")).get("labels", {})
     todo = [x for x in arts if str(x["id"]) not in out["labels"]]
     print(f"{a.model}: {len(arts)} articles, {len(todo)} to do, links={'off' if a.no_links else 'on'}")
 
+    key = os.environ.get("OPENROUTER_API_KEY") or sys.exit("OPENROUTER_API_KEY not set")
+    # Reasoning models (Opus 5.5, GPT-5.6) refuse reasoning=disabled; ask for low effort and give the
+    # budget room so the answer JSON isn't truncated by the thinking tokens. Recorded per label.
+    extra = {"usage": {"include": True}, "reasoning": {"effort": a.effort}}
+    q.MAX_TOKENS = a.max_tokens
+
     def one(art):
-        res = q.call_openrouter(a, build_system(fx, art, not a.no_links), q.render_user(art))
+        res = q.call_openai_chat(q.OPENROUTER_URL, key, a.model, build_system(fx, art, not a.no_links), q.render_user(art), extra, timeout=180)
         if "error" in res:
             return art["id"], None, res
         sc, reason = q.parse_score(res.get("text", ""))
         return art["id"], sc, {"reason": reason, "raw": res.get("text", ""), "wall_ms": res.get("wall_ms"),
-                               "cost": (res.get("extra") or {}).get("billed_cost_usd")}
+                               "cost": (res.get("extra") or {}).get("billed_cost_usd"),
+                               "reasoning_tokens": (res.get("extra") or {}).get("reasoning_tokens")}
 
-    done, errs, t0 = 0, 0, time.time()
+    done, errs, streak, t0 = 0, 0, 0, time.time()
     with ThreadPoolExecutor(max_workers=a.workers) as ex:
         futs = [ex.submit(one, x) for x in todo]
         for f in as_completed(futs):
             id_, sc, info = f.result()
             if sc is None:
-                errs += 1
+                errs += 1; streak += 1
                 print(f"  ! {id_}: {info.get('error') or 'unparseable: ' + (info.get('raw') or '')[:80]}", flush=True)
+                if streak >= 3 and done == 0:
+                    for g in futs: g.cancel()
+                    sys.exit("3 errors before any success; fix the call and rerun (resumes)")
                 continue
+            streak = 0
             out["labels"][str(id_)] = {"score": sc, "reason": info["reason"], "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                                      "wall_ms": info["wall_ms"], "cost": info["cost"]}
+                                      "wall_ms": info["wall_ms"], "cost": info["cost"], "reasoning_tokens": info.get("reasoning_tokens")}
             done += 1
             if done % 25 == 0:
                 print(f"  {done}/{len(todo)} ({time.time()-t0:.0f}s)", flush=True)
