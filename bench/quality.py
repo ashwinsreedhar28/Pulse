@@ -155,10 +155,18 @@ def render_fixture_system(fx, art, links):
     filing-sourced value-chain edges (the text the human labeler saw); without it the
     block is omitted entirely (never "none"), so the model is not told there are no links."""
     sp = fx["system_prompt"]
+    if links == "v1":  # the September brief rendered over this fixture's lists (brief effect isolation)
+        pl = fx["prompt_lists"]
+        return render_system(art["domain"], pl["tickers"], pl.get("interests", []))
     if "finance_links_block" not in sp or art["domain"] != "finance":
         return sp[art["domain"]]
     parts = [sp["finance"]]
-    if links:
+    if links == "mentions":
+        # ablation: the matched tickers only (what the links block carries implicitly), no edges
+        held = {t.split(" ")[0] for t in fx["prompt_lists"]["tickers"]}
+        ments = [f"{t} [held]" if t in held else t for t in art.get("tickers", []) if t and not t.startswith("__")]
+        parts.append("Companies this article mentions: " + (", ".join(ments) if ments else "none identified"))
+    elif links:
         parts.append(sp["finance_links_block"].replace("{links}", art.get("links_text") or "none"))
     parts.append(sp["suffix"])
     return "\n\n".join(parts)
@@ -549,7 +557,7 @@ def run(a):
             "fixture_sha": fx["_sha"], **pf}
 
     def one(art):
-        system = render_fixture_system(fx, art, getattr(a, "links", False))
+        system = render_fixture_system(fx, art, "v1" if getattr(a, "brief", "") == "v1" else ("mentions" if getattr(a, "mentions", False) else getattr(a, "links", False)))
         try:
             res = fn(a, system, render_user(art))
         except requests.RequestException as e:
@@ -564,8 +572,8 @@ def run(a):
                "parse_ok": 1 if score is not None else 0,
                "text": (res.get("text") or "")[:300].replace("\n", "\\n"),
                "error": res.get("error", ""), "est_cost_usd": row_cost(a, pf, res),
-               "extra": json.dumps({**res.get("extra", {}), "brief": fx.get("brief", "v1"),
-                                    "links": 1 if getattr(a, "links", False) else 0,
+               "extra": json.dumps({**res.get("extra", {}), "brief": "v1" if getattr(a, "brief", "") == "v1" else fx.get("brief", "v1"),
+                                    "links": 2 if getattr(a, "mentions", False) else (1 if getattr(a, "links", False) else 0),
                                     "fixture": os.path.basename(FIXTURE)}, ensure_ascii=False)}
         return row
 
@@ -826,6 +834,10 @@ def main():
                     help="openrouter: leave the model's reasoning on (default: send reasoning.enabled=false)")
     pr.add_argument("--limit", type=int, default=0, help="first N articles only (smoke test)")
     pr.add_argument("--fixture", default=None, help=f"fixture file (default {os.path.basename(FIXTURE)}); e.g. articles_300.json")
+    pr.add_argument("--brief", choices=["v1"], default=None,
+                    help="v2 fixtures: run with the September brief (v1) instead; no links block")
+    pr.add_argument("--mentions", action="store_true",
+                    help="v2 fixtures: ablation, append the matched tickers (with [held] tags) but no edges")
     pr.add_argument("--links", action="store_true",
                     help="v2 fixtures: include the article's value-chain links block in the system prompt")
     pr.add_argument("--sleep", type=float, default=0.0, help="seconds between calls")

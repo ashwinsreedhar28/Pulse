@@ -12,6 +12,7 @@ from collections import defaultdict, Counter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ALERT = 4
+LINKS_LABEL = {0: "no", 1: "yes", 2: "mentions only"}
 
 
 def mcnemar_exact(b, c):
@@ -98,17 +99,19 @@ def main():
             continue
         m = metrics(pred, gold, have); full[key] = (pred, have)
         lo, hi = m["recall_ci"]
-        out.append(f"| {key[0]} | {key[1]} | {'yes' if key[2] else 'no'} | {m['n']} | {m['exact']:.0%} | {m['within1']:.0%} | {m['mae']:.2f} | "
+        out.append(f"| {key[0]} | {key[1]} | {LINKS_LABEL[key[2]]} | {m['n']} | {m['exact']:.0%} | {m['within1']:.0%} | {m['mae']:.2f} | "
                    f"{m['recall']:.0%} ({m['tp']}/{m['pos']}, CI {lo:.0%}–{hi:.0%}) | {m['precision']:.0%} ({m['fp']} false) | "
                    f"{m['recall5']:.0%} | {m['precision5']:.0%} |")
 
     # paired links effect per model (same brief v2)
     out.append("\n## Links effect (paired, same articles)\n")
-    out.append("| model | alerts right: no-links only | links only | both | neither | McNemar p | exact no→links | MAE no→links |")
-    out.append("|---|---|---|---|---|---|---|---|")
+    out.append("| model (B vs A) | alerts right: A only | B only | both | neither | McNemar p (accuracy) | exact A→B | MAE A→B | recall on positives fixed/broken, p |")
+    out.append("|---|---|---|---|---|---|---|---|---|")
     models = sorted({k[0] for k in full if k[1] == "v2"})
+    pairs = [(0, 1, "links vs none"), (0, 2, "mentions vs none"), (2, 1, "links vs mentions")]
     for mname in models:
-        k0, k1 = (mname, "v2", 0), (mname, "v2", 1)
+      for a0, a1, lab in pairs:
+        k0, k1 = (mname, "v2", a0), (mname, "v2", a1)
         if k0 not in full or k1 not in full:
             continue
         p0, h0 = full[k0]; p1, h1 = full[k1]
@@ -117,7 +120,9 @@ def main():
         b = sum(r0[i] and not r1[i] for i in both); c = sum(r1[i] and not r0[i] for i in both)
         bb = sum(r0[i] and r1[i] for i in both); nn = sum(not r0[i] and not r1[i] for i in both)
         m0 = metrics(p0, gold, both); m1 = metrics(p1, gold, both)
-        out.append(f"| {mname} | {b} | {c} | {bb} | {nn} | {mcnemar_exact(b, c):.3f} | {m0['exact']:.0%}→{m1['exact']:.0%} | {m0['mae']:.2f}→{m1['mae']:.2f} |")
+        pos = [i for i in both if gold[i] >= ALERT]
+        pb = sum((p0[i] >= ALERT) and not (p1[i] >= ALERT) for i in pos); pc = sum((p1[i] >= ALERT) and not (p0[i] >= ALERT) for i in pos)
+        out.append(f"| {mname} ({lab}) | {b} | {c} | {bb} | {nn} | {mcnemar_exact(b, c):.3f} | {m0['exact']:.0%}→{m1['exact']:.0%} | {m0['mae']:.2f}→{m1['mae']:.2f} | {pc}/{pb} p={mcnemar_exact(pb, pc):.4f} |")
 
     # by stratum, alert recall, for v2 groups
     out.append("\n## Alert recall by stratum (brief v2)\n")
@@ -133,19 +138,19 @@ def main():
             sid = [i for i in have if strat[i] == s]
             m = metrics(pred, gold, sid) if sid else None
             cells.append(f"{m['recall']:.0%} ({m['tp']}/{m['pos']}), {m['fp']} false" if m and m["pos"] else "–")
-        out.append(f"| {key[0]} | {'yes' if key[2] else 'no'} | " + " | ".join(cells) + " |")
+        out.append(f"| {key[0]} | {LINKS_LABEL[key[2]]} | " + " | ".join(cells) + " |")
 
     # pre-registered ensembles over base (non-ev) v2 groups, separately for links on/off
     out.append("\n## Ensembles (pre-registered: (a) rounded mean, alert >= 4; (b) alert if >= 2 models alert)\n")
     for links in (0, 1):
-        keys = [k for k in full if k[1] == "v2" and k[2] == links and not k[0].endswith("+ev")]
+        keys = [k for k in full if k[1] == "v2" and k[2] == links and not k[0].endswith("+ev")]  # mentions-only groups excluded
         if len(keys) < 2:
             continue
         common = [i for i in ids if all(i in full[k][0] for k in keys)]
         mean = {i: max(1, min(5, round(sum(full[k][0][i] for k in keys) / len(keys)))) for i in common}
         vote = {i: (ALERT if sum(full[k][0][i] >= ALERT for k in keys) >= 2 else 1) for i in common}
         ma, mb = metrics(mean, gold, common), metrics(vote, gold, common)
-        out.append(f"links={'yes' if links else 'no'} over {len(keys)} models ({', '.join(k[0] for k in keys)}), n={len(common)}: "
+        out.append(f"links={LINKS_LABEL[links]} over {len(keys)} models ({', '.join(k[0] for k in keys)}), n={len(common)}: "
                    f"(a) exact {ma['exact']:.0%} MAE {ma['mae']:.2f} recall {ma['recall']:.0%} precision {ma['precision']:.0%}; "
                    f"(b) recall {mb['recall']:.0%} precision {mb['precision']:.0%}")
 

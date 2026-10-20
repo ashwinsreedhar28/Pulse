@@ -39,3 +39,6 @@ c9f144f3,2026-10-20T18:07:47+00:00,clef,@cf/cloudflare/clef-flash,,workers-ai,,,
 dd6e6007,2026-10-20T18:43:03+00:00,typical,OzLabs/typical-medium,,runpod-pod,RTX 4090,,1,3,3,3,1950,OzLabs/typical-medium,,,,,,,,473ed7df056d,
 27d6d110,2026-10-20T18:44:17+00:00,typical,OzLabs/typical-medium,,runpod-pod,RTX4090,,4,271,271,271,49653,OzLabs/typical-medium,,,,,,runpod-4090-console-2026-10-20,,473ed7df056d,pod-7eesbucoa5e8ud-typical_shim-torch2.14.1cu130-torchaudio-removed-ssh-tunnel
 24bf04ed,2026-10-20T18:45:09+00:00,typical,OzLabs/typical-medium,,runpod-pod,RTX4090,,4,271,271,271,52304,OzLabs/typical-medium,,,,,,runpod-4090-console-2026-10-20,,473ed7df056d,pod-7eesbucoa5e8ud-typical_shim-torch2.14.1cu130-torchaudio-removed-ssh-tunnel
+c9150bea,2026-10-20T19:10:34+00:00,claude,claude-haiku-4-5-20251001,,anthropic,,,4,271,271,269,141605,,,per_m_tokens,1.0,5.0,,anthropic-pricing-2026-10-20,0.376712,473ed7df056d,
+f03b1939,2026-10-20T19:13:53+00:00,claude,claude-sonnet-4-6,,anthropic,,,4,271,271,270,198820,,,per_m_tokens,3.0,15.0,,anthropic-pricing-2026-10-20,1.053564,473ed7df056d,
+cddec25f,2026-10-20T19:14:07+00:00,jev,jev-1.13.0,,typesafe,,,4,271,271,271,13234,jev-1.13.0,,,,,,,,473ed7df056d,
