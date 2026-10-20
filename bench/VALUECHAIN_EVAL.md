@@ -4,20 +4,20 @@
 
 ## Short version
 
-- A new brief that states the criterion ("should a holder of one of these names look at this today?", levels defined) moves Haiku's alert recall from 39% to 73% on the same 271 articles. Most of the Haiku gap was the brief, not the model.
-- Passing each article's value-chain links as input raises recall again for every LLM and for Jev: Jev 74% → 82% (p = 0.002), Haiku 73% → 84% (p = 0.052), Sonnet 83% → 89% (p = 0.039). Clef does not move; Typical moves within noise.
-- With links, Jev has the best exact agreement (52%) and MAE (0.55) of any model at 373 ms p50, ahead of Sonnet on the number and behind it on recall (82% vs 89%).
+- A new brief that states the criterion ("should a holder of one of these names look at this today?", levels defined) moves Haiku's alert recall from 39% to 73% on the same 271 articles. Measured against a gold set that was itself defined by brief v2, most of the Haiku gap was the brief, not the model.
+- Passing each article's value-chain links as input raises alert recall for Jev, Haiku and Sonnet: Jev 74% → 82%, Haiku 73% → 84%, Sonnet 83% → 89%. Paired on the gold positives, links fix 12 Jev misses and break none (p = 0.0005), Sonnet 8/0 (p = 0.008), Haiku 19/5 (p = 0.007). On overall alert correctness (negatives included) the same tests are p = 0.002 / 0.039 / 0.052, and with a Holm correction across the five models only Jev stays under 0.05. Clef does not move; Typical's change (49% → 57%) is not distinguishable from zero, which is not evidence of no effect.
+- With links, Jev (argmax) has the best exact agreement (52%) and MAE (0.55) of the argmax/temperature-0 configurations at 373 ms p50, ahead of Sonnet on the number and behind it on recall (82% vs 89%). Jev's expected-value decoder has MAE 0.54 with lower recall (65%); it is in VALUECHAIN_RESULTS.md.
 - Every model except Typical has 96–100% alert precision: the errors are misses, not false alarms. Typical is the only one that over-alerts (precision 66–69%).
-- Ensembles with the rules fixed beforehand reach 89% recall with links, the same as Sonnet alone. Nothing to gain.
-- A 20-edge spot-check of the cited filings found 5 supported, 9 not naming the counterparty, 1 contradicted, 4 citing an unrelated company's filing, 1 unverifiable. The links helped mostly by telling the model which held names an article touches, not by supplying supply-chain facts. Pass the ticker matches explicitly next time and fix the citation pipeline.
+- Ensembles with the rules written before the runs give no recall advantage over Sonnet alone with links (vote rule 127/143 vs Sonnet 128/143 on the same articles); the mean-score ensemble does have the lowest MAE of anything (0.51 vs Sonnet's 0.68 on that subset).
+- A 20-edge spot-check of the cited filings found 3 supported, 2 partial, 9 not naming the counterparty, 1 contradicted, 4 citing an unrelated company's filing, 1 unverifiable. My reading is that the links helped mainly by telling the model which held names an article touches rather than by supplying supply-chain facts; that is a hypothesis until a ticker-only ablation is run. Pass the ticker matches explicitly next time and fix the citation pipeline.
 
 ## Gold set
 
-271 finance articles from Pulse's database (12,395 articles), excluding the 50 from the Oct 14 table, deduplicated by title and URL. Stratified by Pulse's keyword urgency score so the sample covers the full range rather than only the ambiguous 3s: 80 each at keyword 1 / 3 / 5, plus 31 articles that name a filing-linked counterparty of a held name without naming a held name (every such article in the database). Holdings list: the 75 active tickers in Pulse, frozen in the fixture.
+271 finance articles from Pulse's database (12,395 articles at the Oct 20 snapshot; counts from the sampler run), excluding the 50 from the Oct 14 table, deduplicated by title and URL. Stratified by Pulse's keyword urgency score so the sample covers the full range rather than only the ambiguous 3s: 80 each at keyword 1 / 3 / 5, plus 31 articles that name a filing-linked counterparty of a held name without naming a held name (31 of the 32 that pass the sampler's length and dedup filters; one more such article sits in the keyword-1 stratum). Holdings list: the 75 active tickers in Pulse, frozen in the fixture.
 
 Brief v2 (bench/brief_v2.txt), frozen before any article was read. Levels: 5 act today (material to a held name), 4 look today (substantive coverage of a held name, or material news at a filing-linked supplier/customer), 3 glance, 2 routine, 1 ignore. Rule: direct coverage of a held name scores one notch above the same news at a linked company; names that are neither held nor linked do not raise the score. Alert = score ≥ 4.
 
-Three labelers, each seeing headline, summary, and the article's links block: Ashwin (blind, 271 in 14 min, ~3 s per article), Claude Opus 5.5 and GPT-5.6 Sol via OpenRouter (neither is an evaluated model). Adjudication rule, written before labeling: adjudicate when any pair differs by two or more points or disagrees on the alert; otherwise Ashwin's label stands. 89 of 271 went to adjudication; 77 were changed, all 77 toward the models (52 down, 25 up), with the model rationales visible. Ashwin's raw labels match the final gold 72% exact. Gold distribution 1–5: 22 / 51 / 50 / 130 / 18; alert rate 55%, 7% at 5.
+One human labeler and two model labelers, each seeing headline, summary, and the article's links block: Ashwin (blind, 270 in 13.5 min, ~3 s per article, one skipped article scored afterwards), Claude Opus 5.5 and GPT-5.6 Sol via OpenRouter (neither is an evaluated model). This is one human judgment assisted by two models, not three independent human judgments. Adjudication rule, written into the project plan before labeling (plan doc timestamps; brief committed as 19f33df before the fixture was frozen): adjudicate when any pair differs by two or more points or disagrees on the alert; otherwise Ashwin's label stands. 89 of 271 went to adjudication; 77 were changed, all 77 toward the models (52 down, 25 up), with the model rationales visible. Ashwin's raw labels match the final gold 72% exact. Gold distribution 1–5: 22 / 51 / 50 / 130 / 18; alert rate 55%, 7% at 5.
 
 Labeler agreement before adjudication: Opus vs Sol 75% exact, MAE 0.27; Ashwin vs Opus 41%, MAE 0.77; Ashwin vs Sol 41%, MAE 0.82. The fast first pass was systematically higher than both models on the keyword-1 stratum (36 of the 89 adjudications), and the models' rationales usually held up on a second read.
 
@@ -35,17 +35,17 @@ For each article: its matched tickers (Pulse's `article_ticker_matches`, plus a 
 |---|---|---|---|---|---|---|---|
 | Haiku 4.5, brief v1 | no | 32% | 69% | 1.04 | 39% (58/148) | 97% | 1,068 ms |
 | Haiku 4.5 | no | 38% | 87% | 0.78 | 73% (108/147) | 100% | 1,409 ms |
-| Haiku 4.5 | yes | 41% | 94% | 0.66 | 84% (120/143) | 98% | 1,520 ms |
+| Haiku 4.5 | yes | 41% | 94% | 0.66 | 84% (120/143) | 98% | 1,522 ms |
 | Sonnet 4.6 | no | 33% | 91% | 0.77 | 83% (122/147) | 99% | 2,283 ms |
 | Sonnet 4.6 | yes | 40% | 94% | 0.67 | 89% (131/148) | 98% | 2,247 ms |
 | Jev 1.13 (argmax) | no | 41% | 83% | 0.79 | 74% (110/148) | 98% | 362 ms |
 | Jev 1.13 (argmax) | yes | 52% | 94% | 0.55 | 82% (122/148) | 98% | 373 ms |
-| Clef-flash (argmax) | no | 29% | 86% | 0.85 | 30% (45/148) | 96% | 536 ms |
+| Clef-flash (argmax) | no | 29% | 86% | 0.85 | 30% (45/148) | 96% | 534 ms |
 | Clef-flash (argmax) | yes | 29% | 85% | 0.86 | 29% (43/148) | 100% | 543 ms |
-| Typical-medium (argmax) | no | 39% | 87% | 0.76 | 49% (73/148) | 69% (33 false) | 710 ms |
+| Typical-medium (argmax) | no | 39% | 87% | 0.76 | 49% (73/148) | 69% (33 false) | 711 ms |
 | Typical-medium (argmax) | yes | 43% | 87% | 0.74 | 57% (85/148) | 66% (44 false) | 749 ms |
 
-Recall 95% CIs are about ±8 points at this n. Haiku returned unparseable JSON on 4–6 articles per run; those rows are excluded (n shown). Expected-value decoding for the decision models is in bench/VALUECHAIN_RESULTS.md; it is worse on recall for all three and not shown here.
+Recall 95% CIs are about ±8 points at this n. Parsed outputs per run: Haiku v1 271, Haiku v2 267 (no links) and 265 (links), Sonnet 270 and 271, all others 271. Haiku's failures are truncated JSON at the 128-token budget, Sonnet's one is a quoted "score": "4"; the table excludes them (recall denominators show it). Counting a failed call as a miss instead, Haiku with links is 120/148 = 81%, not 84%. These are parser and output-budget outcomes as much as model outcomes. Expected-value decoding for the decision models is in bench/VALUECHAIN_RESULTS.md; it is worse on recall for all three and not shown here.
 
 Paired links effect (same articles, alert correct with vs without links, exact McNemar):
 
@@ -57,11 +57,11 @@ Paired links effect (same articles, alert correct with vs without links, exact M
 | Typical | 25 | 24 | 1.00 |
 | Clef | 12 | 12 | 1.00 |
 
-By stratum, the links effect is concentrated where it should be: on the 31 counterparty-only articles (7 positives) every model is 0 for 7 without links; with links Haiku catches 4, Jev 2, Sonnet 1. On keyword-5 articles Jev goes 86% → 95%, Sonnet 92% → 97%.
+By stratum, the links effect shows up where it should: on the 31 counterparty-only articles (7 positives) Haiku, Sonnet, Jev and Clef are 0 for 7 without links; with links Haiku catches 4 of its 6 parsed positives, Jev 2 of 7, Sonnet 1 of 7. Typical is 5 of 7 without links and 3 of 7 with, consistent with it alerting broadly rather than reading the links. On keyword-5 articles Jev goes 86% → 95%, Sonnet 92% → 97%.
 
 Ensembles, rules fixed before the runs: (a) rounded mean score, alert ≥ 4; (b) alert if ≥ 2 of 5 models alert. With links: (a) 76% recall / 99% precision, (b) 89% / 98%. Sonnet alone with links is 89% / 98%. Same conclusion as on the 50.
 
-Brief v2 alert rate is 55% of finance articles (reweighted to Pulse's live mix, about the same). That is a digest, not a ping; the user's reading is that 4 and 5 are "things I should read or have summarized", with 5 (7% of articles) the act-now tier.
+Brief v2 alert rate is 55% of this sample (the sample is balanced across keyword strata, so this is not a population prevalence). That is a digest, not a ping; the user's reading is that 4 and 5 are "things I should read or have summarized", with 5 the act-now tier. The act-now tier is not reliable for any model: with links, score-5 precision is 12% (Jev), 19% (Haiku), 18% (Sonnet), and Jev catches 3 of 18 gold fives. High precision at ≥ 4 does not carry over to 5.
 
 ## What the links actually are
 
@@ -74,22 +74,22 @@ The generator that builds Pulse's value chains reads a company's latest 10-K Ite
 - 4 cite an unrelated company's filing (a Huntsman 8-K for a Celanese/Westlake edge, an Applied Materials 8-K for SK Hynix/Advantest, a GoDaddy 8-K for Alibaba/Weibo, a Flex 10-Q for WESCO/Vertiv): a CIK-resolution bug in the citation builder.
 - 1 unverifiable (image-only investor deck).
 
-So "filings" means the model read a filing while writing the edge, not that the filing states it. The brief told labelers to treat the links as fact; for about half of them that was wrong. The models still benefited, and the stratum breakdown says why: the links block carries `[held]` tags on the matched tickers, so it tells a model which held names an article is about, which the ~120-character summaries often do not. That is the "knowledge" half of the task from the Oct 19 email, and it turns out to be mostly entity resolution, not supply-chain recall.
+So "filings" means the model read a filing while writing the edge, not that the filing states it. The brief told labelers to treat the links as fact; for 14 of the 20 checked, the cited document does not state the relationship as given (unnamed counterparty, wrong document, or contradicted are different failures and the 20 unique edges do not directly estimate the error rate per article shown). The models still benefited. My hypothesis for why: the links block carries `[held]` tags on the matched tickers, so it tells a model which held names an article is about, which the summaries (median 169 characters) often do not. Adding links adds entities, tags, relationships and text at once, so this experiment establishes better agreement with link-conditioned gold, not which part did it; a ticker-only ablation is the next run.
 
 ## Caveats
 
-- One human labeler who also wrote the brief; the second labelers and adjudication are the mitigation, and adjudication moved 77 labels toward them. Gold is conditional on the links shown, including the wrong ones.
-- 271 articles settles the paired questions (brief effect, links effect) and not the ranking of models within ~10 points of each other.
+- One human labeler who also wrote the brief and did the adjudication; the model labelers improve consistency but do not independently validate the intended preference. Adjudication moved 77 labels toward the models. Gold is conditional on the links shown, including the wrong ones.
+- 271 articles supports the brief effect clearly and the links effect for Jev, Sonnet and Haiku on the paired recall test; it does not rank models within ~10 points of each other, and the intervals do not account for label uncertainty or for related articles in the same news cycle not being independent.
 - Pulse's ticker matcher has false positives; some articles carried irrelevant link blocks (a muni-bond ETF note with AMD edges). Models mostly said "links do not apply".
 - The counterparty slice is 31 articles / 7 positives, the whole database's worth; the mechanism shows up but the number is small.
 - Haiku's unparseable outputs (JSON not returned) are dropped, 4–6 per run.
-- Typical and Jev list prices from Oct 13 ($0.03–0.11 per 1k); Clef $0.09–0.11 per 1k measured; Haiku $1.38–1.56 per 1k; Sonnet $3.78–4.38 per 1k at list.
+- Costs per 1k calls at list price, from the run rows (latest successful call per article): Clef $0.09 (no links) / $0.11 (links); Haiku $1.38 / $1.58; Sonnet $3.78 / $4.38. Jev and Typical rows carry no rate; their Oct 13 figures were $0.03 per 1k (TypeSafe list) and ~$0.11 per 1k unbatched on a 4090 (DECISION_MODELS.md), and prompts here are ~15% longer. p50 latencies are over the same row selection.
 
 ## Next
 
 1. Fix the citation CIK bug and tag edges as verified only when the counterparty name appears in the cited document; re-run the links variant with verified edges only.
 2. Input v3: pass the matched tickers explicitly (`mentions: CE [held], LIN [held]`) with or without edges, to separate entity resolution from supply-chain knowledge.
-3. If Jev is the production scorer, calibrate its threshold on this gold (precision has room: 2 false alerts at 82% recall).
+3. If Jev is the production scorer, calibrate its threshold on this gold (precision has room: 2 false alerts at 82% recall), then evaluate on a fresh held-out sample; performance on these 271 after tuning would be training-set performance.
 
 ## Reproduction
 
