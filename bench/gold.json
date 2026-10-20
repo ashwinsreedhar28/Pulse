@@ -1,0 +1,2457 @@
+{
+ "fixture": "articles_300.json",
+ "frozen_at": "2026-10-20T17:21:50+00:00",
+ "brief": "v2",
+ "brief_sha": "0557b06c179b",
+ "labelers": [
+  "ashwin",
+  "anthropic/claude-opus-5.5",
+  "openai/gpt-5.6-sol"
+ ],
+ "rule": "adjudicate when any pair differs by >=2 or the alert (>=4) flips; otherwise ashwin's label stands",
+ "n": 271,
+ "n_adjudicated": 89,
+ "n_queue": 89,
+ "exported_at": "2026-10-20T18:22:52.499Z",
+ "labels": {
+  "9707007": {
+   "score": 4,
+   "source": "adjudicated:kept",
+   "votes": [
+    4,
+    3,
+    4
+   ]
+  },
+  "9707021": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    3,
+    4
+   ]
+  },
+  "9707044": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    2
+   ]
+  },
+  "9707051": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    3
+   ]
+  },
+  "9707058": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    2,
+    4,
+    4
+   ]
+  },
+  "9707064": {
+   "score": 1,
+   "source": "adjudicated:kept",
+   "votes": [
+    1,
+    3,
+    3
+   ]
+  },
+  "9707159": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "9707211": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    3,
+    3
+   ]
+  },
+  "9707226": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "9707250": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    2
+   ]
+  },
+  "9707945": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    2
+   ]
+  },
+  "9708587": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    5,
+    5
+   ]
+  },
+  "9708592": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    4
+   ]
+  },
+  "9708635": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9708659": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    2,
+    2
+   ]
+  },
+  "9708678": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9708683": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9708774": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "9708798": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    2,
+    2
+   ]
+  },
+  "9708841": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    5,
+    5
+   ]
+  },
+  "9708846": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    2
+   ]
+  },
+  "9708913": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    3,
+    4
+   ]
+  },
+  "9708937": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "9709028": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "9709052": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709138": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709191": {
+   "score": 4,
+   "source": "adjudicated:kept",
+   "votes": [
+    4,
+    4,
+    2
+   ]
+  },
+  "9709215": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709306": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709354": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709373": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709378": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    2,
+    1
+   ]
+  },
+  "9709392": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709416": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    4,
+    4
+   ]
+  },
+  "9709445": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "9709469": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "9709507": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709517": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    5
+   ]
+  },
+  "9709560": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709584": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    2
+   ]
+  },
+  "9709603": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    4,
+    4
+   ]
+  },
+  "9709646": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709651": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709675": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709723": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709785": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    5,
+    5
+   ]
+  },
+  "9709790": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9709838": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    3
+   ]
+  },
+  "9709862": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    2
+   ]
+  },
+  "9709977": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    2,
+    1
+   ]
+  },
+  "9709996": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "9710092": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "9710116": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "9710135": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "9710207": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    4,
+    4
+   ]
+  },
+  "9710255": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    2
+   ]
+  },
+  "9710293": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9710359": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    3
+   ]
+  },
+  "9710370": {
+   "score": 1,
+   "source": "ashwin",
+   "votes": [
+    1,
+    1,
+    1
+   ]
+  },
+  "9710394": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "9710456": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9710461": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9710547": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "9710600": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9710619": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9710624": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    3
+   ]
+  },
+  "9710662": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9710691": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    5
+   ]
+  },
+  "9710787": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9710902": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "9710945": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9710964": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "9711108": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9711127": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9711132": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "9724168": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    4,
+    4
+   ]
+  },
+  "9725298": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    2
+   ]
+  },
+  "9742514": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9742840": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9743118": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9743142": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9743923": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9744388": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "9744661": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "9744714": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "9744829": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    2,
+    1
+   ]
+  },
+  "9744853": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    3,
+    4
+   ]
+  },
+  "9771434": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    2,
+    3
+   ]
+  },
+  "9852596": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    3
+   ]
+  },
+  "9852711": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "9854374": {
+   "score": 5,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    5,
+    5
+   ]
+  },
+  "9855366": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    4
+   ]
+  },
+  "9855898": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "9856545": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    2
+   ]
+  },
+  "9856593": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    1
+   ]
+  },
+  "9910371": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "9982476": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "9991769": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    3
+   ]
+  },
+  "10000445": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    3
+   ]
+  },
+  "10057150": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "10059019": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    3
+   ]
+  },
+  "10085206": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    2,
+    3
+   ]
+  },
+  "10098357": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    1,
+    1
+   ]
+  },
+  "10156017": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    3,
+    3
+   ]
+  },
+  "10165722": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "10328194": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    3
+   ]
+  },
+  "10387999": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "10411948": {
+   "score": 1,
+   "source": "ashwin",
+   "votes": [
+    1,
+    1,
+    1
+   ]
+  },
+  "10421848": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    3
+   ]
+  },
+  "10430136": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "10434641": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    2
+   ]
+  },
+  "10439170": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "10491333": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "10531361": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "10552506": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "10573699": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "10589716": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    2,
+    1
+   ]
+  },
+  "10590400": {
+   "score": 1,
+   "source": "ashwin",
+   "votes": [
+    1,
+    1,
+    1
+   ]
+  },
+  "10625191": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "10694708": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "10705482": {
+   "score": 3,
+   "source": "adjudicated:kept",
+   "votes": [
+    3,
+    1,
+    2
+   ]
+  },
+  "10705894": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    4,
+    4
+   ]
+  },
+  "10706239": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    2
+   ]
+  },
+  "10712019": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    3,
+    2
+   ]
+  },
+  "10719275": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "10732536": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "10732541": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "10743514": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    3
+   ]
+  },
+  "10754472": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    5,
+    5
+   ]
+  },
+  "10760688": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    3
+   ]
+  },
+  "10773585": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "10789669": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "10804598": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "10816527": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "10822024": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "10827411": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    2
+   ]
+  },
+  "10859890": {
+   "score": 1,
+   "source": "ashwin",
+   "votes": [
+    1,
+    1,
+    2
+   ]
+  },
+  "10927778": {
+   "score": 3,
+   "source": "adjudicated:kept",
+   "votes": [
+    3,
+    3,
+    1
+   ]
+  },
+  "10929767": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    2
+   ]
+  },
+  "10946316": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "10948892": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    3
+   ]
+  },
+  "10960320": {
+   "score": 2,
+   "source": "adjudicated:kept",
+   "votes": [
+    2,
+    3,
+    1
+   ]
+  },
+  "10968573": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "11018167": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "11040908": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11059628": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11070644": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    3
+   ]
+  },
+  "11072870": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11084214": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11084238": {
+   "score": 4,
+   "source": "adjudicated:kept",
+   "votes": [
+    4,
+    3,
+    4
+   ]
+  },
+  "11084243": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    1
+   ]
+  },
+  "11084444": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11084449": {
+   "score": 5,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    5,
+    5
+   ]
+  },
+  "11085134": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11085139": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    5
+   ]
+  },
+  "11085144": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    2,
+    3
+   ]
+  },
+  "11085187": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    5,
+    4
+   ]
+  },
+  "11085350": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11085369": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11085374": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11085398": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    3
+   ]
+  },
+  "11085537": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    3
+   ]
+  },
+  "11085743": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "11085762": {
+   "score": 5,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    5
+   ]
+  },
+  "11085829": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11086251": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11086270": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11086318": {
+   "score": 5,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    5,
+    5
+   ]
+  },
+  "11086323": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11086337": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11127942": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    1,
+    1
+   ]
+  },
+  "11130022": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11137743": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    3,
+    4
+   ]
+  },
+  "11245471": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11270684": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    3
+   ]
+  },
+  "11564114": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    2
+   ]
+  },
+  "11589122": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    1
+   ]
+  },
+  "11590368": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    2
+   ]
+  },
+  "11609591": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    4
+   ]
+  },
+  "11609593": {
+   "score": 4,
+   "source": "adjudicated:kept",
+   "votes": [
+    4,
+    3,
+    4
+   ]
+  },
+  "11609596": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    3
+   ]
+  },
+  "11676099": {
+   "score": 4,
+   "source": "adjudicated:kept",
+   "votes": [
+    4,
+    3,
+    4
+   ]
+  },
+  "11699683": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    3
+   ]
+  },
+  "11707586": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11708928": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    4
+   ]
+  },
+  "11708995": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11709019": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11710313": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    3,
+    4
+   ]
+  },
+  "11710337": {
+   "score": 1,
+   "source": "ashwin",
+   "votes": [
+    1,
+    1,
+    1
+   ]
+  },
+  "11710345": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    3
+   ]
+  },
+  "11710361": {
+   "score": 3,
+   "source": "adjudicated:kept",
+   "votes": [
+    3,
+    1,
+    1
+   ]
+  },
+  "11710452": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11710524": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11712024": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    3
+   ]
+  },
+  "11712115": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11712163": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11712254": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    3
+   ]
+  },
+  "11712278": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    4,
+    4
+   ]
+  },
+  "11712302": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    5
+   ]
+  },
+  "11712388": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    4,
+    4
+   ]
+  },
+  "11712441": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    2
+   ]
+  },
+  "11712580": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    2
+   ]
+  },
+  "11712671": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11712810": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11713040": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    4
+   ]
+  },
+  "11713155": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    2
+   ]
+  },
+  "11713203": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11713505": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11713711": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11713726": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    3
+   ]
+  },
+  "11713735": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11713754": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    3
+   ]
+  },
+  "11713759": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    2,
+    2
+   ]
+  },
+  "11713775": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    3
+   ]
+  },
+  "11713936": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11713989": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11714219": {
+   "score": 5,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    5,
+    5
+   ]
+  },
+  "11714473": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "11714678": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    3
+   ]
+  },
+  "11716093": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    2
+   ]
+  },
+  "11716740": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11718566": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11721662": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    4,
+    3
+   ]
+  },
+  "11721863": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11721871": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    2,
+    3
+   ]
+  },
+  "11721892": {
+   "score": 1,
+   "source": "ashwin",
+   "votes": [
+    1,
+    2,
+    2
+   ]
+  },
+  "11722007": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11722031": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    1
+   ]
+  },
+  "11722055": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11722079": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    2,
+    2
+   ]
+  },
+  "11723464": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11723488": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11723512": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11723579": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11723603": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    2
+   ]
+  },
+  "11723622": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11723627": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "11723742": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    3
+   ]
+  },
+  "11723766": {
+   "score": 5,
+   "source": "ashwin",
+   "votes": [
+    5,
+    4,
+    4
+   ]
+  },
+  "11723804": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11723857": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11723881": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11723905": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11723996": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    2
+   ]
+  },
+  "11724135": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11724245": {
+   "score": 4,
+   "source": "adjudicated:kept",
+   "votes": [
+    4,
+    3,
+    4
+   ]
+  },
+  "11724528": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11724552": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11724667": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    5,
+    5
+   ]
+  },
+  "11724681": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11724691": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    3
+   ]
+  },
+  "11724806": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    2,
+    1
+   ]
+  },
+  "11724921": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "11725012": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    3,
+    3
+   ]
+  },
+  "11725036": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    3,
+    4
+   ]
+  },
+  "11725060": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    3
+   ]
+  },
+  "11725250": {
+   "score": 3,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    3,
+    3
+   ]
+  },
+  "11725257": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    1,
+    2
+   ]
+  },
+  "11725266": {
+   "score": 2,
+   "source": "adjudicated:changed",
+   "votes": [
+    4,
+    2,
+    1
+   ]
+  },
+  "11725290": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    2,
+    2
+   ]
+  },
+  "11725314": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11725316": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    2,
+    3,
+    4
+   ]
+  },
+  "11725319": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    3,
+    4
+   ]
+  },
+  "11725338": {
+   "score": 4,
+   "source": "adjudicated:kept",
+   "votes": [
+    4,
+    3,
+    4
+   ]
+  },
+  "11725568": {
+   "score": 3,
+   "source": "ashwin",
+   "votes": [
+    3,
+    3,
+    3
+   ]
+  },
+  "11725817": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11725841": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11725889": {
+   "score": 4,
+   "source": "adjudicated:changed",
+   "votes": [
+    3,
+    4,
+    4
+   ]
+  },
+  "11725937": {
+   "score": 4,
+   "source": "ashwin",
+   "votes": [
+    4,
+    4,
+    4
+   ]
+  },
+  "11725961": {
+   "score": 2,
+   "source": "ashwin",
+   "votes": [
+    2,
+    1,
+    1
+   ]
+  },
+  "11726052": {
+   "score": 1,
+   "source": "adjudicated:changed",
+   "votes": [
+    5,
+    1,
+    1
+   ]
+  }
+ }
+}
