@@ -1,0 +1,222 @@
+[
+ {
+  "from": "AMKR",
+  "to": "NVDA",
+  "relationship": "supplier",
+  "note": "Amkor provides advanced packaging and test services for NVIDIA GPU chiplets and AI accelerator modules.",
+  "chain": "NVDA",
+  "form": "8-K",
+  "accession": "0001047127-26-000036",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/1047127/000104712726000036/0001047127-26-000036-index.htm"
+ },
+ {
+  "from": "LRCX",
+  "to": "ASML",
+  "relationship": "partner",
+  "note": "Lam and ASML co-develop patterning and etch process integration to address EUV stochastic defect mitigation.",
+  "chain": "ASML",
+  "form": "10-K",
+  "accession": "0000707549-26-000037",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/707549/000070754926000037/lrcx-20260628.htm"
+ },
+ {
+  "from": "KLIC",
+  "to": "COHU",
+  "relationship": "competitor",
+  "note": "Kulicke & Soffa and Cohu compete in the back-end semiconductor equipment market for packaging and handling systems.",
+  "chain": "KLIC",
+  "form": "10-K",
+  "accession": "0001437749-26-004339",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/21535/000143774926004339/cohu20251227_10k.htm"
+ },
+ {
+  "from": "SNPS",
+  "to": "CRDO",
+  "relationship": "supplier",
+  "note": "Synopsys EDA tools and SerDes IP are used in Credo's high-speed connectivity chip design flows.",
+  "chain": "CRDO",
+  "form": "10-Q",
+  "accession": "0000883241-26-000025",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/883241/000088324126000025/snps-20260731.htm"
+ },
+ {
+  "from": "PH",
+  "to": "BA",
+  "relationship": "supplier",
+  "note": "Parker's Aerospace Systems segment supplies airframe and engine components to Boeing for commercial and defense platforms.",
+  "chain": "PH",
+  "form": "10-K",
+  "accession": "0000076334-26-000105",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/76334/000007633426000105/ph-20260630.htm"
+ },
+ {
+  "from": "NVDA",
+  "to": "COHU",
+  "relationship": "customer",
+  "note": "Cohu's 10-K identifies GPU and AI accelerator test (including NVIDIA-type ASICs and xPUs) as a key growth market for its ATE systems.",
+  "chain": "COHU",
+  "form": "10-K",
+  "accession": "0001437749-26-004339",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/21535/000143774926004339/cohu20251227_10k.htm"
+ },
+ {
+  "from": "CE",
+  "to": "WLK",
+  "relationship": "competitor",
+  "note": "Celanese overlaps with Westlake in vinyl-based polymer and acetyl-chain product markets.",
+  "chain": "CE",
+  "form": "8-K",
+  "accession": "0001104659-26-097961",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/1307954/000110465926097961/0001104659-26-097961-index.htm"
+ },
+ {
+  "from": "GOOGL",
+  "to": "NTAP",
+  "relationship": "customer",
+  "note": "Google Cloud resells NetApp-powered managed storage, contributing to NTAP's Public Cloud segment growth.",
+  "chain": "NTAP",
+  "form": "10-K",
+  "accession": "0001193125-26-259683",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/1002047/000119312526259683/ntap-20260424.htm"
+ },
+ {
+  "from": "FORM",
+  "to": "AMKR",
+  "relationship": "supplier",
+  "note": "Amkor uses FormFactor probe card and wafer test solutions within its OSAT manufacturing workflow.",
+  "chain": "AMKR",
+  "form": "10-K",
+  "accession": "0001039399-26-000009",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/1039399/000103939926000009/form-20251227.htm"
+ },
+ {
+  "from": "SKHY",
+  "to": "ATEYY",
+  "relationship": "customer",
+  "note": "SK Hynix uses Advantest ATE for HBM and standard DRAM test, a growing segment driven by AI demand.",
+  "chain": "ATEYY",
+  "form": "8-K",
+  "accession": "0001628280-26-035071",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/6951/000162828026035071/0001628280-26-035071-index.htm"
+ },
+ {
+  "from": "FN",
+  "to": "CLS",
+  "relationship": "competitor",
+  "note": "Fabrinet and Celestica both compete as contract manufacturers serving networking equipment OEMs including Arista.",
+  "chain": "ANET",
+  "form": "10-K",
+  "accession": "0001408710-26-000028",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/1408710/000140871026000028/fn-20260626.htm"
+ },
+ {
+  "from": "MSFT",
+  "to": "SNPS",
+  "relationship": "customer",
+  "note": "Microsoft uses EDA toolchains including Synopsys for custom silicon design (Azure Maia AI accelerator).",
+  "chain": "SNPS",
+  "form": "10-K",
+  "accession": "0000883241-25-000028",
+  "filed_year": 2025,
+  "url": "https://www.sec.gov/Archives/edgar/data/883241/000088324125000028/0000883241-25-000028-index.htm"
+ },
+ {
+  "from": "BABA",
+  "to": "WB",
+  "relationship": "customer",
+  "note": "Alibaba is a major Weibo advertiser and previously held an ~31% equity stake in Weibo.",
+  "chain": "SINA",
+  "form": "8-K",
+  "accession": "0001609711-21-000126",
+  "filed_year": 2021,
+  "url": "https://www.sec.gov/Archives/edgar/data/1609711/000160971121000126/0001609711-21-000126-index.htm"
+ },
+ {
+  "from": "WCC",
+  "to": "VRT",
+  "relationship": "customer",
+  "note": "WESCO distributes Vertiv products to end-user data centers as an independent sales and distribution partner.",
+  "chain": "VRT",
+  "form": "10-Q",
+  "accession": "0000866374-26-000030",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/866374/000086637426000030/0000866374-26-000030-index.htm"
+ },
+ {
+  "from": "ADI",
+  "to": "VICR",
+  "relationship": "competitor",
+  "note": "Analog Devices competes with Vicor in power management products targeting AI and data center applications.",
+  "chain": "ADI",
+  "form": "10-K",
+  "accession": "0001193125-26-085102",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/751978/000119312526085102/vicr-20251231.htm"
+ },
+ {
+  "from": "NVDA",
+  "to": "JBL",
+  "relationship": "supplier",
+  "note": "NVIDIA GPUs and AI accelerators are integrated into AI infrastructure systems assembled by Jabil for hyperscaler customers.",
+  "chain": "JBL",
+  "form": "10-K",
+  "accession": "0001628280-25-045293",
+  "filed_year": 2025,
+  "url": "https://www.sec.gov/Archives/edgar/data/898293/000162828025045293/jbl-20250831.htm"
+ },
+ {
+  "from": "ONTO",
+  "to": "TSM",
+  "relationship": "supplier",
+  "note": "ONTO sells optical metrology and process control systems to TSMC for advanced node manufacturing including 3nm and 2nm.",
+  "chain": "ONTO",
+  "form": "10-K",
+  "accession": "0001193125-26-066937",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/704532/000119312526066937/onto-20260103.htm"
+ },
+ {
+  "from": "AMKR",
+  "to": "QCOM",
+  "relationship": "supplier",
+  "note": "Amkor provides outsourced assembly and test services for Qualcomm chipsets including mobile SoCs and modems.",
+  "chain": "QCOM",
+  "form": "10-K",
+  "accession": "0001047127-26-000014",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/1047127/000104712726000014/amkr-20251231.htm"
+ },
+ {
+  "from": "AMKR",
+  "to": "MU",
+  "relationship": "supplier",
+  "note": "Micron uses Amkor for outsourced back-end assembly and test of certain memory device packages including HBM.",
+  "chain": "MU",
+  "form": "10-K",
+  "accession": "0001047127-26-000014",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/1047127/000104712726000014/amkr-20251231.htm"
+ },
+ {
+  "from": "ADEA",
+  "to": "AMD",
+  "relationship": "supplier",
+  "note": "Adeia signed a multi-year semiconductor packaging IP license with AMD on March 9, 2026.",
+  "chain": "AMD",
+  "form": "10-K",
+  "accession": "0001193125-26-076549",
+  "filed_year": 2026,
+  "url": "https://www.sec.gov/Archives/edgar/data/1803696/000119312526076549/adea-20251231.htm"
+ }
+]
