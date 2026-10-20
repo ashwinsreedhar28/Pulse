@@ -2,7 +2,7 @@
 """Freeze the 300-article fixture for the value-chain eval (plan: claude/pulse-valuechain-eval-plan.md).
 
 Strata (keyword urgencyScore, excluding AI-scored rows): finance 80/80/80 at 1/3/5,
-general 30/30 at 1/3. Deterministic pseudo-shuffle (id*7919 % 10007) like quality.py's
+plus a counterparty-only slice (any score). General dropped. Deterministic pseudo-shuffle (id*7919 % 10007) like quality.py's
 freeze(). Excludes articles_50.json ids and near-duplicate titles / normalizedUrls.
 Each article gets `links`: up to 8 value-chain edges with source='filings' touching its
 matched tickers (ticker-kind nodes only), each with the filing citation. `stratum` is
@@ -18,7 +18,7 @@ FIXTURE = os.path.join(HERE, "articles_300.json")
 FIX50 = os.path.join(HERE, "articles_50.json")
 BRIEF = os.path.join(HERE, "brief_v2.txt")
 DEFAULT_DB = os.path.expanduser("~/Library/Application Support/pulse/pulse.db")
-STRATA = [("finance", 1, 80), ("finance", 3, 80), ("finance", 5, 80), ("general", 1, 30), ("general", 3, 30)]
+STRATA = [("finance", 1, 80), ("finance", 3, 80), ("finance", 5, 80)]  # general dropped 2026-10-20: no interests list, finance is the question
 CP_STRATUM_N = 40  # finance articles naming a filings-linked counterparty of a held name, but no held name; any keyword score
 MAX_LINKS = 8
 REL_VERB = {"supplier": "supplies", "customer": "is a customer of", "competitor": "competes with", "partner": "partners with"}

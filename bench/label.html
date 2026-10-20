@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pulse labeler</title>
+<style>
+  :root { --bg:#fafaf7; --fg:#1b1b1b; --muted:#6b6b6b; --card:#fff; --line:#e3e1da; --acc:#2b5aa8; --held:#1f6b3a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141414; --fg:#ececec; --muted:#9a9a9a; --card:#1e1e1e; --line:#333; --acc:#7aa2e8; --held:#6fcf8f; } }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 ui-sans-serif,system-ui,-apple-system,Helvetica,Arial; }
+  .wrap { max-width:860px; margin:0 auto; padding:16px; }
+  .top { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; color:var(--muted); font-size:13px; }
+  .top b { color:var(--fg) }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin-top:12px; }
+  h1 { font-size:20px; margin:0 0 8px; line-height:1.3 }
+  .sum { font-size:15px; color:var(--fg); }
+  .links { margin-top:12px; font-family:ui-monospace,Menlo,monospace; font-size:13px; white-space:pre-wrap; color:var(--fg); border-top:1px dashed var(--line); padding-top:10px; }
+  .links .h { color:var(--held); font-weight:600 }
+  .links .lab { font-family:inherit; color:var(--muted); font-size:12px; margin-bottom:4px }
+  .scale { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-top:14px; }
+  .scale button { font:inherit; padding:10px 6px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg); cursor:pointer; text-align:left; }
+  .scale button b { display:block; font-size:18px }
+  .scale button small { color:var(--muted); font-size:12px; line-height:1.25; display:block }
+  .scale button.on { border-color:var(--acc); box-shadow:0 0 0 2px var(--acc) inset }
+  details { margin-top:10px; color:var(--muted); font-size:13px }
+  details pre { white-space:pre-wrap; font:13px/1.4 ui-monospace,Menlo,monospace; color:var(--fg); }
+  .bar { height:4px; background:var(--line); border-radius:2px; margin-top:10px; overflow:hidden }
+  .bar i { display:block; height:100%; background:var(--acc); width:0 }
+  .ctl { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center }
+  .ctl button, .ctl a { font:inherit; font-size:13px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); cursor:pointer; text-decoration:none }
+  .ctl input { font:inherit; font-size:13px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); flex:1; min-width:200px }
+  kbd { font:12px ui-monospace,Menlo,monospace; border:1px solid var(--line); border-radius:4px; padding:0 4px; color:var(--muted) }
+  .done { text-align:center; padding:40px 0; color:var(--muted) }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <span><b id="pos">–</b> of <span id="n">–</span> · labeled <b id="cnt">0</b></span>
+    <span><kbd>1</kbd>–<kbd>5</kbd> score · <kbd>←</kbd> back · <kbd>→</kbd> skip · <kbd>n</kbd> note</span>
+  </div>
+  <div class="bar"><i id="bar"></i></div>
+
+  <div class="card" id="card">
+    <h1 id="title"></h1>
+    <div class="sum" id="summary"></div>
+    <div class="links" id="links"></div>
+    <div class="scale" id="scale">
+      <button data-s="1"><b>1</b><small>Ignore: unrelated</small></button>
+      <button data-s="2"><b>2</b><small>Routine: no held or linked name</small></button>
+      <button data-s="3"><b>3</b><small>Glance: passing mention, macro touching its market, routine at linked co.</small></button>
+      <button data-s="4"><b>4</b><small>Look today: substantive on a held name, or material at a linked co.</small></button>
+      <button data-s="5"><b>5</b><small>Act today: material to a held name</small></button>
+    </div>
+    <div class="ctl">
+      <input id="note" placeholder="note (optional, press n to focus, Enter to save)">
+      <button id="exp">export labels</button>
+      <button id="reset">reset</button>
+    </div>
+    <details><summary>brief v2 (what you're held to)</summary><pre id="brief"></pre></details>
+    <details><summary>holdings list</summary><pre id="holdings"></pre></details>
+  </div>
+  <div class="done" id="done" hidden>All labeled. Export, then send me <code>labels_ashwin.json</code>.</div>
+</div>
+<script>
+(async () => {
+  const FX = 'articles_300.json';
+  const KEY = 'pulse-labels-v2';
+  const fx = await (await fetch(FX)).json();
+  const arts = fx.articles.filter(a => a.domain === 'finance');
+  // deterministic shuffle (mulberry32 on fixture sha-ish seed) so order is reproducible but not the stratum order
+  const seed = [...(fx.frozen_at || 'x')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const rnd = (s => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; })(seed);
+  for (let i = arts.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arts[i], arts[j]] = [arts[j], arts[i]]; }
+
+  let labels = {};
+  try { labels = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(labels)); } catch {} };
+
+  const $ = id => document.getElementById(id);
+  $('n').textContent = arts.length;
+  // brief: rules only (ticker list shown separately)
+  const sys = fx.system_prompt.finance;
+  $('brief').textContent = sys.slice(sys.indexOf('Score 1-5')) + '\n\n' + fx.system_prompt.finance_links_block.replace('{links}', '<links as shown per article>') + '\n\n' + fx.system_prompt.suffix;
+  $('holdings').textContent = fx.prompt_lists.tickers.join('\n');
+
+  let i = 0;
+  // start at first unlabeled
+  while (i < arts.length && labels[arts[i].id]) i++;
+
+  function render() {
+    const a = arts[i];
+    if (!a) { $('card').hidden = true; $('done').hidden = false; return; }
+    $('card').hidden = false; $('done').hidden = true;
+    $('pos').textContent = i + 1;
+    $('cnt').textContent = Object.keys(labels).length;
+    $('bar').style.width = (100 * Object.keys(labels).length / arts.length) + '%';
+    $('title').textContent = a.title;
+    $('summary').textContent = a.summary || '';
+    const lt = a.links_text || 'none';
+    $('links').innerHTML = '<div class="lab">Value-chain links for this article (from the companies\' SEC filings):</div>' +
+      lt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\[held\]/g, '<span class="h">[held]</span>');
+    const cur = labels[a.id];
+    document.querySelectorAll('#scale button').forEach(b => b.classList.toggle('on', cur && +b.dataset.s === cur.score));
+    $('note').value = cur?.note || '';
+  }
+  function set(score) {
+    const a = arts[i]; if (!a) return;
+    labels[a.id] = { score, note: $('note').value || undefined, at: new Date().toISOString() };
+    save(); i++; render();
+  }
+  document.querySelectorAll('#scale button').forEach(b => b.onclick = () => set(+b.dataset.s));
+  document.addEventListener('keydown', e => {
+    if (e.target === $('note')) { if (e.key === 'Enter') { const a = arts[i]; if (a && labels[a.id]) { labels[a.id].note = $('note').value; save(); } $('note').blur(); } return; }
+    if (e.key >= '1' && e.key <= '5') set(+e.key);
+    else if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+    else if (e.key === 'ArrowRight' && i < arts.length) { i++; render(); }
+    else if (e.key === 'n') { e.preventDefault(); $('note').focus(); }
+  });
+  $('exp').onclick = () => {
+    const out = { fixture: FX, frozen_at: fx.frozen_at, brief: fx.brief, brief_sha: fx.brief_sha, labeler: 'ashwin',
+                  saw_links: true, exported_at: new Date().toISOString(), n: Object.keys(labels).length, labels };
+    const u = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' }));
+    const el = document.createElement('a'); el.href = u; el.download = 'labels_ashwin.json'; el.click();
+  };
+  $('reset').onclick = () => { if (confirm('Clear all labels?')) { labels = {}; save(); i = 0; render(); } };
+  render();
+})();
+</script>
+</body>
+</html>
