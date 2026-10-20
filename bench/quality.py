@@ -148,6 +148,9 @@ def freeze(a):
           f"finance system prompt {len(fx['system_prompt']['finance'])} chars")
 
 
+_VERIFIED = None
+
+
 def render_fixture_system(fx, art, links):
     """v1 fixtures (articles_50.json) carry one system prompt per domain. v2 fixtures
     (articles_300.json, brief v2) carry the finance brief, a links block and the JSON suffix
@@ -166,6 +169,12 @@ def render_fixture_system(fx, art, links):
         held = {t.split(" ")[0] for t in fx["prompt_lists"]["tickers"]}
         ments = [f"{t} [held]" if t in held else t for t in art.get("tickers", []) if t and not t.startswith("__")]
         parts.append("Companies this article mentions: " + (", ".join(ments) if ments else "none identified"))
+    elif links == "verified":
+        # verified edges only (bench/links_verified.json from verify_edges.py); same block, same format
+        global _VERIFIED
+        if _VERIFIED is None:
+            _VERIFIED = json.load(open(os.path.join(HERE, "links_verified.json"), encoding="utf-8"))["links"]
+        parts.append(sp["finance_links_block"].replace("{links}", _VERIFIED.get(str(art["id"])) or "none"))
     elif links:
         parts.append(sp["finance_links_block"].replace("{links}", art.get("links_text") or "none"))
     parts.append(sp["suffix"])
@@ -557,7 +566,7 @@ def run(a):
             "fixture_sha": fx["_sha"], **pf}
 
     def one(art):
-        system = render_fixture_system(fx, art, "v1" if getattr(a, "brief", "") == "v1" else ("mentions" if getattr(a, "mentions", False) else getattr(a, "links", False)))
+        system = render_fixture_system(fx, art, "v1" if getattr(a, "brief", "") == "v1" else ("mentions" if getattr(a, "mentions", False) else ("verified" if getattr(a, "links_verified", False) else getattr(a, "links", False))))
         try:
             res = fn(a, system, render_user(art))
         except requests.RequestException as e:
@@ -573,7 +582,7 @@ def run(a):
                "text": (res.get("text") or "")[:300].replace("\n", "\\n"),
                "error": res.get("error", ""), "est_cost_usd": row_cost(a, pf, res),
                "extra": json.dumps({**res.get("extra", {}), "brief": "v1" if getattr(a, "brief", "") == "v1" else fx.get("brief", "v1"),
-                                    "links": 2 if getattr(a, "mentions", False) else (1 if getattr(a, "links", False) else 0),
+                                    "links": 2 if getattr(a, "mentions", False) else (3 if getattr(a, "links_verified", False) else (1 if getattr(a, "links", False) else 0)),
                                     "fixture": os.path.basename(FIXTURE)}, ensure_ascii=False)}
         return row
 
@@ -836,6 +845,8 @@ def main():
     pr.add_argument("--fixture", default=None, help=f"fixture file (default {os.path.basename(FIXTURE)}); e.g. articles_300.json")
     pr.add_argument("--brief", choices=["v1"], default=None,
                     help="v2 fixtures: run with the September brief (v1) instead; no links block")
+    pr.add_argument("--links-verified", action="store_true",
+                    help="v2 fixtures: links block built from verified edges only (bench/links_verified.json)")
     pr.add_argument("--mentions", action="store_true",
                     help="v2 fixtures: ablation, append the matched tickers (with [held] tags) but no edges")
     pr.add_argument("--links", action="store_true",

@@ -12,7 +12,7 @@ from collections import defaultdict, Counter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ALERT = 4
-LINKS_LABEL = {0: "no", 1: "yes", 2: "mentions only"}
+LINKS_LABEL = {0: "no", 1: "yes", 2: "mentions only", 3: "verified only"}
 
 
 def mcnemar_exact(b, c):
@@ -108,7 +108,7 @@ def main():
     out.append("| model (B vs A) | alerts right: A only | B only | both | neither | McNemar p (accuracy) | exact A→B | MAE A→B | recall on positives fixed/broken, p |")
     out.append("|---|---|---|---|---|---|---|---|---|")
     models = sorted({k[0] for k in full if k[1] == "v2"})
-    pairs = [(0, 1, "links vs none"), (0, 2, "mentions vs none"), (2, 1, "links vs mentions")]
+    pairs = [(0, 1, "links vs none"), (0, 2, "mentions vs none"), (2, 1, "links vs mentions"), (0, 3, "verified vs none"), (3, 1, "all links vs verified")]
     for mname in models:
       for a0, a1, lab in pairs:
         k0, k1 = (mname, "v2", a0), (mname, "v2", a1)
