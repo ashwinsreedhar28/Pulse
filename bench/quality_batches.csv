@@ -13,3 +13,12 @@ ee57a1ea,2026-09-27T21:18:14+00:00,openrouter,deepseek/deepseek-v4.1-flash,,open
 f8c01662,2026-09-27T21:19:22+00:00,openrouter,moonshotai/kimi-k3,,openrouter,,,1,50,33,23,67851,moonshotai/kimi-k3,,per_m_tokens,3.0,15.0,,"https://openrouter.ai/api/v1/models pricing for moonshotai/kimi-k3, read 2026-09-27T21:18:14+00:00",0.095865,7e6005269552,
 ecd7d2ad,2026-09-27T21:21:57+00:00,openrouter,deepseek/deepseek-v4.1-flash,reasoning-off,openrouter,,,1,50,50,50,52533,deepseek/deepseek-v4.1-flash,,per_m_tokens,0.03483,0.6,,"https://openrouter.ai/api/v1/models pricing for deepseek/deepseek-v4.1-flash, read 2026-09-27T21:21:04+00:00",0.001607,7e6005269552,
 9a0ac311,2026-09-27T21:24:37+00:00,openrouter,moonshotai/kimi-k3,reasoning-off,openrouter,,,1,50,50,50,160376,moonshotai/kimi-k3,,per_m_tokens,3.0,15.0,,"https://openrouter.ai/api/v1/models pricing for moonshotai/kimi-k3, read 2026-09-27T21:21:57+00:00",0.095736,7e6005269552,
+f93d49a5,2026-10-13T19:05:10+00:00,jev,jev-1.13.0,probe,typesafe,,,1,3,3,3,837,jev-1.13.0,,,,,,,,7e6005269552,
+9bbea759,2026-10-13T19:09:37+00:00,clef,@cf/cloudflare/clef-flash,probe,workers-ai,,,1,3,3,3,1505,clef-flash,,,,,,,,7e6005269552,
+47624194,2026-10-13T19:22:07+00:00,typical,OzLabs/typical-medium,probe,runpod-pod,,,1,3,3,3,1830,OzLabs/typical-medium,,,,,,,,7e6005269552,
+e9d9ea99,2026-10-13T19:23:47+00:00,typical,OzLabs/typical-medium,probe,runpod-pod,,,1,3,3,3,2573,OzLabs/typical-medium,,,,,,,,7e6005269552,
+6647f651,2026-10-13T19:25:43+00:00,typical,OzLabs/typical-medium,probe,runpod-pod,,,1,3,3,3,2637,OzLabs/typical-medium,,,,,,,,7e6005269552,
+6ae47cca,2026-10-13T19:26:34+00:00,typical,OzLabs/typical-medium,probe,runpod-pod,,,1,3,3,3,2507,OzLabs/typical-medium,,,,,,,,7e6005269552,
+bdfbc22a,2026-10-13T19:27:10+00:00,jev,jev-1.13.0,,typesafe,,,1,50,50,50,13741,jev-1.13.0,,per_m_tokens,0.042,0.0,,"typesafe.ai pricing, read 2026-10-13",0.001501,7e6005269552,
+cad64126,2026-10-13T19:27:38+00:00,clef,@cf/cloudflare/clef-flash,,workers-ai,,,1,50,50,50,28714,clef-flash,,per_m_tokens,0.09,0.0,,"openrouter.ai/cloudflare/clef-flash, read 2026-10-13",0.002588,7e6005269552,
+220e7865,2026-10-13T19:28:08+00:00,typical,OzLabs/typical-medium,,runpod-pod,RTX 4090,,1,50,50,50,29581,OzLabs/typical-medium,,,,,,,,7e6005269552,"pod 9ahvy4iq0scfm7, typical_shim.py, instructions_in_state"
