@@ -1,3 +1,6 @@
+// ARCHIVED 2026-10-20: not mounted. To restore, re-add the 'graph' view (tab + render branch +
+// import) in StocksPage in App.tsx. graph:getMarketGraph IPC and marketGraphService are kept
+// (MarketAnalytics uses getMarketGraphStats).
 // Whole-market relationship graph — an orbitable 3D view over everything
 // Pulse knows about how companies connect. Companies are stars; supplier,
 // competitor and partner links are the structure between them.

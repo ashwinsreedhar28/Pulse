@@ -1,0 +1,6 @@
+# Python env for scripts/timestral_worker.py (default ~/.venvs/timestral, override PULSE_TIMESTRAL_PYTHON).
+#   python3.12 -m venv ~/.venvs/timestral && ~/.venvs/timestral/bin/pip install -r scripts/timestral_requirements.txt
+torch==2.14.1
+numpy==2.5.4
+timestral @ git+https://github.com/mistralai/timestral.git@a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff
+google-cloud-bigquery==3.46.2

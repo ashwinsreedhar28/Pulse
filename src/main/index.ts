@@ -1,3 +1,6 @@
+import { startNewsVolumeScheduler, stopNewsVolumeScheduler } from './services/newsVolumeService'
+import { startPriceForecastScheduler, stopPriceForecastScheduler } from './services/priceForecastService'
+import { stopTimestralWorker } from './services/timestralWorker'
 import {
   app,
   BrowserWindow,
@@ -691,6 +694,11 @@ app.whenReady().then(async () => {
   // and EPS-Δ 4Q dots on the Value Chain page never drift more than
   // ~30 min stale during a long session.
   startEarningsScheduler()
+  // GDELT news volume per held ticker (BigQuery via the Timestral worker).
+  // First call is 3 min after boot, then every 6 h; see newsVolumeService.
+  startNewsVolumeScheduler()
+  // Forward forecast log: hourly outside 09:30-17:00 ET; first run 6 min after boot.
+  startPriceForecastScheduler()
   // Analyst consensus (forward EPS, price targets, upgrade/downgrade tally)
   // on its own slow cadence — weekly per-symbol refresh; nothing user-visible
   // changes more often than that.
@@ -841,6 +849,9 @@ app.on('will-quit', () => {
   stopStocksScheduler()
   stopFinancialsScheduler()
   stopEarningsScheduler()
+  stopNewsVolumeScheduler()
+  stopPriceForecastScheduler()
+  stopTimestralWorker()
   stopEstimatesScheduler()
   stopSecFilingsScheduler()
   stopEarningsReleasesScheduler()

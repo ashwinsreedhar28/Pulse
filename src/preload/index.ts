@@ -384,6 +384,155 @@ export interface MarketSectorFlow {
   examples: Array<{ from: string; to: string }>
 }
 
+// News volume forecast board (Stocks > Analytics). Daily GDELT GKG doc
+// counts per held ticker (UTC days) and Timestral-28M next-day quantiles.
+export interface NewsVolumeBoardRow {
+  symbol: string
+  recent: Array<number | null>
+  mean28: number | null
+  yesterday: {
+    day: string
+    actual: number
+    q10: number
+    q50: number
+    q90: number
+    pct: number
+    surge: boolean
+  } | null
+  today: { day: string; q10: number; q50: number; q90: number } | null
+}
+
+export interface NewsVolumeSnapshotDay {
+  day: string
+  count: number | null
+  q10: number | null
+  q50: number | null
+  q90: number | null
+  surge: boolean
+}
+
+export interface NewsVolumeSnapshot {
+  symbol: string
+  available: boolean
+  reason: string | null
+  model: string
+  asOf: string | null
+  days: NewsVolumeSnapshotDay[]
+  today: { day: string; q10: number; q50: number; q90: number } | null
+  outlook: Array<{ day: string; q10: number; q50: number; q90: number }>
+  calib: { n: number; coverage: number | null; surges: Array<{ day: string; count: number; q90: number }> }
+  mean28: number | null
+}
+
+export interface Range80 {
+  q10: number
+  q50: number
+  q90: number
+}
+
+export interface PriceForecastDay {
+  day: string
+  close: number
+  volume: number | null
+  move: number | null // |100 * log return|, percent
+  ret: number | null
+  volumeFc: Range80 | null // shares
+  moveFc: Range80 | null // percent
+  earnings: boolean
+}
+
+// Nearest-expiry ATM straddle vs the model's close band at the same horizon.
+// impliedHalfPct / modelHalfPct: half-width of the 80% range in log percent.
+export interface PriceForecastOptions {
+  expiry: string
+  sessions: number
+  basis: 'straddle' | 'iv'
+  impliedHalfPct: number
+  modelHalfPct: number | null
+  modelSource: 'timestral' | 'ewma' | null
+  ratio: number | null
+  lo: number
+  hi: number
+  underlying: number | null
+  fetchedAt: number
+}
+
+export interface ScorecardRow {
+  target: 'lnV' | 'absr' | 'lnC'
+  horizon: string // '1'..'5' or 'expiry'
+  method: string
+  label: string
+  vs: string | null
+  vsLabel: string | null
+  n: number
+  coverage: number | null
+  meanCrps: number | null
+  pairs: number
+  skill: number | null
+  tickersWon: number
+  tickersLost: number
+}
+
+export interface ForecastScorecard {
+  since: string | null
+  logged: number
+  scored: number
+  pending: number
+  lastScored: string | null
+  nextPending: string | null
+  tickers: number
+  rows: ScorecardRow[]
+  status: { running: boolean; lastRunAt: number | null; lastError: string | null; lastLogged: number; lastTickers: number }
+}
+
+export interface PriceForecastSnapshot {
+  symbol: string
+  available: boolean
+  reason: string | null
+  model: string
+  config: string
+  asOf: string | null
+  next: {
+    day: string
+    volume: Range80 | null
+    move: Range80 | null
+    moveConfig: string
+    price: { lo: number; hi: number; lastClose: number } | null
+    earnings: boolean
+    nextEarnings: string | null
+  } | null
+  // Close band for the next 10 sessions: h=1-5 Timestral-209M on log close (Exp 5
+  // holdout pass at every horizon; no direction, so `mid` is never drawn), h=6-10
+  // EWMA(0.94) sqrt(h), untested.
+  priceFan: Array<{ day: string; lo: number; mid: number; hi: number; source: 'timestral' | 'ewma' }>
+  options: PriceForecastOptions | null
+  logged: number // forecasts written to the forward log by this build
+  days: PriceForecastDay[]
+  calib: {
+    n: number
+    volumeCoverage: number | null
+    moveCoverage: number | null
+    volumeAboveQ90: number
+    moveAboveQ90: number
+  }
+  ewmaSigma: number | null
+}
+
+export interface NewsVolumeBoard {
+  source: string
+  model: string
+  asOf: string | null
+  rows: NewsVolumeBoardRow[]
+  surges: number
+  status: {
+    running: boolean
+    lastRunAt: number | null
+    lastError: string | null
+    disabled: string | null
+    missingPatterns: string[]
+  }
+}
+
 export interface MarketGraphStats {
   totals: {
     nodes: number
@@ -1687,6 +1836,16 @@ const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>
 
 const api = {
+  newsVolume: {
+    board: (): Promise<NewsVolumeBoard> => invoke<NewsVolumeBoard>('newsvol:board'),
+    refresh: (): Promise<NewsVolumeBoard> => invoke<NewsVolumeBoard>('newsvol:refresh'),
+    snapshot: (symbol: string): Promise<NewsVolumeSnapshot> => invoke<NewsVolumeSnapshot>('newsvol:ticker', symbol)
+  },
+  priceForecast: {
+    snapshot: (symbol: string): Promise<PriceForecastSnapshot> => invoke<PriceForecastSnapshot>('pricefc:ticker', symbol),
+    scorecard: (): Promise<ForecastScorecard> => invoke<ForecastScorecard>('pricefc:scorecard'),
+    logNow: (): Promise<ForecastScorecard> => invoke<ForecastScorecard>('pricefc:logNow')
+  },
   app: {
     getTheme: () => invoke<'dark' | 'light'>('app:getTheme'),
     rendererReady: () => invoke<void>('app:rendererReady'),

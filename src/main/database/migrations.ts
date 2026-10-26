@@ -2104,5 +2104,100 @@ export const migrations: Migration[] = [
         )
       }
     }
+  },
+  {
+    version: 64,
+    name: 'news volume (GDELT GKG daily counts) + Timestral forecasts',
+    // Daily article counts per held ticker from GDELT GKG org tags, refreshed
+    // from BigQuery by newsVolumeService. Pulse's own corpus can't supply a
+    // daily series: it only ingests while the app runs (7 ingest days between
+    // 2026-09-07 and 10-20), so its per-day counts track launches, not news.
+    // `day` is a UTC day; `norm` is every GKG doc that day. A day GDELT has no
+    // docs for (an outage) has no row, never a zero.
+    // Forecasts: one row per (symbol, targetDay, model); quantiles/levels JSON.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS news_volume_daily (
+          source TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          day TEXT NOT NULL,
+          count INTEGER NOT NULL,
+          norm INTEGER,
+          fetchedAt INTEGER NOT NULL,
+          PRIMARY KEY (source, symbol, day)
+        );
+        CREATE INDEX IF NOT EXISTS idx_news_volume_daily_day
+          ON news_volume_daily(source, day);
+        CREATE TABLE IF NOT EXISTS news_volume_forecasts (
+          source TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          targetDay TEXT NOT NULL,
+          model TEXT NOT NULL,
+          quantiles TEXT NOT NULL,
+          levels TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          PRIMARY KEY (source, symbol, targetDay, model)
+        );
+      `)
+    }
+  },
+  {
+    version: 65,
+    name: 'daily price bars (Nasdaq) + Timestral price forecasts',
+    // Per-ticker daily OHLCV from api.nasdaq.com (split-adjusted, not
+    // dividend-adjusted) and next-session forecasts of log volume / |return|
+    // (priceForecastService). `config` names the validated configuration
+    // (PREREG_EXP4.md base = 'B') so later arms can coexist with it.
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS price_bars_daily (
+          symbol TEXT NOT NULL,
+          day TEXT NOT NULL,
+          open REAL,
+          high REAL,
+          low REAL,
+          close REAL NOT NULL,
+          volume REAL,
+          fetchedAt INTEGER NOT NULL,
+          PRIMARY KEY (symbol, day)
+        );
+        CREATE TABLE IF NOT EXISTS price_forecasts (
+          symbol TEXT NOT NULL,
+          targetDay TEXT NOT NULL,
+          target TEXT NOT NULL,
+          config TEXT NOT NULL,
+          quantiles TEXT NOT NULL,
+          levels TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          PRIMARY KEY (symbol, targetDay, target, config)
+        );
+      `)
+    }
+  },
+  {
+    version: 66,
+    name: 'forward forecast log for the live scorecard',
+    // Every StockDetail forecast made before its target session opens, written
+    // once (INSERT OR IGNORE) and never revised; forecastScorecardService scores
+    // them as daily bars arrive. horizon = sessions ahead; target lnV | absr |
+    // lnC; method names the model or baseline (timestral, empirical60, ewma-rw,
+    // timestral-209m, options, ...).
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS forecast_log (
+          symbol TEXT NOT NULL,
+          targetDay TEXT NOT NULL,
+          horizon INTEGER NOT NULL,
+          target TEXT NOT NULL,
+          method TEXT NOT NULL,
+          asOfDay TEXT NOT NULL,
+          madeAt INTEGER NOT NULL,
+          quantiles TEXT NOT NULL,
+          levels TEXT NOT NULL,
+          PRIMARY KEY (symbol, targetDay, horizon, target, method)
+        );
+        CREATE INDEX IF NOT EXISTS idx_forecast_log_target ON forecast_log(targetDay);
+      `)
+    }
   }
 ]

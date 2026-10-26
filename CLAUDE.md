@@ -35,6 +35,17 @@ the real finance scoring prompt is ~730-860 tokens (75-ticker list), not the
 140 the first cold-start runs assumed, and the Ollama scoring path had never
 written a single result in the live corpus (see BUGS.md).
 
+Since then (2026-10-20): the Stocks page **Graph** tab is archived (unmounted; `MarketGraph.tsx`
+and the `graph:*` IPC are kept, Analytics still uses `getMarketGraphStats`). **News volume + Timestral (2026-10-21):** Stocks > Analytics shows a news-volume forecast panel.
+Data is GDELT GKG org-tag doc counts per held ticker per UTC day (`news_volume_daily`, v64), pulled from
+BigQuery by `newsVolumeService` through the Python worker `scripts/timestral_worker.py` (env
+`~/.venvs/timestral` or `PULSE_TIMESTRAL_PYTHON`, pinned in `scripts/timestral_requirements.txt`; auth is
+gcloud Application Default Credentials with a quota project). Backfill from 2017 once (~70 GB scan, capped
+at 120 GB, at most once a day), then the last 3 days every 6 h (capped at 5 GB). Timestral-28M forecasts
+the next UTC day (`news_volume_forecasts`). Patterns live in `src/data/gdeltOrgPatterns.json`; a newly held
+ticker needs an entry there. Pulse's own article counts are NOT a usable daily series (it only ingests while
+running). Backtest: `bench/timestral_newsflow.py`, `bench/NEWSFLOW_RESULTS.md`.
+
 **Read `trading/PHASE_A1_RESULT.md` with the market_bars caveat in mind** — its
 5-day excess returns were computed on bars that were monthly or quarterly for
 most symbols, so the MARGINAL verdict needs re-deriving once the corrected

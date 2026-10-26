@@ -11,8 +11,9 @@ import { FindBar } from './components/FindBar'
 import { ResearchPage } from './components/ResearchPage'
 import { CollapseChevron, useCollapsedSection } from './components/collapseUI'
 import { ValueChain } from './components/ValueChain'
-import MarketGraph from './components/MarketGraph'
 import MarketAnalytics from './components/MarketAnalytics'
+import NewsVolumePanel from './components/NewsVolumePanel'
+import ForecastScorecardPanel from './components/ForecastScorecardPanel'
 import { UnifiedValueChainCard } from './components/UnifiedValueChainCard'
 import { ValueChainDiagram } from './components/ValueChainDiagram'
 import { MorningBrief } from './components/MorningBrief'
@@ -26,6 +27,8 @@ import {
 } from './components/financialsFormat'
 import { SecFilingsSection } from './components/SecFilingsSection'
 import { OptionsSnapshotSection } from './components/OptionsSnapshotSection'
+import { NewsForecastSection } from './components/NewsForecastSection'
+import { PriceForecastSection } from './components/PriceForecastSection'
 import { EarningsReleaseSection } from './components/EarningsReleaseSection'
 import { CollapsibleSection } from './components/CollapsibleSection'
 import { WhyThisMatters } from './components/WhyThisMatters'
@@ -3163,7 +3166,7 @@ function StocksPage({
   const [busy, setBusy] = useState(false)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
   const [selectedTickerId, setSelectedTickerId] = useState<number | null>(null)
-  const [view, setView] = useState<'holdings' | 'chain' | 'graph' | 'analytics'>('holdings')
+  const [view, setView] = useState<'holdings' | 'chain' | 'analytics'>('holdings')
 
   // Opening a symbol from the graph or the analytics rankings.
   //
@@ -3295,7 +3298,6 @@ function StocksPage({
           <div className="flex items-center gap-1 rounded-full bg-surface-1 ring-1 ring-edge/60 p-0.5">
             <StocksViewTab label="Holdings" active={view === 'holdings'} onClick={() => setView('holdings')} />
             <StocksViewTab label="Value Chain" active={view === 'chain'} onClick={() => setView('chain')} />
-            <StocksViewTab label="Graph" active={view === 'graph'} onClick={() => setView('graph')} />
             <StocksViewTab
               label="Analytics"
               active={view === 'analytics'}
@@ -3375,12 +3377,11 @@ function StocksPage({
           </CollapsibleSection>
         </div>
         {view === 'analytics' ? (
-          <MarketAnalytics onSelectSymbol={openGraphSymbol} />
-        ) : view === 'graph' ? (
-          // Whole-universe relationship graph. Quotes are passed for the
-          // live change tint only — MarketGraph never lays out from them,
-          // so a 60s tick recolours without re-running the simulation.
-          <MarketGraph quotes={quotes} onSelectSymbol={openGraphSymbol} />
+          <>
+            <NewsVolumePanel onSelectSymbol={openGraphSymbol} />
+            <ForecastScorecardPanel />
+            <MarketAnalytics onSelectSymbol={openGraphSymbol} />
+          </>
         ) : view === 'chain' ? (
           <ValueChain
             tickers={tickers}
@@ -4125,6 +4126,8 @@ function StockDetail({
             </div>
           </section>
 
+          <PriceForecastSection symbol={ticker.symbol} />
+
           {fundamentals && (
             <CollapsibleSection title="Key stats" meta="via Yahoo Finance" defaultOpen>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-5 gap-y-3">
@@ -4205,6 +4208,8 @@ function StockDetail({
           )}
 
           <SecFilingsSection symbol={ticker.symbol} />
+
+          <NewsForecastSection symbol={ticker.symbol} />
 
           <OptionsSnapshotSection symbol={ticker.symbol} />
 

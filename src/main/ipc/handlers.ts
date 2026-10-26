@@ -1274,6 +1274,35 @@ export function registerDbIpc(): void {
     const { getMarketGraphStats } = await import('../services/marketGraphService')
     return getMarketGraphStats()
   })
+  // News volume (GDELT) + Timestral forecasts for the Analytics tab.
+  ipcMain.handle('newsvol:board', async () => {
+    const { getNewsVolumeBoard } = await import('../services/newsVolumeService')
+    return getNewsVolumeBoard()
+  })
+  ipcMain.handle('newsvol:ticker', async (_e, symbol: string) => {
+    const { getNewsVolumeSnapshot } = await import('../services/newsVolumeService')
+    return getNewsVolumeSnapshot(String(symbol))
+  })
+  ipcMain.handle('newsvol:refresh', async () => {
+    const { refreshNewsVolume, getNewsVolumeBoard } = await import('../services/newsVolumeService')
+    await refreshNewsVolume()
+    return getNewsVolumeBoard()
+  })
+  // Next-session price/volume forecast for StockDetail (priceForecastService).
+  ipcMain.handle('pricefc:ticker', async (_e, symbol: string) => {
+    const { getPriceForecastSnapshot } = await import('../services/priceForecastService')
+    return getPriceForecastSnapshot(String(symbol))
+  })
+  ipcMain.handle('pricefc:scorecard', async () => {
+    const { getForecastScorecard } = await import('../services/forecastScorecardService')
+    return getForecastScorecard()
+  })
+  ipcMain.handle('pricefc:logNow', async () => {
+    const { runForecastLog } = await import('../services/priceForecastService')
+    const { getForecastScorecard } = await import('../services/forecastScorecardService')
+    await runForecastLog()
+    return getForecastScorecard()
+  })
   ipcMain.handle('graph:getMarketGraph', async () => {
     const { getMarketGraph } = await import('../services/marketGraphService')
     return getMarketGraph()

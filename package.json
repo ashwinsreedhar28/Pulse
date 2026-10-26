@@ -69,7 +69,17 @@
       "identity": null,
       "gatekeeperAssess": false,
       "hardenedRuntime": false
-    }
+    },
+    "extraResources": [
+      {
+        "from": "scripts",
+        "to": "scripts",
+        "filter": [
+          "*.py",
+          "*.txt"
+        ]
+      }
+    ]
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.14.1",
