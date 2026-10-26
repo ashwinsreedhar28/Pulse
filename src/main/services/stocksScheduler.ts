@@ -4,6 +4,7 @@ import { getQuotes as getStooqQuotes, type StockQuote } from './stooqService'
 import { getExtendedQuotes, getYahooQuotes } from './yahooFinanceService'
 import { evaluateStockAlerts } from './tickerAlertsService'
 import { shouldDeferOnResume } from './networkStatus'
+import { getDb } from '../database/connection'
 
 // Three cadences, picked to match when Stooq data is actually changing:
 //  - Active: weekday 04:00–20:00 ET (pre-market + regular + after-hours)
@@ -161,11 +162,15 @@ async function tick(): Promise<void> {
     // rotation, so overwriting would blank every symbol not in this batch and
     // make value-chain and market-graph tiles flicker between polls. Merging
     // keeps the last known price for anything not refreshed this round.
+    // A null price is a failed fetch (Yahoo 429 returns emptyQuote), not news:
+    // it never overwrites a price we already have.
     if (lastQuotes.length === 0) {
       lastQuotes = quotes
     } else {
       const merged = new Map(lastQuotes.map((q) => [q.symbol, q]))
-      for (const q of quotes) merged.set(q.symbol, q)
+      for (const q of quotes) {
+        if (q.price !== null || (merged.get(q.symbol)?.price ?? null) === null) merged.set(q.symbol, q)
+      }
       lastQuotes = [...merged.values()]
     }
     // Broadcast the full merged set so the renderer always sees every symbol.
@@ -225,8 +230,62 @@ function scheduleNext(): void {
   }, cadence)
 }
 
+// Live quotes are in-memory only, and passive symbols refresh on a rotation
+// (hourly off-hours), so a fresh launch after the close used to leave most
+// tiles blank for hours. Seed each symbol with its newest persisted bar
+// ('1m' for the watchlist, '1d' from the backfill) from the last 14 days.
+// change/changePct stay null so an old move never reads as today's.
+function seedFromBars(): StockQuote[] {
+  try {
+    const db = getDb()
+    const latest = db.prepare<[string, string], { tsMs: number; close: number }>(
+      `SELECT tsMs, close FROM market_bars
+        WHERE symbol = ? AND intervalLabel = ? AND close IS NOT NULL
+        ORDER BY tsMs DESC LIMIT 1`
+    )
+    const cutoff = Date.now() - 14 * 86_400_000
+    const out: StockQuote[] = []
+    for (const t of listTickers()) {
+      const sym = t.symbol.toUpperCase()
+      const bars = [latest.get(sym, '1m'), latest.get(sym, '1d')].filter(
+        (x): x is { tsMs: number; close: number } => !!x && x.tsMs >= cutoff
+      )
+      if (bars.length === 0) continue
+      const bar = bars.reduce((x, y) => (y.tsMs > x.tsMs ? y : x))
+      out.push({
+        symbol: t.symbol,
+        price: bar.close,
+        open: null,
+        high: null,
+        low: null,
+        previousClose: null,
+        change: null,
+        changePct: null,
+        volume: null,
+        time: new Date(bar.tsMs).toISOString().slice(0, 16).replace('T', ' '),
+        postMarketPrice: null,
+        postMarketChange: null,
+        postMarketChangePct: null,
+        preMarketPrice: null,
+        preMarketChange: null,
+        preMarketChangePct: null,
+        marketState: 'closed'
+      })
+    }
+    return out
+  } catch (err) {
+    console.warn('[stocks] seed from market_bars failed:', err instanceof Error ? err.message : err)
+    return []
+  }
+}
+
 export function startStocksScheduler(): void {
   stopStocksScheduler()
+  if (lastQuotes.length === 0) {
+    lastQuotes = seedFromBars()
+    console.log(`[stocks] seeded ${lastQuotes.length} quotes from market_bars`)
+    if (lastQuotes.length > 0) broadcast(lastQuotes)
+  }
   void tick()
   scheduleNext()
 }

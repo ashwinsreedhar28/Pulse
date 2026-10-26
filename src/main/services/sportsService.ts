@@ -1,5 +1,5 @@
 // Sports data via ESPN's public (unofficial) site API.
-// Scoreboard: GET /apis/site/v2/sports/{sport}/{league}/scoreboard[?dates=YYYYMMDD-YYYYMMDD]
+// Scoreboard: GET /apis/site/v2/sports/{sport}/{league}/scoreboard[?dates=YYYYMMDD] (ranges 400 since 2026-10-20)
 // Summary:    GET /apis/site/v2/sports/{sport}/{league}/summary?event={eventId}
 
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports'
@@ -567,33 +567,21 @@ export async function listGames(
     return cached.value
   }
 
-  // ESPN's scoreboard endpoint caps responses at ~100 events per request, which
-  // truncates long windows for high-volume leagues like NBA/MLB. Split the
-  // window into 7-day chunks and fire all requests in parallel.
-  // For NCAA we use shorter chunks (3 days) since a single Saturday
-  // can carry 60+ games across all FBS — a 7-day window risks the
-  // 100-event cap.
+  // One request per UTC day: ESPN rejects ?dates=A-B ranges (HTTP 400 since
+  // 2026-10-20), and a single day also stays under the ~100-event cap.
   const now = Date.now()
-  const chunkDays = leagueId === 'ncaaf' || leagueId === 'ncaam' ? 3 : 7
-  const ranges: Array<{ from: Date; to: Date }> = []
-  for (let offset = -windowDays; offset < windowDays; offset += chunkDays) {
-    const end = Math.min(offset + chunkDays - 1, windowDays - 1)
-    ranges.push({
-      from: new Date(now + offset * 86_400_000),
-      to: new Date(now + end * 86_400_000)
-    })
-  }
+  const days = eachUtcDay(new Date(now - windowDays * 86_400_000), new Date(now + (windowDays - 1) * 86_400_000))
 
   const groupParam = groupId ? `&groups=${encodeURIComponent(groupId)}` : ''
   const collected: Game[] = []
   const seen = new Set<string>()
   const tasks: Array<Promise<void>> = []
   for (const path of league.paths) {
-    for (const range of ranges) {
-      const datesParam = `${fmtEspnDate(range.from)}-${fmtEspnDate(range.to)}`
+    for (const day of days) {
+      const datesParam = fmtEspnDate(day)
       const url = `${ESPN_BASE}/${path}/scoreboard?dates=${datesParam}${groupParam}`
       tasks.push(
-        fetchJson(url)
+        withEspnSlot(() => fetchJson(url))
           .then((res) => {
             for (const g of extractGames(res, leagueId, path)) {
               if (seen.has(g.id)) continue
@@ -633,24 +621,18 @@ export async function listSeasonGames(leagueId: string): Promise<SeasonGames> {
   const cached = seasonCache.get(cacheKey)
   if (cached && Date.now() - cached.fetchedAt < SEASON_TTL_MS) return cached.value
 
-  // Chunk into 14-day windows — ESPN caps ~100 events/request.
-  const chunkMs = 14 * 86_400_000
-  const ranges: Array<{ from: Date; to: Date }> = []
-  for (let t = range.start.getTime(); t <= range.end.getTime(); t += chunkMs) {
-    const from = new Date(t)
-    const to = new Date(Math.min(t + chunkMs - 86_400_000, range.end.getTime()))
-    ranges.push({ from, to })
-  }
+  // One request per UTC day (ESPN rejects date ranges; see listGames).
+  const days = eachUtcDay(range.start, range.end)
 
   const collected: Game[] = []
   const seen = new Set<string>()
   const tasks: Array<Promise<void>> = []
   for (const path of league.paths) {
-    for (const r of ranges) {
-      const datesParam = `${fmtEspnDate(r.from)}-${fmtEspnDate(r.to)}`
+    for (const day of days) {
+      const datesParam = fmtEspnDate(day)
       const url = `${ESPN_BASE}/${path}/scoreboard?dates=${datesParam}`
       tasks.push(
-        fetchJson(url)
+        withEspnSlot(() => fetchJson(url))
           .then((res) => {
             for (const g of extractGames(res, leagueId, path)) {
               if (seen.has(g.id)) continue
@@ -700,6 +682,29 @@ export async function getGameDetail(
 }
 
 // ---------- helpers ----------
+
+function eachUtcDay(from: Date, to: Date): Date[] {
+  const days: Date[] = []
+  for (let t = from.getTime(); t <= to.getTime(); t += 86_400_000) days.push(new Date(t))
+  return days
+}
+
+// Per-day scoreboard requests multiply call counts (a season view is ~250
+// days), so every scoreboard fetch shares one in-flight cap.
+const ESPN_MAX_IN_FLIGHT = 8
+let espnInFlight = 0
+const espnWaiters: Array<() => void> = []
+async function withEspnSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (espnInFlight < ESPN_MAX_IN_FLIGHT) espnInFlight++
+  else await new Promise<void>((resolve) => espnWaiters.push(resolve)) // slot handed over
+  try {
+    return await fn()
+  } finally {
+    const next = espnWaiters.shift()
+    if (next) next()
+    else espnInFlight--
+  }
+}
 
 function fmtEspnDate(d: Date): string {
   const y = d.getUTCFullYear()

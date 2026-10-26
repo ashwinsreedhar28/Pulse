@@ -20,7 +20,7 @@ import {
   upsertQuarters,
   type TickerFinancialRow
 } from '../database/tickerFinancials'
-import { getQuarterlyFinancials } from './yahooFinanceService'
+import { getQuarterlyFinancials, yahooThrottled } from './yahooFinanceService'
 
 // Quarters older than this don't roll forward into TTM. Yahoo ships up to
 // 4 Q history per module; we store up to 8 so YoY comparisons work even
@@ -277,6 +277,7 @@ async function sweep(): Promise<void> {
     .slice(0, SYMBOLS_PER_TICK)
 
   for (const entry of queued) {
+    if (yahooThrottled()) return
     try {
       await refreshFinancials(entry.symbol)
     } catch (err) {
@@ -318,6 +319,10 @@ async function runInitialBackfill(): Promise<void> {
   )
   let done = 0
   for (const sym of queue) {
+    if (yahooThrottled()) {
+      console.warn(`[financials] Yahoo 429 cooldown — backfill stopped at ${done}/${queue.length}`)
+      return
+    }
     try {
       await refreshFinancials(sym)
     } catch (err) {

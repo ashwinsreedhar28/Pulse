@@ -133,6 +133,7 @@ export async function getHistory(symbol: string, range: HistoryRange): Promise<H
       },
       signal: controller.signal
     })
+    noteYahooStatus(res.status)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     json = (await res.json()) as YahooChartResponse
   } catch (err) {
@@ -225,6 +226,7 @@ export async function backfillBars(
       headers: { 'User-Agent': UA, Accept: 'application/json' },
       signal: controller.signal
     })
+    noteYahooStatus(res.status)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const json = (await res.json()) as QuoteChartResponse
     const result = json.chart.result?.[0]
@@ -348,6 +350,8 @@ export async function getFundamentals(symbol: string): Promise<Fundamentals | nu
   if (cached && Date.now() - cached.value.fetchedAt < FUNDAMENTALS_TTL_MS) {
     return cached.value
   }
+  // 429 cooldown: serve the stale cache (or null) instead of extending the block.
+  if (yahooThrottled()) return cached?.value ?? null
 
   const modules = 'summaryDetail,defaultKeyStatistics,price'
   const fetchOnce = async (): Promise<QuoteSummaryResponse> => {
@@ -371,6 +375,7 @@ export async function getFundamentals(symbol: string): Promise<Fundamentals | nu
         yahooCrumb = null
         throw new Error('HTTP 401')
       }
+      noteYahooStatus(res.status)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return (await res.json()) as QuoteSummaryResponse
     } finally {
@@ -530,6 +535,7 @@ async function fetchTimeseriesPoints(
       headers: { 'User-Agent': UA, Accept: 'application/json' },
       signal: controller.signal
     })
+    noteYahooStatus(res.status)
     if (!res.ok) {
       if (res.status === 404) return []
       throw new Error(`HTTP ${res.status}`)
@@ -695,6 +701,8 @@ export async function getEarnings(symbol: string): Promise<EarningsCalendar | nu
   if (cached && Date.now() - cached.value.fetchedAt < EARNINGS_TTL_MS) {
     return cached.value
   }
+  // 429 cooldown: serve the stale cache (or null) instead of extending the block.
+  if (yahooThrottled()) return cached?.value ?? null
 
   const modules = 'calendarEvents'
   const fetchOnce = async (): Promise<CalendarEventsResponse> => {
@@ -713,6 +721,7 @@ export async function getEarnings(symbol: string): Promise<EarningsCalendar | nu
         yahooCrumb = null
         throw new Error('HTTP 401')
       }
+      noteYahooStatus(res.status)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return (await res.json()) as CalendarEventsResponse
     } finally {
@@ -845,6 +854,8 @@ export async function getEarningsHistory(symbol: string): Promise<EarningsHistor
   if (cached && Date.now() - cached.value.fetchedAt < EARNINGS_TTL_MS) {
     return cached.value
   }
+  // 429 cooldown: serve the stale cache (or null) instead of extending the block.
+  if (yahooThrottled()) return cached?.value ?? null
 
   const modules = 'earningsHistory'
   const fetchOnce = async (): Promise<EarningsHistoryResponse> => {
@@ -863,6 +874,7 @@ export async function getEarningsHistory(symbol: string): Promise<EarningsHistor
         yahooCrumb = null
         throw new Error('HTTP 401')
       }
+      noteYahooStatus(res.status)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return (await res.json()) as EarningsHistoryResponse
     } finally {
@@ -1102,6 +1114,8 @@ export async function getAnalystEstimates(symbol: string): Promise<AnalystEstima
   if (cached && Date.now() - cached.value.fetchedAt < EARNINGS_TTL_MS) {
     return cached.value
   }
+  // 429 cooldown: serve the stale cache (or null) instead of extending the block.
+  if (yahooThrottled()) return cached?.value ?? null
 
   const modules = 'financialData,earningsTrend,recommendationTrend,upgradeDowngradeHistory'
   const fetchOnce = async (): Promise<AnalystEstimatesResponse> => {
@@ -1121,6 +1135,7 @@ export async function getAnalystEstimates(symbol: string): Promise<AnalystEstima
         throw new Error('HTTP 401')
       }
       if (res.status === 404) throw new Error('HTTP 404')
+      noteYahooStatus(res.status)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return (await res.json()) as AnalystEstimatesResponse
     } finally {
@@ -1326,6 +1341,8 @@ export async function getOptionsSnapshot(symbol: string): Promise<OptionsSnapsho
   if (cached && Date.now() - cached.value.fetchedAt < OPTIONS_TTL_MS) {
     return cached.value
   }
+  // 429 cooldown: serve the stale cache (or null) instead of extending the block.
+  if (yahooThrottled()) return cached?.value ?? null
 
   const url = `${YAHOO_OPTIONS_BASE}${encodeURIComponent(sym)}`
 
@@ -1365,6 +1382,7 @@ export async function getOptionsSnapshot(symbol: string): Promise<OptionsSnapsho
       // quietly and fall through to the cached value when we have one.
       return cached?.value ?? null
     }
+    noteYahooStatus(res.status)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     json = (await res.json()) as OptionChainResponse
   } catch (err) {
@@ -1505,6 +1523,7 @@ async function fetchExtendedOne(symbol: string): Promise<ExtendedQuote | null> {
       headers: { 'User-Agent': UA, Accept: 'application/json' },
       signal: controller.signal
     })
+    noteYahooStatus(res.status)
     if (!res.ok) return null
     const json = (await res.json()) as ExtendedChartResponse
     const result = json.chart.result?.[0]
@@ -1629,6 +1648,18 @@ interface QuoteChartResponse {
 // either provider's output through the same broadcast. We inline the shape
 // here (rather than importing) because importing from stooqService across
 // the codebase would create a doubtful dependency direction.
+// Any HTTP 429 from Yahoo opens a cooldown. Background passes (earnings and
+// financials backfills/sweeps) check yahooThrottled() and stop, so the quote
+// path gets the IP's budget back instead of the storm extending the block.
+const YAHOO_429_COOLDOWN_MS = 15 * 60_000
+let yahooThrottledUntil = 0
+export function noteYahooStatus(status: number): void {
+  if (status === 429) yahooThrottledUntil = Date.now() + YAHOO_429_COOLDOWN_MS
+}
+export function yahooThrottled(): boolean {
+  return Date.now() < yahooThrottledUntil
+}
+
 export interface StockQuote {
   symbol: string
   price: number | null
@@ -1699,6 +1730,7 @@ async function fetchQuoteOne(symbol: string): Promise<StockQuote> {
       headers: { 'User-Agent': UA, Accept: 'application/json' },
       signal: controller.signal
     })
+    noteYahooStatus(res.status)
     if (!res.ok) return emptyQuote(sym)
     const json = (await res.json()) as QuoteChartResponse
     const result = json.chart.result?.[0]
@@ -1963,6 +1995,7 @@ export async function searchTickers(
       headers: { 'User-Agent': UA, Accept: 'application/json' },
       signal: controller.signal
     })
+    noteYahooStatus(res.status)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const json = (await res.json()) as YahooSearchResponse
     const out: TickerSearchResult[] = []

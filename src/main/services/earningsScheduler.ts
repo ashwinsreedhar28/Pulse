@@ -18,10 +18,13 @@
 // Broadcast: each refresh emits 'earnings:updated' so the Value Chain
 // page can re-fetch the badge for that symbol without a full remount.
 
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 
 import { listTickers } from '../database/tickers'
 import { getEarningsBadge } from './earningsService'
+import { yahooThrottled } from './yahooFinanceService'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { join } from 'path'
 
 // How fresh we want every symbol's earnings to be. 30 min matches the
 // "needs to be faster" intent; bumping this down further trades a bit
@@ -97,6 +100,7 @@ async function sweep(): Promise<void> {
     .slice(0, SYMBOLS_PER_TICK)
 
   for (const entry of queued) {
+    if (yahooThrottled()) return
     try {
       await refreshOne(entry.symbol)
     } catch (err) {
@@ -110,13 +114,37 @@ async function sweep(): Promise<void> {
   }
 }
 
+// Boot backfill state lives on disk: lastRefreshedAt is in-memory, so without
+// this every relaunch re-fetched 500 symbols and several relaunches in a row
+// earned a Yahoo 429 block that blanked quotes (2026-10-20: 1,552 429s).
+const BACKFILL_MIN_GAP_MS = 12 * 60 * 60 * 1000
+function backfillStampPath(): string {
+  return join(app.getPath('userData'), 'earnings-backfill.json')
+}
+function lastBackfillAt(): number {
+  try {
+    const p = backfillStampPath()
+    return existsSync(p) ? Number(JSON.parse(readFileSync(p, 'utf8')).completedAt) || 0 : 0
+  } catch {
+    return 0
+  }
+}
+
 async function runInitialBackfill(): Promise<void> {
   const tickers = listTickers()
   if (tickers.length === 0) return
+  if (Date.now() - lastBackfillAt() < BACKFILL_MIN_GAP_MS) {
+    console.log('[earnings] initial backfill skipped (completed within 12 h)')
+    return
+  }
   const queue = tickers.slice(0, BACKFILL_MAX_SYMBOLS).map((t) => t.symbol)
   console.log(`[earnings] initial backfill: ${queue.length} symbol(s)`)
   let done = 0
   for (const sym of queue) {
+    if (yahooThrottled()) {
+      console.warn(`[earnings] Yahoo 429 cooldown — backfill stopped at ${done}/${queue.length}`)
+      return
+    }
     try {
       await refreshOne(sym)
     } catch (err) {
@@ -131,6 +159,11 @@ async function runInitialBackfill(): Promise<void> {
     await sleep(INTRA_TICK_DELAY_MS)
   }
   console.log(`[earnings] initial backfill complete (${done} symbols)`)
+  try {
+    writeFileSync(backfillStampPath(), JSON.stringify({ completedAt: Date.now() }))
+  } catch {
+    // best-effort; worst case the next boot backfills again
+  }
 }
 
 let timer: NodeJS.Timeout | null = null
