@@ -83,7 +83,11 @@ def render_system(domain, tickers, interests):
     return base + PROMPT_SUFFIX
 
 
-def render_user(article):
+def render_user(article, headline_only=False):
+    # --headline-only (Exp 3 validity gate): GDELT's historical records carry the page title but no
+    # summary, so the backtest proxy is scored on the headline alone.
+    if headline_only:
+        return f"Headline: {article['title']}"
     return f"Headline: {article['title']}\nSummary: {article.get('summary') or ''}"
 
 
@@ -568,7 +572,7 @@ def run(a):
     def one(art):
         system = render_fixture_system(fx, art, "v1" if getattr(a, "brief", "") == "v1" else ("mentions" if getattr(a, "mentions", False) else ("verified" if getattr(a, "links_verified", False) else getattr(a, "links", False))))
         try:
-            res = fn(a, system, render_user(art))
+            res = fn(a, system, render_user(art, getattr(a, "headline_only", False)))
         except requests.RequestException as e:
             res = {"wall_ms": "", "error": f"{type(e).__name__}: {str(e)[:200]}"}
         score, reason = parse_score(res.get("text", ""))
@@ -581,7 +585,7 @@ def run(a):
                "parse_ok": 1 if score is not None else 0,
                "text": (res.get("text") or "")[:300].replace("\n", "\\n"),
                "error": res.get("error", ""), "est_cost_usd": row_cost(a, pf, res),
-               "extra": json.dumps({**res.get("extra", {}), "brief": "v1" if getattr(a, "brief", "") == "v1" else fx.get("brief", "v1"),
+               "extra": json.dumps({**res.get("extra", {}), "brief": ("v1" if getattr(a, "brief", "") == "v1" else fx.get("brief", "v1")) + ("-headline" if getattr(a, "headline_only", False) else ""),
                                     "links": 2 if getattr(a, "mentions", False) else (3 if getattr(a, "links_verified", False) else (1 if getattr(a, "links", False) else 0)),
                                     "fixture": os.path.basename(FIXTURE)}, ensure_ascii=False)}
         return row
@@ -849,6 +853,8 @@ def main():
                     help="v2 fixtures: links block built from verified edges only (bench/links_verified.json)")
     pr.add_argument("--mentions", action="store_true",
                     help="v2 fixtures: ablation, append the matched tickers (with [held] tags) but no edges")
+    pr.add_argument("--headline-only", action="store_true",
+                    help="score the headline alone, no summary (Exp 3: historical GDELT titles have no summary)")
     pr.add_argument("--links", action="store_true",
                     help="v2 fixtures: include the article's value-chain links block in the system prompt")
     pr.add_argument("--sleep", type=float, default=0.0, help="seconds between calls")
